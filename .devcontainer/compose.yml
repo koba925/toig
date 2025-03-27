@@ -1,0 +1,8 @@
+services:
+  toig:
+    build: ./python3
+    stdin_open: true
+    tty: true
+    working_dir: /workspaces/toig
+    volumes:
+      - ..:/workspaces/toig
