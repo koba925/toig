@@ -66,95 +66,15 @@ builtins = {
     "=": lambda args_val: binary_op(op.eq, args_val),
     "print": lambda args_val: print(*args_val),
 }
-top_env = {"parent": None, "vals": builtins}
+
+top_env = None
+
+def init_env():
+    global top_env
+    top_env = {
+        "parent": {"parent": None, "vals": builtins.copy()},
+        "vals": {}
+    }
 
 def run(src):
     return eval(src, top_env)
-
-# tests
-
-def fails(expr):
-    try: run(expr)
-    except AssertionError: return True
-    else: return False
-
-import sys
-from io import StringIO
-
-def printed(expr):
-    stdout_bak = sys.stdout
-    sys.stdout = captured = StringIO()
-    try: val = run(expr)
-    finally: sys.stdout = stdout_bak
-    return val, captured.getvalue()
-
-assert run(None) == None
-assert run(5) == 5
-assert run(True) == True
-assert run(False) == False
-
-assert run(["define", "a", 5]) == 5
-assert run("a") == 5
-assert fails(["define", "a", 6])
-assert fails(["b"])
-assert printed([["func", [], ["do",
-                    ["print", ["define", "a", 6]],
-                    ["print", "a"]]]]) == (None, "6\n6\n")
-assert run("a") == 5
-
-assert run(["assign", "a", 6]) == 6
-assert run("a") == 6
-assert fails(["assign", "b", 6])
-assert run([["func", [], ["assign", "a", 7]]]) == 7
-assert printed([["func", [], ["do",
-                    ["print", ["assign", "a", 7]],
-                    ["print", "a"]]]]) == (None, "7\n7\n")
-assert run("a") == 7
-
-assert run(["do"]) == None
-assert run(["do", 5]) == 5
-assert run(["do", 5, 6]) == 6
-assert printed(["do", ["print", 5]]) == (None, "5\n")
-assert printed(["do", ["print", 5], ["print", 6]]) == (None, "5\n6\n")
-
-assert run(["if", True, 5, 6]) == 5
-assert run(["if", False, 5, 6]) == 6
-assert fails(["if", True, 5])
-
-assert run(["+", 5, 6]) == 11
-assert run(["-", 11, 5]) == 6
-assert run(["=", 5, 5]) == True
-assert run(["=", 5, 6]) == False
-assert fails(["+", 5])
-assert fails(["+", 5, 6, 7])
-
-assert run([["func", ["n"], ["+", 5, "n"]], 6]) == 11
-assert fails([["func", ["n"], ["+", 5, "n"]]])
-assert fails([["func", ["n"], ["+", 5, "n"]], 6, 7])
-
-run(["define", "fib", ["func", ["n"],
-        ["if", ["=", "n", 0], 0,
-        ["if", ["=", "n", 1], 1,
-        ["+", ["fib", ["-", "n", 1]], ["fib", ["-", "n", 2]]]]]]])
-assert run(["fib", 0]) == 0
-assert run(["fib", 1]) == 1
-assert run(["fib", 2]) == 1
-assert run(["fib", 3]) == 2
-assert run(["fib", 10]) == 55
-
-run(["define", "make_adder", ["func", ["n"], ["func", ["m"], ["+", "n", "m"]]]])
-assert run([["make_adder", 5], 6]) == 11
-
-run(["define", "make_counter", ["func", [], ["do",
-        ["define", "c", 0],
-        ["func", [], ["assign", "c", ["+", "c", 1]]]]]])
-run(["define", "counter1", ["make_counter"]])
-run(["define", "counter2", ["make_counter"]])
-assert run(["counter1"]) == 1
-assert run(["counter1"]) == 2
-assert run(["counter2"]) == 1
-assert run(["counter2"]) == 2
-assert run(["counter1"]) == 3
-assert run(["counter2"]) == 3
-
-print("Success")
