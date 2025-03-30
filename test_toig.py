@@ -61,8 +61,12 @@ class TestToig(unittest.TestCase):
     def test_builtins(self):
         self.assertEqual(run(["+", ["+", 5, 6], ["+", 7, 8]]), 26)
         self.assertEqual(run(["-", ["-", 26, 8], ["+", 5, 6]]), 7)
+        self.assertEqual(run(["*", ["*", 5, 6], ["*", 7, 8]]), 1680)
+        self.assertEqual(run(["/", ["/", 1680, 8], ["*", 5, 6]]), 7)
         self.assertEqual(run(["=", ["+", 5, 6], ["+", 6, 5]]), True)
         self.assertEqual(run(["=", ["+", 5, 6], ["+", 7, 8]]), False)
+        self.assertEqual(run(["not", ["=", ["+", 5, 6], ["+", 6, 5]]]), False)
+        self.assertEqual(run(["not", ["=", ["+", 5, 6], ["+", 7, 8]]]), True)
         self.assertTrue(fails(["+", 5]))
         self.assertTrue(fails(["+", 5, 6, 7]))
 
@@ -152,6 +156,18 @@ class TestToig(unittest.TestCase):
     def test_quote(self):
         self.assertEqual(run(["q", 5]), 5)
         self.assertEqual(run(["q", ["+", 5, 6]]), ["+", 5, 6])
+
+    def test_macro_when(self):
+        run(["define", "when", ["macro", ["cnd", "thn"],
+                ["arr", ["q", "if"], "cnd", "thn", None]]])
+        self.assertEqual(run(["expand",
+                            ["when", ["not", ["=", "b", 0]], ["/", "a", "b"]]]),
+                         ["if", ["not", ["=", "b", 0]], ["/", "a", "b"], None])
+        run(["define", "a", 30])
+        run(["define", "b", 5])
+        self.assertEqual(run(["when", ["not", ["=", "b", 0]], ["/", "a", "b"]]), 6)
+        run(["assign", "b", 0])
+        self.assertEqual(run(["when", ["not", ["=", "b", 0]], ["/", "a", "b"]]), None)
 
 if __name__ == "__main__":
     unittest.main()
