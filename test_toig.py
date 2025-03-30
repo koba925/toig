@@ -108,5 +108,50 @@ class TestToig(unittest.TestCase):
         self.assertEqual(run(["counter1"]), 3)
         self.assertEqual(run(["counter2"]), 3)
 
+    def test_array(self):
+        self.assertEqual(run(["arr"]), [])
+        self.assertEqual(run(["arr", ["+", 5, 6]]), [11])
+
+        run(["define", "a", ["arr", 5, 6, ["arr", 7, 8]]])
+        self.assertEqual(run("a"), [5, 6, [7, 8]])
+
+        self.assertEqual(run(["is_arr", 5]), False)
+        self.assertEqual(run(["is_arr", ["arr"]]), True)
+        self.assertEqual(run(["is_arr", "a"]), True)
+        self.assertTrue(fails(["is_arr"]))
+        self.assertTrue(fails(["is_arr", 5, 6]))
+
+        self.assertEqual(run(["len", ["arr"]]), 0)
+        self.assertEqual(run(["len", "a"]), 3)
+        self.assertTrue(fails(["len"]))
+        self.assertTrue(fails(["len", 5, 6]))
+
+        self.assertEqual(run(["getat", "a", 1]), 6)
+        self.assertEqual(run(["getat", "a", -1]), [7, 8])
+        self.assertEqual(run(["getat", ["getat", "a", 2], 1]), 8)
+        self.assertTrue(fails(["getat", "a"]))
+        self.assertTrue(fails(["getat", "a", 5, 6]))
+
+        self.assertEqual(run(["setat", "a", 1, 9]), [5, 9, [7, 8]])
+        self.assertEqual(run("a"), [5, 9, [7, 8]])
+        self.assertEqual(run(["setat", ["getat", "a", 2], -1, 10]), [7, 10])
+        self.assertEqual(run("a"), [5, 9, [7, 10]])
+        self.assertTrue(fails(["setat", "a", 1]))
+        self.assertTrue(fails(["setat", "a", 1, 5, 6]))
+
+        self.assertTrue(fails(["slice"]))
+        self.assertEqual(run(["slice", "a"]), [5, 9, [7, 10]])
+        self.assertEqual(run(["slice", "a", 1]), [9, [7, 10]])
+        self.assertEqual(run(["slice", "a", -2]), [9, [7, 10]])
+        self.assertEqual(run(["slice", "a", 1, 2]), [9])
+        self.assertEqual(run(["slice", "a", 1, -1]), [9])
+        self.assertTrue(fails(["slice", "a", 1, 2, 3]))
+
+        self.assertEqual(run(["+", ["arr", 5], ["arr", 6]]), [5, 6])
+
+    def test_quote(self):
+        self.assertEqual(run(["q", 5]), 5)
+        self.assertEqual(run(["q", ["+", 5, 6]]), ["+", 5, 6])
+
 if __name__ == "__main__":
     unittest.main()

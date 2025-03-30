@@ -29,6 +29,7 @@ def eval(expr, env):
     match expr:
         case None | bool(_) | int(_): return expr
         case str(name): return get(env, name)
+        case ["q", expr]: return expr
         case ["func", params, body]: return ["func", params, body, env]
         case ["define", name, val]:
             return define(env, name, eval(val, env))
@@ -55,16 +56,39 @@ def apply(f_val, args_val):
 
 import operator as op
 
-def binary_op(f, args):
-    assert len(args) == 2, \
-        f"Argument count doesn't match: `{args}` @ binary_op"
-    return f(args[0], args[1])
+def n_ary(n, f, args):
+    assert len(args) == n, \
+        f"Argument count doesn't match: `{args}` @ n_ary"
+    return f(*args[0:n])
+
+def setat(args):
+    assert len(args) == 3, \
+        f"Argument count doesn't match: `{args}` @ setat"
+    args[0][args[1]] = args[2]
+    return args[0]
+
+def slice(args):
+    if len(args) == 1:
+        return args[0][:]
+    elif len(args) == 2:
+        return args[0][args[1]:]
+    elif len(args) == 3:
+        return args[0][args[1]:args[2]]
+    assert False, f"Invalid slice: args=`{args}` @ slice"
 
 builtins = {
-    "+": lambda args_val: binary_op(op.add, args_val),
-    "-": lambda args_val: binary_op(op.sub, args_val),
-    "=": lambda args_val: binary_op(op.eq, args_val),
-    "print": lambda args_val: print(*args_val),
+    "+": lambda args: n_ary(2, op.add, args),
+    "-": lambda args: n_ary(2, op.sub, args),
+    "=": lambda args: n_ary(2, op.eq, args),
+
+    "arr": lambda args: args,
+    "is_arr": lambda args: n_ary(1, lambda arr: isinstance(arr, list), args),
+    "len": lambda args: n_ary(1, lambda arr: len(arr), args),
+    "getat": lambda args: n_ary(2, lambda arr, ind: arr[ind], args),
+    "setat": setat,
+    "slice": slice,
+
+    "print": lambda args: print(*args),
 }
 
 top_env = None
@@ -78,3 +102,7 @@ def init_env():
 
 def run(src):
     return eval(src, top_env)
+
+if __name__ == "__main__":
+    init_env()
+    run(["print", ["q", "hello"], ["q", "world"]])
