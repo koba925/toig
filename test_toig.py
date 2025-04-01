@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 from io import StringIO
 
-from toig import init_env, run
+from toig import init_env, stdlib, run
 
 def fails(src):
     try: run(src)
@@ -14,10 +14,15 @@ def printed(src):
         val = run(src)
         return (val, mock_stdout.getvalue())
 
+
 class TestToig(unittest.TestCase):
 
     def setUp(self):
         init_env()
+        stdlib()
+
+
+class TestCore(TestToig):
 
     def test_primitives(self):
         self.assertEqual(run(None), None)
@@ -157,9 +162,9 @@ class TestToig(unittest.TestCase):
         self.assertEqual(run(["q", 5]), 5)
         self.assertEqual(run(["q", ["+", 5, 6]]), ["+", 5, 6])
 
-    def test_macro_when(self):
-        run(["define", "when", ["macro", ["cnd", "thn"],
-                ["arr", ["q", "if"], "cnd", "thn", None]]])
+class TestStdlib(TestToig):
+
+    def test_when(self):
         self.assertEqual(run(["expand",
                             ["when", ["not", ["=", "b", 0]], ["/", "a", "b"]]]),
                          ["if", ["not", ["=", "b", 0]], ["/", "a", "b"], None])
@@ -168,6 +173,30 @@ class TestToig(unittest.TestCase):
         self.assertEqual(run(["when", ["not", ["=", "b", 0]], ["/", "a", "b"]]), 6)
         run(["assign", "b", 0])
         self.assertEqual(run(["when", ["not", ["=", "b", 0]], ["/", "a", "b"]]), None)
+
+    def test_and_or(self):
+        run(["define", "and", ["macro", ["a", "b"],
+                ["arr", ["q", "if"], "a", "b", False]]])
+        self.assertEqual(run(["expand", ["and", ["=", "a", 0], ["=", "b", 0]]]),
+                         ["if", ["=", "a", 0], ["=", "b", 0], False])
+        self.assertEqual(run(["and", False, "nosuchvariable"]), False)
+        self.assertEqual(run(["and", False, "nosuchvariable"]), False)
+        self.assertEqual(run(["and", True, False]), False)
+        self.assertEqual(run(["and", True, True]), True)
+
+        self.assertEqual(run(["expand", ["or", ["=", "a", 0], ["=", "b", 0]]]),
+                         ["if", ["=", "a", 0], True, ["=", "b", 0]])
+        self.assertEqual(run(["or", False, False]), False)
+        self.assertEqual(run(["or", False, True]), True)
+        self.assertEqual(run(["or", True, "nosuchvariable"]), True)
+        self.assertEqual(run(["or", True, "nosuchvariable"]), True)
+
+        self.assertEqual(
+            run(["expand", ["and", ["or", ["=", 5, 6], ["=", 7, 7]], ["=", 8, 8]]]),
+            ["if", ["or", ["=", 5, 6], ["=", 7, 7]], ["=", 8, 8], False])
+        self.assertEqual(
+            run(["and", ["or", ["=", 5, 6], ["=", 7, 7]], ["=", 8, 8]]),
+            True)
 
 if __name__ == "__main__":
     unittest.main()

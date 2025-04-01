@@ -123,14 +123,22 @@ top_env = None
 
 def init_env():
     global top_env
-    top_env = {
-        "parent": {"parent": None, "vals": builtins.copy()},
-        "vals": {}
-    }
+    top_env = {"parent": top_env, "vals": builtins.copy()}
+    top_env = {"parent": top_env, "vals": {}}
+
+def stdlib():
+    run(["define", "when", ["macro", ["cnd", "thn"],
+            ["arr", ["q", "if"], "cnd", "thn", None]]])
+    run(["define", "and", ["macro", ["a", "b"], ["arr", ["q", "if"], "a", "b", False]]])
+    run(["define", "or", ["macro", ["a", "b"],  ["arr", ["q", "if"], "a", True, "b"]]])
+
+    global top_env
+    top_env = {"parent": top_env, "vals": {}}
 
 def run(src):
     return eval(src, top_env)
 
 if __name__ == "__main__":
     init_env()
+    stdlib()
     run(["print", ["q", "hello"], ["q", "world"]])
