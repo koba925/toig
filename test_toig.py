@@ -68,10 +68,19 @@ class TestCore(TestToig):
         self.assertEqual(run(["-", ["-", 26, 8], ["+", 5, 6]]), 7)
         self.assertEqual(run(["*", ["*", 5, 6], ["*", 7, 8]]), 1680)
         self.assertEqual(run(["/", ["/", 1680, 8], ["*", 5, 6]]), 7)
+
         self.assertEqual(run(["=", ["+", 5, 6], ["+", 6, 5]]), True)
         self.assertEqual(run(["=", ["+", 5, 6], ["+", 7, 8]]), False)
+        self.assertEqual(run(["<", ["+", 5, 6], ["+", 3, 7]]), False)
+        self.assertEqual(run(["<", ["+", 5, 6], ["+", 4, 7]]), False)
+        self.assertEqual(run(["<", ["+", 5, 6], ["+", 4, 8]]), True)
+        self.assertEqual(run([">", ["+", 5, 6], ["+", 3, 7]]), True)
+        self.assertEqual(run([">", ["+", 5, 6], ["+", 4, 7]]), False)
+        self.assertEqual(run([">", ["+", 5, 6], ["+", 4, 8]]), False)
+
         self.assertEqual(run(["not", ["=", ["+", 5, 6], ["+", 6, 5]]]), False)
         self.assertEqual(run(["not", ["=", ["+", 5, 6], ["+", 7, 8]]]), True)
+
         self.assertTrue(fails(["+", 5]))
         self.assertTrue(fails(["+", 5, 6, 7]))
 
@@ -197,6 +206,29 @@ class TestStdlib(TestToig):
         self.assertEqual(
             run(["and", ["or", ["=", 5, 6], ["=", 7, 7]], ["=", 8, 8]]),
             True)
+
+    def test_while(self):
+        self.assertEqual(run(["expand",
+            ["while", ["<", "a", 5], ["do",
+                ["assign", "b", ["+", "b", ["arr", "a"]]],
+                ["assign", "a", ["+", "a", 1]]]]]),
+            ["do",
+                ["define", "loop", ["func", [],
+                    ["when", ["<", "a", 5],
+                        ["do",
+                            ["do",
+                                ["assign", "b", ["+", "b", ["arr", "a"]]],
+                                ["assign", "a", ["+", "a", 1]]],
+                            ["loop"]]]]],
+                ["loop"]])
+        run(["do",
+                ["define", "a", 0],
+                ["define", "b", ["arr"]],
+                ["while", ["<", "a", 5], ["do",
+                    ["assign", "b", ["+", "b", ["arr", "a"]]],
+                    ["assign", "a", ["+", "a", 1]]]]])
+        self.assertEqual(run("a"), 5)
+        self.assertEqual(run("b"), [0, 1, 2, 3, 4])
 
 if __name__ == "__main__":
     unittest.main()

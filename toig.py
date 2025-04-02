@@ -107,6 +107,8 @@ builtins = {
     "*": lambda args: n_ary(2, op.mul, args),
     "/": lambda args: n_ary(2, op.truediv, args),
     "=": lambda args: n_ary(2, op.eq, args),
+    "<": lambda args: n_ary(2, op.lt, args),
+    ">": lambda args: n_ary(2, op.gt, args),
     "not": lambda args: n_ary(1, op.not_, args),
 
     "arr": lambda args: args,
@@ -131,6 +133,13 @@ def stdlib():
             ["arr", ["q", "if"], "cnd", "thn", None]]])
     run(["define", "and", ["macro", ["a", "b"], ["arr", ["q", "if"], "a", "b", False]]])
     run(["define", "or", ["macro", ["a", "b"],  ["arr", ["q", "if"], "a", True, "b"]]])
+
+    run((["define", "while", ["macro", ["cnd", "body"], ["arr", ["q", "do"],
+            ["arr", ["q", "define"], ["q", "loop"], ["arr",
+                ["q", "func"], ["arr"], ["arr",
+                    ["q", "when"], "cnd",
+                        ["arr", ["q", "do"], "body", ["q", ["loop"]]]]]],
+            ["q", ["loop"]]]]]))
 
     global top_env
     top_env = {"parent": top_env, "vals": {}}
