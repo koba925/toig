@@ -129,17 +129,21 @@ def init_env():
     top_env = {"parent": top_env, "vals": {}}
 
 def stdlib():
+    run(["define", "scope", ["macro", ["body"],
+            ["arr", ["arr", ["q", "func"], ["arr"], "body"]]]])
+
     run(["define", "when", ["macro", ["cnd", "thn"],
             ["arr", ["q", "if"], "cnd", "thn", None]]])
     run(["define", "and", ["macro", ["a", "b"], ["arr", ["q", "if"], "a", "b", False]]])
     run(["define", "or", ["macro", ["a", "b"],  ["arr", ["q", "if"], "a", True, "b"]]])
 
-    run((["define", "while", ["macro", ["cnd", "body"], ["arr", ["q", "do"],
-            ["arr", ["q", "define"], ["q", "loop"], ["arr",
-                ["q", "func"], ["arr"], ["arr",
-                    ["q", "when"], "cnd",
-                        ["arr", ["q", "do"], "body", ["q", ["loop"]]]]]],
-            ["q", ["loop"]]]]]))
+    run((["define", "while", ["macro", ["cnd", "body"], ["arr", ["q", "scope"],
+            ["arr", ["q", "do"],
+                ["arr", ["q", "define"], ["q", "loop"], ["arr",
+                    ["q", "func"], ["arr"], ["arr",
+                        ["q", "when"], "cnd",
+                            ["arr", ["q", "do"], "body", ["q", ["loop"]]]]]],
+                ["q", ["loop"]]]]]]))
 
     global top_env
     top_env = {"parent": top_env, "vals": {}}

@@ -173,6 +173,14 @@ class TestCore(TestToig):
 
 class TestStdlib(TestToig):
 
+    def test_scope(self):
+        self.assertEqual(run(["expand", ["scope", ["do", ["define", "a", 5]]]]),
+                         [["func", [], ["do", ["define", "a", 5]]]])
+        self.assertEqual(printed(["do",
+            ["define", "a", 5],
+            ["scope", ["do", ["define", "a", 6], ["print", "a"]]],
+            ["print", "a"]]), (None, "6\n5\n"))
+
     def test_when(self):
         self.assertEqual(run(["expand",
                             ["when", ["not", ["=", "b", 0]], ["/", "a", "b"]]]),
@@ -212,7 +220,7 @@ class TestStdlib(TestToig):
             ["while", ["<", "a", 5], ["do",
                 ["assign", "b", ["+", "b", ["arr", "a"]]],
                 ["assign", "a", ["+", "a", 1]]]]]),
-            ["do",
+            ["scope", ["do",
                 ["define", "loop", ["func", [],
                     ["when", ["<", "a", 5],
                         ["do",
@@ -220,7 +228,8 @@ class TestStdlib(TestToig):
                                 ["assign", "b", ["+", "b", ["arr", "a"]]],
                                 ["assign", "a", ["+", "a", 1]]],
                             ["loop"]]]]],
-                ["loop"]])
+                ["loop"]]])
+
         run(["do",
                 ["define", "a", 0],
                 ["define", "b", ["arr"]],
@@ -229,6 +238,16 @@ class TestStdlib(TestToig):
                     ["assign", "a", ["+", "a", 1]]]]])
         self.assertEqual(run("a"), 5)
         self.assertEqual(run("b"), [0, 1, 2, 3, 4])
+        run(["do",
+                ["define", "r", ["arr"]],
+                ["define", "c", ["arr"]],
+                ["while", ["<", ["len", "r"], 3],
+                    ["do",
+                        ["assign", "c", ["arr"]],
+                        ["while", ["<", ["len", "c"], 3],
+                            ["assign", "c", ["+", "c", ["arr", 0]]]],
+                        ["assign", "r", ["+", "r", ["arr", "c"]]]]]])
+        self.assertEqual(run("r"), [[0, 0, 0], [0, 0, 0], [0, 0, 0]])
 
 if __name__ == "__main__":
     unittest.main()
