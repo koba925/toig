@@ -29,7 +29,8 @@ def eval(expr, env):
     match expr:
         case None | bool(_) | int(_): return expr
         case str(name): return get(env, name)
-        case ["q", expr]: return expr
+        case ["q", elem]: return elem
+        case ["qq", elem]: return eval_quasiquote(elem, env)
         case ["func", params, body]:
             return ["func", params, body, env]
         case ["macro", params, body]:
@@ -48,6 +49,17 @@ def eval(expr, env):
             return eval_op(op, args, env)
         case unexpected:
             assert False, f"Unexpected expression: {unexpected} @ eval"
+
+def is_arr(elem): return isinstance(elem, list)
+
+def eval_quasiquote(elem, env):
+    if not is_arr(elem): return elem
+    quoted = []
+    for e in elem:
+        match e:
+            case ["!", e]: quoted.append(eval(e, env))
+            case _: quoted.append(eval_quasiquote(e, env))
+    return quoted
 
 def eval_expand(op, args, env):
     match eval(op, env):
@@ -112,8 +124,8 @@ builtins = {
     "not": lambda args: n_ary(1, op.not_, args),
 
     "arr": lambda args: args,
-    "is_arr": lambda args: n_ary(1, lambda arr: isinstance(arr, list), args),
-    "len": lambda args: n_ary(1, lambda arr: len(arr), args),
+    "is_arr": lambda args: n_ary(1, is_arr, args),
+    "len": lambda args: n_ary(1, len, args),
     "getat": lambda args: n_ary(2, lambda arr, ind: arr[ind], args),
     "setat": setat,
     "slice": slice,
@@ -130,20 +142,20 @@ def init_env():
 
 def stdlib():
     run(["define", "scope", ["macro", ["body"],
-            ["arr", ["arr", ["q", "func"], ["arr"], "body"]]]])
+            ["qq", [["func", [], ["!", "body"]]]]]])
 
     run(["define", "when", ["macro", ["cnd", "thn"],
-            ["arr", ["q", "if"], "cnd", "thn", None]]])
-    run(["define", "and", ["macro", ["a", "b"], ["arr", ["q", "if"], "a", "b", False]]])
-    run(["define", "or", ["macro", ["a", "b"],  ["arr", ["q", "if"], "a", True, "b"]]])
+            ["qq", ["if", ["!", "cnd"], ["!", "thn"], None]]]])
+    run(["define", "and", ["macro", ["a", "b"],
+            ["qq", ["if", ["!", "a"], ["!", "b"], False]]]])
+    run(["define", "or", ["macro", ["a", "b"],
+            ["qq", ["if", ["!", "a"], True, ["!", "b"]]]]])
 
-    run((["define", "while", ["macro", ["cnd", "body"], ["arr", ["q", "scope"],
-            ["arr", ["q", "do"],
-                ["arr", ["q", "define"], ["q", "loop"], ["arr",
-                    ["q", "func"], ["arr"], ["arr",
-                        ["q", "when"], "cnd",
-                            ["arr", ["q", "do"], "body", ["q", ["loop"]]]]]],
-                ["q", ["loop"]]]]]]))
+    run(["define", "while", ["macro", ["cnd", "body"], ["qq",
+            ["scope", ["do",
+                ["define", "loop", ["func", [],
+                    ["when", ["!", "cnd"], ["do", ["!", "body"], ["loop"]]]]],
+                ["loop"]]]]]])
 
     global top_env
     top_env = {"parent": top_env, "vals": {}}
