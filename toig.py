@@ -105,13 +105,11 @@ def setat(args):
     return args[0]
 
 def slice(args):
-    if len(args) == 1:
-        return args[0][:]
-    elif len(args) == 2:
-        return args[0][args[1]:]
-    elif len(args) == 3:
-        return args[0][args[1]:args[2]]
-    assert False, f"Invalid slice: args=`{args}` @ slice"
+    match args:
+        case [arr]: return arr[:]
+        case [arr, start]: return arr[start:]
+        case [arr, start, end]: return arr[start:end]
+        case _: assert False, f"Invalid slice: args=`{args}` @ slice"
 
 builtins = {
     "+": lambda args: n_ary(2, op.add, args),
@@ -119,8 +117,11 @@ builtins = {
     "*": lambda args: n_ary(2, op.mul, args),
     "/": lambda args: n_ary(2, op.truediv, args),
     "=": lambda args: n_ary(2, op.eq, args),
+    "!=": lambda args: n_ary(2, op.ne, args),
     "<": lambda args: n_ary(2, op.lt, args),
     ">": lambda args: n_ary(2, op.gt, args),
+    "<=": lambda args: n_ary(2, op.le, args),
+    ">=": lambda args: n_ary(2, op.ge, args),
     "not": lambda args: n_ary(1, op.not_, args),
 
     "arr": lambda args: args,
@@ -141,6 +142,24 @@ def init_env():
     top_env = {"parent": top_env, "vals": {}}
 
 def stdlib():
+    run(["define", "id", ["func", ["x"], "x"]])
+
+    run(["define", "inc", ["func", ["x"], ["+", "x", 1]]])
+    run(["define", "dec", ["func", ["x"], ["-", "x", 1]]])
+
+    run(["define", "unfoldl", ["func", ["x", "p", "h", "t"], ["do",
+            ["define", "_unfoldl", ["func", ["x", "b"],
+                ["if", ["p", "x"],
+                    "b",
+                    ["_unfoldl", ["t", "x"], ["+", "b", ["arr", ["h", "x"]]]]]]],
+            ["_unfoldl", "x", ["arr"]]]]])
+
+    run(["define", "range", ["func", ["s", "e"],
+            ["unfoldl", "s", ["func", ["x"], [">=", "x", "e"]], "id", "inc"]]])
+
+    run(["define", "append", ["func", ["l", "a"], ["+", "l", ["arr", "a"]]]])
+    run(["define", "prepend", ["func", ["a", "l"], ["+", ["arr", "a"], "l"]]])
+
     run(["define", "scope", ["macro", ["body"],
             ["qq", [["func", [], ["!", "body"]]]]]])
 
@@ -156,6 +175,15 @@ def stdlib():
                 ["define", "loop", ["func", [],
                     ["when", ["!", "cnd"], ["do", ["!", "body"], ["loop"]]]]],
                 ["loop"]]]]]])
+
+    run(["define", "for", ["macro", ["e", "l", "body"], ["qq",
+            ["scope", ["do",
+                ["define", "__index", 0],
+                ["define", ["!", "e"], None],
+                ["while", ["<", "__index", ["len", ["!", "l"]]], ["do",
+                    ["assign", ["!", "e"], ["getat", ["!", "l"], "__index"]],
+                    ["!", "body"],
+                    ["assign", "__index", ["inc", "__index"]]]]]]]]])
 
     global top_env
     top_env = {"parent": top_env, "vals": {}}

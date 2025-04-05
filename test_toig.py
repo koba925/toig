@@ -14,16 +14,12 @@ def printed(src):
         val = run(src)
         return (val, mock_stdout.getvalue())
 
-
 class TestToig(unittest.TestCase):
-
     def setUp(self):
         init_env()
         stdlib()
 
-
 class TestCore(TestToig):
-
     def test_primitives(self):
         self.assertEqual(run(None), None)
         self.assertEqual(run(5), 5)
@@ -63,14 +59,21 @@ class TestCore(TestToig):
         self.assertEqual(run(["if", ["=", 5, 6], ["+", 7, 8], ["+", 9, 10]]), 19)
         self.assertTrue(fails(["if", True, 5]))
 
-    def test_builtins(self):
+    def test_builtin_math(self):
         self.assertEqual(run(["+", ["+", 5, 6], ["+", 7, 8]]), 26)
         self.assertEqual(run(["-", ["-", 26, 8], ["+", 5, 6]]), 7)
         self.assertEqual(run(["*", ["*", 5, 6], ["*", 7, 8]]), 1680)
         self.assertEqual(run(["/", ["/", 1680, 8], ["*", 5, 6]]), 7)
+        self.assertTrue(fails(["+", 5]))
+        self.assertTrue(fails(["+", 5, 6, 7]))
 
+    def test_builtin_equality(self):
         self.assertEqual(run(["=", ["+", 5, 6], ["+", 6, 5]]), True)
         self.assertEqual(run(["=", ["+", 5, 6], ["+", 7, 8]]), False)
+        self.assertEqual(run(["!=", ["+", 5, 6], ["+", 6, 5]]), False)
+        self.assertEqual(run(["!=", ["+", 5, 6], ["+", 7, 8]]), True)
+
+    def test_builtin_comparison(self):
         self.assertEqual(run(["<", ["+", 5, 6], ["+", 3, 7]]), False)
         self.assertEqual(run(["<", ["+", 5, 6], ["+", 4, 7]]), False)
         self.assertEqual(run(["<", ["+", 5, 6], ["+", 4, 8]]), True)
@@ -78,11 +81,16 @@ class TestCore(TestToig):
         self.assertEqual(run([">", ["+", 5, 6], ["+", 4, 7]]), False)
         self.assertEqual(run([">", ["+", 5, 6], ["+", 4, 8]]), False)
 
+        self.assertEqual(run(["<=", ["+", 5, 6], ["+", 3, 7]]), False)
+        self.assertEqual(run(["<=", ["+", 5, 6], ["+", 4, 7]]), True)
+        self.assertEqual(run(["<=", ["+", 5, 6], ["+", 4, 8]]), True)
+        self.assertEqual(run([">=", ["+", 5, 6], ["+", 3, 7]]), True)
+        self.assertEqual(run([">=", ["+", 5, 6], ["+", 4, 7]]), True)
+        self.assertEqual(run([">=", ["+", 5, 6], ["+", 4, 8]]), False)
+
+    def test_builtin_logic(self):
         self.assertEqual(run(["not", ["=", ["+", 5, 6], ["+", 6, 5]]]), False)
         self.assertEqual(run(["not", ["=", ["+", 5, 6], ["+", 7, 8]]]), True)
-
-        self.assertTrue(fails(["+", 5]))
-        self.assertTrue(fails(["+", 5, 6, 7]))
 
     def test_print(self):
         self.assertEqual(printed(["print", None]), (None, "None\n"))
@@ -172,6 +180,20 @@ class TestCore(TestToig):
         self.assertEqual(run(["q", ["+", 5, 6]]), ["+", 5, 6])
 
 class TestStdlib(TestToig):
+    def test_id(self):
+        self.assertEqual(run(["id", ["+", 5, 6]]), 11)
+
+    def test_inc_dec(self):
+        self.assertEqual(run(["inc", ["+", 5, 6]]), 12)
+        self.assertEqual(run(["dec", ["+", 5, 6]]), 10)
+
+    def test_range(self):
+        self.assertEqual(run(["range", 5, 5]), [])
+        self.assertEqual(run(["range", 5, 8]), [5, 6, 7])
+
+    def test_append_prepend(self):
+        self.assertEqual(run(["append", ["arr", 5, 6], ["inc", 7]]), [5, 6, 8])
+        self.assertEqual(run(["prepend", ["inc", 5], ["arr", 7, 8]]), [6, 7, 8])
 
     def test_scope(self):
         self.assertEqual(run(["expand", ["scope", ["do", ["define", "a", 5]]]]),
@@ -248,6 +270,43 @@ class TestStdlib(TestToig):
                             ["assign", "c", ["+", "c", ["arr", 0]]]],
                         ["assign", "r", ["+", "r", ["arr", "c"]]]]]])
         self.assertEqual(run("r"), [[0, 0, 0], [0, 0, 0], [0, 0, 0]])
+
+    def test_for(self):
+        print(run(["expand",
+            ["for", "i", ["arr", 5, 6, 7], ["assign", "sum", ["+", "sum", "i"]]]]))
+        self.assertEqual(run(["expand",
+            ["for", "i", ["arr", 5, 6, 7], ["assign", "sum", ["+", "sum", "i"]]]]),
+            ["scope", ["do",
+                ["define", "__index", 0],
+                ["define", "i", None],
+                ["while", ["<", "__index", ["len", ["arr", 5, 6, 7]]], ["do",
+                    ["assign", "i", ["getat", ["arr", 5, 6, 7], "__index"]],
+                    ["assign", "sum", ["+", "sum", "i"]],
+                    ["assign", "__index", ["inc", "__index"]]]]]])
+
+        self.assertEqual(run(["do",
+            ["define", "sum", 0],
+            ["for", "i", ["arr", 5, 6, 7], ["assign", "sum", ["+", "sum", "i"]]],
+            "sum"]), 18)
+
+    def test_sieve(self):
+        run(["define", "sieve", ["+",
+                ["*", ["arr", False], 2],
+                ["*", ["arr", True], 28]]])
+        run(["define", "j", None])
+        run(["for", "i", ["range", 2, 30],
+                ["when", ["getat", "sieve", "i"],
+                    ["do",
+                        ["assign", "j", ["*", "i", "i"]],
+                        ["while", ["<", "j", 30], ["do",
+                            ["setat", "sieve", "j", False],
+                            ["assign", "j", ["+", "j", "i"]]]]]]])
+        run(["print", "sieve"])
+        run(["define", "primes", ["arr"]])
+        run(["for", "i", ["range", 0, 30],
+                ["when", ["getat", "sieve", "i"],
+                    ["assign", "primes", ["append", "primes", "i"]]]])
+        self.assertEqual(run("primes"), [2, 3, 5, 7, 11, 13, 17, 19, 23, 29])
 
 if __name__ == "__main__":
     unittest.main()
