@@ -187,13 +187,22 @@ class TestStdlib(TestToig):
         self.assertEqual(run(["inc", ["+", 5, 6]]), 12)
         self.assertEqual(run(["dec", ["+", 5, 6]]), 10)
 
-    def test_range(self):
-        self.assertEqual(run(["range", 5, 5]), [])
-        self.assertEqual(run(["range", 5, 8]), [5, 6, 7])
+    def test_first_rest_last(self):
+        self.assertEqual(run(["first", ["arr", 5, 6, 7]]), 5)
+        self.assertEqual(run(["rest", ["arr", 5, 6, 7]]), [6, 7])
+        self.assertEqual(run(["last", ["arr", 5, 6, 7]]), 7)
 
     def test_append_prepend(self):
         self.assertEqual(run(["append", ["arr", 5, 6], ["inc", 7]]), [5, 6, 8])
         self.assertEqual(run(["prepend", ["inc", 5], ["arr", 7, 8]]), [6, 7, 8])
+
+    def test_map(self):
+        self.assertEqual(run(["map", ["arr"], "inc"]), [])
+        self.assertEqual(run(["map", ["arr", 5, 6, 7], "inc"]), [6, 7, 8])
+
+    def test_range(self):
+        self.assertEqual(run(["range", 5, 5]), [])
+        self.assertEqual(run(["range", 5, 8]), [5, 6, 7])
 
     def test_scope(self):
         self.assertEqual(run(["expand", ["scope", ["do", ["define", "a", 5]]]]),
@@ -243,14 +252,14 @@ class TestStdlib(TestToig):
                 ["assign", "b", ["+", "b", ["arr", "a"]]],
                 ["assign", "a", ["+", "a", 1]]]]]),
             ["scope", ["do",
-                ["define", "loop", ["func", [],
+                ["define", "__stdlib_while_loop", ["func", [],
                     ["when", ["<", "a", 5],
                         ["do",
                             ["do",
                                 ["assign", "b", ["+", "b", ["arr", "a"]]],
                                 ["assign", "a", ["+", "a", 1]]],
-                            ["loop"]]]]],
-                ["loop"]]])
+                            ["__stdlib_while_loop"]]]]],
+                ["__stdlib_while_loop"]]])
 
         run(["do",
                 ["define", "a", 0],
@@ -277,12 +286,12 @@ class TestStdlib(TestToig):
         self.assertEqual(run(["expand",
             ["for", "i", ["arr", 5, 6, 7], ["assign", "sum", ["+", "sum", "i"]]]]),
             ["scope", ["do",
-                ["define", "__index", 0],
+                ["define", "__stdlib_for_index", 0],
                 ["define", "i", None],
-                ["while", ["<", "__index", ["len", ["arr", 5, 6, 7]]], ["do",
-                    ["assign", "i", ["getat", ["arr", 5, 6, 7], "__index"]],
+                ["while", ["<", "__stdlib_for_index", ["len", ["arr", 5, 6, 7]]], ["do",
+                    ["assign", "i", ["getat", ["arr", 5, 6, 7], "__stdlib_for_index"]],
                     ["assign", "sum", ["+", "sum", "i"]],
-                    ["assign", "__index", ["inc", "__index"]]]]]])
+                    ["assign", "__stdlib_for_index", ["inc", "__stdlib_for_index"]]]]]])
 
         self.assertEqual(run(["do",
             ["define", "sum", 0],
@@ -307,6 +316,25 @@ class TestStdlib(TestToig):
                 ["when", ["getat", "sieve", "i"],
                     ["assign", "primes", ["append", "primes", "i"]]]])
         self.assertEqual(run("primes"), [2, 3, 5, 7, 11, 13, 17, 19, 23, 29])
+
+    def test_let(self):
+        run(["define", "let", ["macro", ["bindings", "body"], ["do",
+                ["define", "defines", ["func", ["bindings"],
+                    ["map", "bindings", ["func", ["b"], ["qq",
+                        ["define",
+                         ["!", ["first", "b"]],
+                         ["!", ["last", "b"]]]]]]]],
+                ["qq", ["scope", ["!", ["append",
+                    ["+",
+                        ["q", ["do"]],
+                        ["defines", "bindings"]],
+                    "body"]]]]]]])
+        self.assertEqual(run(["expand", ["let", [["a", 5], ["b", 6]], ["+", "a", "b"]]]),
+                         ["scope", ["do",
+                             ["define", "a", 5],
+                             ["define", "b", 6],
+                             ["+", "a", "b"]]])
+        self.assertEqual(run(["let", [["a", 5], ["b", 6]], ["+", "a", "b"]]), 11)
 
 if __name__ == "__main__":
     unittest.main()

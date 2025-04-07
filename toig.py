@@ -147,6 +147,16 @@ def stdlib():
     run(["define", "inc", ["func", ["x"], ["+", "x", 1]]])
     run(["define", "dec", ["func", ["x"], ["-", "x", 1]]])
 
+    run(["define", "first", ["func", ["l"], ["getat", "l", 0]]])
+    run(["define", "rest", ["func", ["l"], ["slice", "l", 1]]])
+    run(["define", "last", ["func", ["l"], ["getat", "l", -1]]])
+    run(["define", "append", ["func", ["l", "a"], ["+", "l", ["arr", "a"]]]])
+    run(["define", "prepend", ["func", ["a", "l"], ["+", ["arr", "a"], "l"]]])
+
+    run(["define", "foldl", ["func", ["l", "f", "init"],
+            ["if", ["=", "l", ["arr"]],
+                "init",
+                ["foldl", ["rest", "l"], "f", ["f", "init", ["first", "l"]]]]]])
     run(["define", "unfoldl", ["func", ["x", "p", "h", "t"], ["do",
             ["define", "_unfoldl", ["func", ["x", "b"],
                 ["if", ["p", "x"],
@@ -154,11 +164,10 @@ def stdlib():
                     ["_unfoldl", ["t", "x"], ["+", "b", ["arr", ["h", "x"]]]]]]],
             ["_unfoldl", "x", ["arr"]]]]])
 
+    run(["define", "map", ["func", ["l", "f"],
+            ["foldl", "l", ["func", ["acc", "e"], ["append", "acc", ["f", "e"]]], ["arr"]]]])
     run(["define", "range", ["func", ["s", "e"],
             ["unfoldl", "s", ["func", ["x"], [">=", "x", "e"]], "id", "inc"]]])
-
-    run(["define", "append", ["func", ["l", "a"], ["+", "l", ["arr", "a"]]]])
-    run(["define", "prepend", ["func", ["a", "l"], ["+", ["arr", "a"], "l"]]])
 
     run(["define", "scope", ["macro", ["body"],
             ["qq", [["func", [], ["!", "body"]]]]]])
@@ -172,18 +181,18 @@ def stdlib():
 
     run(["define", "while", ["macro", ["cnd", "body"], ["qq",
             ["scope", ["do",
-                ["define", "loop", ["func", [],
-                    ["when", ["!", "cnd"], ["do", ["!", "body"], ["loop"]]]]],
-                ["loop"]]]]]])
+                ["define", "__stdlib_while_loop", ["func", [],
+                    ["when", ["!", "cnd"], ["do", ["!", "body"], ["__stdlib_while_loop"]]]]],
+                ["__stdlib_while_loop"]]]]]])
 
     run(["define", "for", ["macro", ["e", "l", "body"], ["qq",
             ["scope", ["do",
-                ["define", "__index", 0],
+                ["define", "__stdlib_for_index", 0],
                 ["define", ["!", "e"], None],
-                ["while", ["<", "__index", ["len", ["!", "l"]]], ["do",
-                    ["assign", ["!", "e"], ["getat", ["!", "l"], "__index"]],
+                ["while", ["<", "__stdlib_for_index", ["len", ["!", "l"]]], ["do",
+                    ["assign", ["!", "e"], ["getat", ["!", "l"], "__stdlib_for_index"]],
                     ["!", "body"],
-                    ["assign", "__index", ["inc", "__index"]]]]]]]]])
+                    ["assign", "__stdlib_for_index", ["inc", "__stdlib_for_index"]]]]]]]]])
 
     global top_env
     top_env = {"parent": top_env, "vals": {}}
