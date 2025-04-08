@@ -58,6 +58,10 @@ def eval_quasiquote(elem, env):
     for e in elem:
         match e:
             case ["!", e]: quoted.append(eval(e, env))
+            case ["!!", e]:
+                vals = eval(e, env)
+                assert isinstance(vals, list), f"Cannot splice in quasiquote: {e}"
+                quoted += vals
             case _: quoted.append(eval_quasiquote(e, env))
     return quoted
 

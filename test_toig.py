@@ -281,8 +281,6 @@ class TestStdlib(TestToig):
         self.assertEqual(run("r"), [[0, 0, 0], [0, 0, 0], [0, 0, 0]])
 
     def test_for(self):
-        print(run(["expand",
-            ["for", "i", ["arr", 5, 6, 7], ["assign", "sum", ["+", "sum", "i"]]]]))
         self.assertEqual(run(["expand",
             ["for", "i", ["arr", 5, 6, 7], ["assign", "sum", ["+", "sum", "i"]]]]),
             ["scope", ["do",
@@ -310,7 +308,6 @@ class TestStdlib(TestToig):
                         ["while", ["<", "j", 30], ["do",
                             ["setat", "sieve", "j", False],
                             ["assign", "j", ["+", "j", "i"]]]]]]])
-        run(["print", "sieve"])
         run(["define", "primes", ["arr"]])
         run(["for", "i", ["range", 0, 30],
                 ["when", ["getat", "sieve", "i"],
@@ -324,11 +321,9 @@ class TestStdlib(TestToig):
                         ["define",
                          ["!", ["first", "b"]],
                          ["!", ["last", "b"]]]]]]]],
-                ["qq", ["scope", ["!", ["append",
-                    ["+",
-                        ["q", ["do"]],
-                        ["defines", "bindings"]],
-                    "body"]]]]]]])
+                ["qq", ["scope", ["do",
+                    ["!!", ["defines", "bindings"]],
+                    ["!","body"]]]]]]])
         self.assertEqual(run(["expand", ["let", [["a", 5], ["b", 6]], ["+", "a", "b"]]]),
                          ["scope", ["do",
                              ["define", "a", 5],
