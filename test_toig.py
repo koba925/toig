@@ -210,6 +210,58 @@ class TestCore(TestToig):
 
         self.assertTrue(fails([["macro", [["*", "r"], "a"], 5]]))
 
+    def test_let(self):
+        run(["define", "let", ["macro", ["bindings", "body"], ["do",
+                ["define", "defines", ["func", ["bindings"],
+                    ["map", "bindings", ["func", ["b"], ["qq",
+                        ["define",
+                         ["!", ["first", "b"]],
+                         ["!", ["last", "b"]]]]]]]],
+                ["qq", ["scope", ["do",
+                    ["!!", ["defines", "bindings"]],
+                    ["!","body"]]]]]]])
+        self.assertEqual(expanded(["let", [["a", 5], ["b", 6]], ["+", "a", "b"]]),
+                         ["scope", ["do",
+                             ["define", "a", 5],
+                             ["define", "b", 6],
+                             ["+", "a", "b"]]])
+        self.assertEqual(run(["let", [["a", 5], ["b", 6]], ["+", "a", "b"]]), 11)
+
+    def test_cond(self):
+        run(["define", "cond", ["macro", [["*", "clauses"]],
+                ["do",
+                    ["define", "_cond", ["func", ["clauses"],
+                        ["if", ["=", "clauses", ["arr"]],
+                            None,
+                            ["do",
+                                ["define", "clause", ["first", "clauses"]],
+                                ["define", "cnd", ["first", "clause"]],
+                                ["define", "thn", ["last", "clause"]],
+                                ["qq", ["if", ["!", "cnd"],
+                                        ["!", "thn"],
+                                        ["!", ["_cond", ["rest", "clauses"]]]]]]]]],
+                    ["_cond", "clauses"]]]])
+        self.assertEqual(expanded(
+            ["cond",
+                [["=", "n", 0], 0],
+                [["=", "n", 1], 1],
+                [True, ["+", ["fib", ["-", "n", 1]], ["fib", ["-", "n", 2]]]]]),
+            ["if", ["=", "n", 0], 0,
+                ["if", ["=", "n", 1], 1,
+                    ["if", True,
+                        ["+", ["fib", ["-", "n", 1]], ["fib", ["-", "n", 2]]],
+                        None]]])
+        run(["define", "fib", ["func", ["n"],
+                ["cond",
+                    [["=", "n", 0], 0],
+                    [["=", "n", 1], 1],
+                    [True, ["+", ["fib", ["-", "n", 1]], ["fib", ["-", "n", 2]]]]]]])
+        self.assertEqual(run(["fib", 0]), 0)
+        self.assertEqual(run(["fib", 1]), 1)
+        self.assertEqual(run(["fib", 2]), 1)
+        self.assertEqual(run(["fib", 3]), 2)
+        self.assertEqual(run(["fib", 10]), 55)
+
 
 class TestStdlib(TestToig):
     def test_id(self):
@@ -345,24 +397,6 @@ class TestStdlib(TestToig):
                 ["when", ["getat", "sieve", "i"],
                     ["assign", "primes", ["append", "primes", "i"]]]])
         self.assertEqual(run("primes"), [2, 3, 5, 7, 11, 13, 17, 19, 23, 29])
-
-    def test_let(self):
-        run(["define", "let", ["macro", ["bindings", "body"], ["do",
-                ["define", "defines", ["func", ["bindings"],
-                    ["map", "bindings", ["func", ["b"], ["qq",
-                        ["define",
-                         ["!", ["first", "b"]],
-                         ["!", ["last", "b"]]]]]]]],
-                ["qq", ["scope", ["do",
-                    ["!!", ["defines", "bindings"]],
-                    ["!","body"]]]]]]])
-        self.assertEqual(expanded(["let", [["a", 5], ["b", 6]], ["+", "a", "b"]]),
-                         ["scope", ["do",
-                             ["define", "a", 5],
-                             ["define", "b", 6],
-                             ["+", "a", "b"]]])
-        self.assertEqual(run(["let", [["a", 5], ["b", 6]], ["+", "a", "b"]]), 11)
-
 
 if __name__ == "__main__":
     unittest.main()
