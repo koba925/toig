@@ -21,6 +21,26 @@ def get(env, name):
     else:
         return get(env["parent"], name)
 
+from itertools import zip_longest
+
+def extend(env, params, args):
+    sentinel, new_env = object(), {}
+    for i, (param, arg) in enumerate(zip_longest(params, args, fillvalue=sentinel)):
+        match param:
+            case str(param):
+                assert arg is not sentinel, \
+                    f"Argument count doesn't match: `{params}, {args}` @ extend"
+                new_env[param] = arg
+            case ["*", rest]:
+                assert i == len(params) - 1, \
+                    f"Rest param must be last: `{params}` @ extend"
+                new_env[rest] = args[i:]; break
+            case unexpected:
+                assert param is not  sentinel, \
+                    f"Argument count doesn't match: `{params}, {args}` @ extend"
+                assert False, f"Unexpected param at extend: {unexpected}"
+    return {"parent": env, "vals": new_env}
+
 # evaluator
 
 from functools import reduce
@@ -50,20 +70,22 @@ def eval(expr, env):
         case unexpected:
             assert False, f"Unexpected expression: {unexpected} @ eval"
 
-def is_arr(elem): return isinstance(elem, list)
+def eval_quasiquote(expr, env):
+    def qqelems(elems):
+        quoted = []
+        for elem in elems:
+            match elem:
+                case ["!!", e]:
+                    vals = eval(e, env)
+                    assert isinstance(vals, list), f"Cannot splice in quasiquote: {e}"
+                    quoted += vals
+                case _: quoted.append(eval_quasiquote(elem, env))
+        return quoted
 
-def eval_quasiquote(elem, env):
-    if not is_arr(elem): return elem
-    quoted = []
-    for e in elem:
-        match e:
-            case ["!", e]: quoted.append(eval(e, env))
-            case ["!!", e]:
-                vals = eval(e, env)
-                assert isinstance(vals, list), f"Cannot splice in quasiquote: {e}"
-                quoted += vals
-            case _: quoted.append(eval_quasiquote(e, env))
-    return quoted
+    match expr:
+        case ["!", elem]: return eval(elem, env)
+        case [*elems]: return qqelems(elems)
+        case _: return expr
 
 def eval_expand(op, args, env):
     match eval(op, env):
@@ -80,17 +102,13 @@ def eval_op(op, args, env):
             return apply(f_val, [eval(arg, env) for arg in args])
 
 def expand(body, params, args, env):
-    assert len(params) == len(args), \
-        f"Argument count doesn't match: `{args}` @ expand"
-    env = {"parent": env, "vals": dict(zip(params, args))}
+    env = extend(env, params, args)
     return eval(body, env)
 
 def apply(f_val, args_val):
     if callable(f_val): return f_val(args_val)
     _, params, body, env = f_val
-    assert len(params) == len(args_val), \
-        f"Argument count doesn't match: `{args_val}` @ apply"
-    env = {"parent": env, "vals": dict(zip(params, args_val))}
+    env = extend(env, params, args_val)
     return eval(body, env)
 
 # runtime
@@ -101,6 +119,9 @@ def n_ary(n, f, args):
     assert len(args) == n, \
         f"Argument count doesn't match: `{args}` @ n_ary"
     return f(*args[0:n])
+
+def is_arr(elem):
+    return isinstance(elem, list)
 
 def setat(args):
     assert len(args) == 3, \

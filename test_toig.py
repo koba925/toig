@@ -9,6 +9,9 @@ def fails(src):
     except AssertionError: return True
     else: return False
 
+def expanded(src):
+    return run(["expand", src])
+
 def printed(src):
     with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
         val = run(src)
@@ -105,6 +108,12 @@ class TestCore(TestToig):
         self.assertTrue(fails([["func", ["n"], ["+", 5, "n"]]]))
         self.assertTrue(fails([["func", ["n"], ["+", 5, "n"]], 6, 7]))
 
+        self.assertEqual(run([["func", [["*", "rest"]], "rest"]]), [])
+        self.assertEqual(run([["func", ["a", ["*", "rest"]], ["arr", "a", "rest"]], 5]), [5, []])
+        self.assertEqual(run([["func", ["a", ["*", "rest"]], ["arr", "a", "rest"]], 5, 6]), [5, [6]])
+        self.assertEqual(run([["func", ["a", ["*", "rest"]], ["arr", "a", "rest"]], 5, 6, 7]), [5, [6, 7]])
+        self.assertTrue(fails([["func", [["*", "rest"], "a"], ["arr", "a", "rest"]], 5]))
+
     def test_fib(self):
         run(["define", "fib", ["func", ["n"],
                 ["if", ["=", "n", 0], 0,
@@ -179,6 +188,29 @@ class TestCore(TestToig):
         self.assertEqual(run(["q", 5]), 5)
         self.assertEqual(run(["q", ["+", 5, 6]]), ["+", 5, 6])
 
+    def test_qq(self):
+        self.assertEqual(run(["qq", 5]), 5)
+        self.assertEqual(run(["qq", ["+", 5, 6]]), ["+", 5, 6])
+        self.assertEqual(run(["qq", ["!", ["+", 5, 6]]]), 11)
+        self.assertEqual(run(["qq", ["*", 4, ["!", ["+", 5, 6]]]]), ["*", 4, 11])
+        self.assertEqual(run(["qq", ["+", ["!!", ["arr", 5, 6]]]]), ["+", 5, 6])
+        self.assertTrue(fails(["qq", ["+", ["!!", 5]]]))
+
+    def test_macro(self):
+        self.assertEqual(expanded([["macro", [], ["q", "abc"]]]), "abc")
+        self.assertEqual(
+            expanded([["macro", ["a"], ["arr", ["q", "*"], "a", "a"]], ["+", 5, 6]]),
+            ["*", ["+", 5, 6], ["+", 5, 6]])
+
+        run(["define", "build_exp", ["macro", ["op", ["*", "r"]],
+                ["+", ["arr", "op"], "r"]]])
+        self.assertEqual(expanded(["build_exp", "+"]), ["+"])
+        self.assertEqual(expanded(["build_exp", "+", 5]), ["+", 5])
+        self.assertEqual(expanded(["build_exp", "+", 5, 6]), ["+", 5, 6])
+
+        self.assertTrue(fails([["macro", [["*", "r"], "a"], 5]]))
+
+
 class TestStdlib(TestToig):
     def test_id(self):
         self.assertEqual(run(["id", ["+", 5, 6]]), 11)
@@ -205,7 +237,7 @@ class TestStdlib(TestToig):
         self.assertEqual(run(["range", 5, 8]), [5, 6, 7])
 
     def test_scope(self):
-        self.assertEqual(run(["expand", ["scope", ["do", ["define", "a", 5]]]]),
+        self.assertEqual(expanded(["scope", ["do", ["define", "a", 5]]]),
                          [["func", [], ["do", ["define", "a", 5]]]])
         self.assertEqual(printed(["do",
             ["define", "a", 5],
@@ -225,14 +257,14 @@ class TestStdlib(TestToig):
     def test_and_or(self):
         run(["define", "and", ["macro", ["a", "b"],
                 ["arr", ["q", "if"], "a", "b", False]]])
-        self.assertEqual(run(["expand", ["and", ["=", "a", 0], ["=", "b", 0]]]),
+        self.assertEqual(expanded(["and", ["=", "a", 0], ["=", "b", 0]]),
                          ["if", ["=", "a", 0], ["=", "b", 0], False])
         self.assertEqual(run(["and", False, "nosuchvariable"]), False)
         self.assertEqual(run(["and", False, "nosuchvariable"]), False)
         self.assertEqual(run(["and", True, False]), False)
         self.assertEqual(run(["and", True, True]), True)
 
-        self.assertEqual(run(["expand", ["or", ["=", "a", 0], ["=", "b", 0]]]),
+        self.assertEqual(expanded(["or", ["=", "a", 0], ["=", "b", 0]]),
                          ["if", ["=", "a", 0], True, ["=", "b", 0]])
         self.assertEqual(run(["or", False, False]), False)
         self.assertEqual(run(["or", False, True]), True)
@@ -240,7 +272,7 @@ class TestStdlib(TestToig):
         self.assertEqual(run(["or", True, "nosuchvariable"]), True)
 
         self.assertEqual(
-            run(["expand", ["and", ["or", ["=", 5, 6], ["=", 7, 7]], ["=", 8, 8]]]),
+            expanded(["and", ["or", ["=", 5, 6], ["=", 7, 7]], ["=", 8, 8]]),
             ["if", ["or", ["=", 5, 6], ["=", 7, 7]], ["=", 8, 8], False])
         self.assertEqual(
             run(["and", ["or", ["=", 5, 6], ["=", 7, 7]], ["=", 8, 8]]),
@@ -324,12 +356,13 @@ class TestStdlib(TestToig):
                 ["qq", ["scope", ["do",
                     ["!!", ["defines", "bindings"]],
                     ["!","body"]]]]]]])
-        self.assertEqual(run(["expand", ["let", [["a", 5], ["b", 6]], ["+", "a", "b"]]]),
+        self.assertEqual(expanded(["let", [["a", 5], ["b", 6]], ["+", "a", "b"]]),
                          ["scope", ["do",
                              ["define", "a", 5],
                              ["define", "b", 6],
                              ["+", "a", "b"]]])
         self.assertEqual(run(["let", [["a", 5], ["b", 6]], ["+", "a", "b"]]), 11)
+
 
 if __name__ == "__main__":
     unittest.main()
