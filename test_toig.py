@@ -210,6 +210,18 @@ class TestCore(TestToig):
 
         self.assertTrue(fails([["macro", [["*", "r"], "a"], 5]]))
 
+    def test_macro_firstclass(self):
+        self.assertEqual(run([["func", ["op", "a", "b"], ["op", "a", "b"]], "and", True, False]), False)
+        self.assertEqual(run([["func", ["op", "a", "b"], ["op", "a", "b"]], "or", True, False]), True)
+
+        self.assertEqual(run([[["func", [], "and"]], True, False]), False)
+        self.assertEqual(run([[["func", [], "or"]], True, False]), True)
+
+        self.assertEqual(run(["map",
+                                ["arr", "and", "or"],
+                                ["func", ["op"], ["op", True, False]]]),
+                        [False, True])
+
     def test_let(self):
         run(["define", "let", ["macro", ["bindings", "body"], ["do",
                 ["define", "defines", ["func", ["bindings"],
