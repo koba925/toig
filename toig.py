@@ -21,25 +21,24 @@ def get(env, name):
     else:
         return get(env["parent"], name)
 
-from itertools import zip_longest
-
 def extend(env, params, args):
-    sentinel, new_env = object(), {}
-    for i, (param, arg) in enumerate(zip_longest(params, args, fillvalue=sentinel)):
-        match param:
+    def new_env(params, args):
+        if params == [] and args == []: return {}
+        assert len(params) > 0, \
+            f"Argument count doesn't match: `{params}, {args}` @ extend"
+        match params[0]:
             case str(param):
-                assert arg is not sentinel, \
+                assert len(args) > 0, \
                     f"Argument count doesn't match: `{params}, {args}` @ extend"
-                new_env[param] = arg
+                return {param: args[0], **new_env(params[1:], args[1:])}
             case ["*", rest]:
-                assert i == len(params) - 1, \
+                assert len(params) == 1, \
                     f"Rest param must be last: `{params}` @ extend"
-                new_env[rest] = args[i:]; break
+                return {rest: args}
             case unexpected:
-                assert param is not  sentinel, \
-                    f"Argument count doesn't match: `{params}, {args}` @ extend"
                 assert False, f"Unexpected param at extend: {unexpected}"
-    return {"parent": env, "vals": new_env}
+
+    return {"parent": env, "vals": new_env(params, args)}
 
 # evaluator
 
