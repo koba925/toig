@@ -199,10 +199,16 @@ def stdlib():
 
     run(["define", "when", ["macro", ["cnd", "thn"],
             ["qq", ["if", ["!", "cnd"], ["!", "thn"], None]]]])
+
+    run(["define", "aif", ["macro", ["cnd", "thn", "els"],
+            ["qq", ["scope", ["do",
+                ["define", "it", ["!", "cnd"]],
+                ["if", "it", ["!", "thn"], ["!", "els"]]]]]]])
+
     run(["define", "and", ["macro", ["a", "b"],
-            ["qq", ["if", ["!", "a"], ["!", "b"], False]]]])
+            ["qq", ["aif", ["!", "a"], ["!", "b"], "it"]]]])
     run(["define", "or", ["macro", ["a", "b"],
-            ["qq", ["if", ["!", "a"], True, ["!", "b"]]]]])
+            ["qq", ["aif", ["!", "a"], "it", ["!", "b"]]]]])
 
     run(["define", "while", ["macro", ["cnd", "body"], ["qq",
             ["scope", ["do",
