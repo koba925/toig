@@ -105,7 +105,6 @@ class TestCore(TestToig):
 
     def test_func(self):
         self.assertEqual(run([["func", ["n"], ["+", 5, "n"]], 6]), 11)
-        self.assertTrue(fails([["func", ["n"], ["+", 5, "n"]]]))
         self.assertTrue(fails([["func", ["n"], ["+", 5, "n"]], 6, 7]))
 
         self.assertEqual(run([["func", [["*", "rest"]], "rest"]]), [])
@@ -113,6 +112,16 @@ class TestCore(TestToig):
         self.assertEqual(run([["func", ["a", ["*", "rest"]], ["arr", "a", "rest"]], 5, 6]), [5, [6]])
         self.assertEqual(run([["func", ["a", ["*", "rest"]], ["arr", "a", "rest"]], 5, 6, 7]), [5, [6, 7]])
         self.assertTrue(fails([["func", [["*", "rest"], "a"], ["arr", "a", "rest"]], 5]))
+
+    def test_currying(self):
+        self.assertTrue(run([[["func", ["n"], ["+", 5, "n"]]], 6]), 11)
+        run(["define", "add", ["func", ["a", "b"], ["+", "a", "b"]]])
+        self.assertEqual(run([["add", 5], 6]), 11)
+        self.assertEqual(run([[["add"], 5], 6]), 11)
+        run(["define", "add3", ["func", ["a", "b", "c"], ["+", ["+", "a", "b"], "c"]]])
+        self.assertEqual(run([["add3", 5], 6, 7]), 18)
+        self.assertEqual(run([["add3", 5, 6], 7]), 18)
+        self.assertEqual(run([[["add3", 5], 6], 7]), 18)
 
     def test_closure_adder(self):
         run(["define", "make_adder", ["func", ["n"],

@@ -22,23 +22,24 @@ def get(env, name):
         return get(env["parent"], name)
 
 def extend(env, params, args):
-    def new_env(params, args):
-        if params == [] and args == []: return {}
-        assert len(params) > 0, \
+    def _extend(params, args):
+        if params == [] and args == []: return [[], {}]
+        assert params != [], \
             f"Argument count doesn't match: `{params}, {args}` @ extend"
         match params[0]:
             case str(param):
-                assert len(args) > 0, \
-                    f"Argument count doesn't match: `{params}, {args}` @ extend"
-                return {param: args[0], **new_env(params[1:], args[1:])}
+                if args == []: return [params, {}]
+                rest_params, new_env = _extend(params[1:], args[1:])
+                return [rest_params, {param: args[0], **new_env}]
             case ["*", rest]:
                 assert len(params) == 1, \
                     f"Rest param must be last: `{params}` @ extend"
-                return {rest: args}
+                return [[], {rest: args}]
             case unexpected:
                 assert False, f"Unexpected param at extend: {unexpected}"
 
-    return {"parent": env, "vals": new_env(params, args)}
+    rest_params, new_env = _extend(params, args)
+    return [rest_params, {"parent": env, "vals": new_env}]
 
 # evaluator
 
@@ -101,14 +102,14 @@ def eval_op(op, args, env):
             return apply(f_val, [eval(arg, env) for arg in args])
 
 def expand(body, params, args, env):
-    env = extend(env, params, args)
-    return eval(body, env)
+    rest_params, new_env = extend(env, params, args)
+    return ["macro", rest_params, body, new_env] if rest_params else eval(body, new_env)
 
 def apply(f_val, args_val):
     if callable(f_val): return f_val(args_val)
     _, params, body, env = f_val
-    env = extend(env, params, args_val)
-    return eval(body, env)
+    rest_params, new_env = extend(env, params, args_val)
+    return ["func", rest_params, body, new_env] if rest_params else eval(body, new_env)
 
 # runtime
 
