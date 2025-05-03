@@ -1,3 +1,5 @@
+import operator as op
+
 # environment
 
 def define(env, name, val):
@@ -9,18 +11,18 @@ def get(env, name):
 def extend(env, params, args):
     return {"parent": env, "vals": dict(zip(params, args))}
 
-# evaluator
+# CPS primitives
 
 def cps(expr):
     return lambda cont: cont(expr)
 
-def cpscall2(cps1, cps2, body):
-    return cps1(lambda val1: cps2(lambda val2: body(val1, val2)))
+def if_cps(cnd_cps, thn_delayed, els_delayed):
+    return cnd_cps(lambda cnd: thn_delayed() if cnd else els_delayed())
 
-def if_cps(cnd_cps, thn_cps, els_cps):
-    return cnd_cps(lambda cnd: thn_cps() if cnd else els_cps())
+# unary primitives
 
-import operator as op
+def cpscall(a_cps, body):
+    return a_cps(lambda a: body(a))
 
 def unop_cps(op, a_cps):
     return lambda cont: a_cps(lambda a: cont(op(a)))
@@ -28,8 +30,13 @@ def unop_cps(op, a_cps):
 def callable_cps(a_cps):
     return unop_cps(callable, a_cps)
 
+# binary primitives
+
+def cpscall2(a_cps, b_cps, body):
+    return a_cps(lambda a: b_cps(lambda b: body(a, b)))
+
 def binop_cps(op, a_cps, b_cps):
-    return lambda cont: a_cps(lambda a: b_cps(lambda b: cont(op(a, b))))
+    return cps(cpscall2(a_cps, b_cps, op))
 
 def equal_cps(a_cps, b_cps):
     return binop_cps(op.eq, a_cps, b_cps)
@@ -40,11 +47,13 @@ def add_cps(a_cps, b_cps):
 def sub_cps(a_cps, b_cps):
     return binop_cps(op.sub, a_cps, b_cps)
 
-def array_cps(*es_cps):
-    return (cps([]) if es_cps == () else
-            es_cps[0](lambda r: add_cps(
-                cps([r]),
-                array_cps(*es_cps[1:]))))
+# array primitives
+
+def array_cps(*elems_cps):
+    return (cps([]) if elems_cps == () else
+            elems_cps[0](lambda elem: add_cps(
+                cps([elem]),
+                array_cps(*elems_cps[1:]))))
 
 def first_cps(l_cps):
     return lambda cont: l_cps(lambda l: cont(l[0]))
@@ -64,37 +73,49 @@ def map_cps(l_cps, f):
         lambda acc_cps, e_cps: add_cps(acc_cps, array_cps(f(e_cps))),
         cps([]))
 
+# evaluator
+
+class Skip(Exception):
+    def __init__(self, skip): self.skip = skip
+
 def eval_cps(expr_cps, env_cps):
     def _eval(expr, env, cont):
         match expr:
             case None | bool(_) | int(_): return cont(expr)
-            case str(name): return cont(get(env, name))
             case ["func", params, body]: return cont(["func", params, body, env])
-            case ["define", name, val]:
-                eval_cps(cps(val), cps(env))(lambda v: define(env, name, v))
+            case str(name): return cont(get(env, name))
+            case ["define", name, expr]:
+                eval_cps(cps(expr), cps(env))(lambda val: define(env, name, val))
                 return cont(None)
-            case ["if", cnd, thn, els]:
-                return if_cps(eval_cps(cps(cnd), cps(env)),
-                    lambda: eval_cps(cps(thn), cps(env)),
-                    lambda: eval_cps(cps(els), cps(env)))(cont)
+            case ["if", cnd_expr, thn_expr, els_expr]:
+                return if_cps(eval_cps(cps(cnd_expr), cps(env)),
+                    lambda: eval_cps(cps(thn_expr), cps(env)),
+                    lambda: eval_cps(cps(els_expr), cps(env)))(cont)
+            case ["letcc", name, body]:
+                def skip(args): raise Skip(lambda: cont(args[0]))
+                result = apply_cps(cps(["func", [name], body, env]), cps([skip]))
+                return result(cont)
             case [func, *args]:
                 f_val_cps = eval_cps(cps(func), cps(env))
-                args_val_cps = map_cps(cps(args), lambda arg_cps: eval_cps(arg_cps, cps(env)))
+                args_val_cps = map_cps(
+                    cps(args),
+                    lambda arg_cps: eval_cps(arg_cps, cps(env)))
                 return apply_cps(f_val_cps, args_val_cps)(cont)
 
     return lambda cont: cpscall2(expr_cps, env_cps,
                 lambda expr, env: _eval(expr, env, cont))
 
-def apply_cps(f_val_cps, args_val_cps):
-    def _apply_cps(f_val, cont):
-        match f_val:
+def apply_cps(func_val_cps, args_val_cps):
+    def _apply_cps(func_val, cont):
+        match func_val:
             case f if callable(f):
                 return args_val_cps(lambda args_val: cont(f(args_val)))
             case ["func", params, body, env]:
-                new_env = args_val_cps(lambda args: extend(env, params, args))
+                new_env = args_val_cps(lambda args_val: extend(env, params, args_val))
                 return eval_cps(cps(body), cps(new_env))(cont)
 
-    return lambda cont: f_val_cps(lambda f_val: _apply_cps(f_val, cont))
+    return lambda cont: cpscall(func_val_cps,
+        lambda func_val: _apply_cps(func_val, cont))
 
 # runtime
 
@@ -109,7 +130,12 @@ builtins = {
 top_env = {"parent": None, "vals": builtins}
 
 def run(src):
-    return eval_cps(cps(src), cps(top_env))(identity)
+    computation = lambda: eval_cps(cps(src), cps(top_env))(identity)
+    while True:
+        try:
+            return computation()
+        except Skip as s:
+            computation = s.skip
 
 # tests
 
@@ -144,5 +170,11 @@ assert run(["fib", 10]) == 55
 
 run(["define", "make_adder", ["func", ["n"], ["func", ["m"], ["+", "n", "m"]]]])
 assert run([["make_adder", 5], 6]) == 11
+
+assert run(["letcc", "skip-to", ["+", 5, 6]]) == 11                 # success
+assert run(["letcc", "skip-to", ["+", ["skip-to", 5], 6]]) == 5     # success
+assert run(["+", 5, ["letcc", "skip-to", ["skip-to", 6]]]) == 11    # fail
+assert run(["letcc", "skip1", ["+", ["skip1", ["letcc", "skip2", ["+", 5, 6]]], 7]]) == 11
+assert run(["letcc", "skip1", ["+", ["skip1", ["letcc", "skip2", ["+", ["skip2", 5], 6]]], 7]]) == 5
 
 print("Success")
