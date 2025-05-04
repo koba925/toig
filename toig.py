@@ -8,35 +8,56 @@ def get(env, name):
 
 # evaluator
 
-def eval(expr, env):
+def eval(expr, env, cont):
     match expr:
-        case None | bool(_) | int(_): return expr
-        case str(name): return get(env, name)
-        case ["func", params, body]: return ["func", params, body, env]
-        case ["define", name, val]:
-            return define(env, name, eval(val, env))
-        case ["if", cnd, thn, els]:
-            return eval(thn, env) if eval(cnd, env) else eval(els, env)
-        case [func, *args]:
-            return apply(eval(func, env), [eval(arg, env) for arg in args])
+        case None | bool(_) | int(_): cont(expr)
+        case ["func", params, body]: cont(["func", params, body, env])
+        case str(name): cont(get(env, name))
+        case ["define", name, expr]:
+            eval(expr, env, lambda val: define(env, name, val))
+            cont(None)
+        case ["if", cnd_expr, thn_expr, els_expr]:
+            eval(cnd_expr, env, lambda cnd:
+                 eval(thn_expr, env, cont) if cnd else
+                 eval(els_expr, env, cont))
+        case [func_expr, *args_expr]:
+            eval(func_expr, env, lambda func_val:
+                map_cps(args_expr,
+                    lambda arg_expr, c: eval(arg_expr, env, c),
+                    lambda args_val: apply(func_val, args_val, cont)))
 
-def apply(f_val, args_val):
-    if callable(f_val): return f_val(args_val)
-    _, params, body, env = f_val
-    env = {"parent": env, "vals": dict(zip(params, args_val))}
-    return eval(body, env)
+def foldl_cps(l, f, init, cont):
+    cont(init) if l == [] else \
+    f(init, l[0], lambda r: foldl_cps(l[1:], f, r, cont))
+
+def map_cps(l, f, cont):
+    foldl_cps(l,
+        lambda acc, e, cont: f(e, lambda r: cont(acc + [r])),
+        [], cont)
+
+def apply(func_val, args_val, cont):
+    match func_val:
+        case f if callable(f): cont(func_val(args_val))
+        case ["func", params, body_expr, env]:
+            env = {"parent": env, "vals": dict(zip(params, args_val))}
+            eval(body_expr, env, cont)
 
 # runtime
 
 builtins = {
-    "+": lambda args: args[0] + args[1],
-    "-": lambda args: args[0] - args[1],
-    "=": lambda args: args[0] == args[1],
+    "+": lambda args_val: args_val[0] + args_val[1],
+    "-": lambda args_val: args_val[0] - args_val[1],
+    "=": lambda args_val: args_val[0] == args_val[1],
 }
 top_env = {"parent": None, "vals": builtins}
 
 def run(src):
-    return eval(src, top_env)
+    def save(val): nonlocal result; result = val
+
+    result = None
+    eval(src, top_env, save)
+    return result
+
 
 # tests
 
@@ -57,6 +78,9 @@ assert run(["=", 5, 5]) == True
 assert run(["=", 5, 6]) == False
 
 assert run([["func", ["n"], ["+", 5, "n"]], 6]) == 11
+
+import sys
+sys.setrecursionlimit(14000)
 
 run(["define", "fib", ["func", ["n"],
         ["if", ["=", "n", 0], 0,
