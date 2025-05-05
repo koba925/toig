@@ -8,6 +8,9 @@ def get(env, name):
 
 # evaluator
 
+class Skip(Exception):
+    def __init__(self, skip): self.skip = skip
+
 def eval(expr, env, cont):
     match expr:
         case None | bool(_) | int(_): cont(expr)
@@ -20,6 +23,9 @@ def eval(expr, env, cont):
             eval(cnd_expr, env, lambda cnd:
                  eval(thn_expr, env, cont) if cnd else
                  eval(els_expr, env, cont))
+        case ["letcc", name, body]:
+            def skip(args): raise Skip(lambda: cont(args[0]))
+            apply(["func", [name], body, env], [skip], cont)
         case [func_expr, *args_expr]:
             eval(func_expr, env, lambda func_val:
                 map_cps(args_expr,
@@ -54,10 +60,13 @@ top_env = {"parent": None, "vals": builtins}
 def run(src):
     def save(val): nonlocal result; result = val
 
-    result = None
-    eval(src, top_env, save)
-    return result
-
+    result, computation = None, lambda: eval(src, top_env, save)
+    while True:
+        try:
+            computation()
+            return result
+        except Skip as s:
+            computation = s.skip
 
 # tests
 
@@ -94,5 +103,15 @@ assert run(["fib", 10]) == 55
 
 run(["define", "make_adder", ["func", ["n"], ["func", ["m"], ["+", "n", "m"]]]])
 assert run([["make_adder", 5], 6]) == 11
+
+assert run(["letcc", "skip-to", ["+", 5, 6]]) == 11
+assert run(["letcc", "skip-to", ["+", ["skip-to", 5], 6]]) == 5
+assert run(["+", 5, ["letcc", "skip-to", ["skip-to", 6]]]) == 11
+assert run(["letcc", "skip1", ["+", ["skip1", ["letcc", "skip2", ["+", ["skip2", 5], 6]]], 7]]) == 5
+
+run(["define", "inner", ["func", ["raise"], ["raise", 5]]])
+run(["define", "outer", ["func", [],
+        [ "letcc", "raise", ["+", ["inner", "raise"], 6]]]])
+assert run(["outer"]) == 5
 
 print("Success")
