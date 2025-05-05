@@ -14,21 +14,21 @@ class Skip(Exception):
 def eval(expr, env):
     def _eval(expr, env, cont):
         match expr:
-            case None | bool(_) | int(_): cont(expr)
-            case ["func", params, body]: cont(["func", params, body, env])
-            case str(name): cont(get(env, name))
+            case None | bool(_) | int(_): return cont(expr)
+            case ["func", params, body]: return cont(["func", params, body, env])
+            case str(name): return cont(get(env, name))
             case ["define", name, expr]:
                 eval(expr, env)(lambda val: define(env, name, val))
-                cont(None)
+                return cont(None)
             case ["if", cnd_expr, thn_expr, els_expr]:
-                eval(cnd_expr, env)(lambda cnd:
+                return eval(cnd_expr, env)(lambda cnd:
                     eval(thn_expr, env)(cont) if cnd else
                     eval(els_expr, env)(cont))
             case ["letcc", name, body]:
                 def skip(args): raise Skip(lambda: cont(args[0]))
-                apply(["func", [name], body, env], [skip])(cont)
+                return apply(["func", [name], body, env], [skip])(cont)
             case [func_expr, *args_expr]:
-                eval(func_expr, env)(lambda func_val:
+                return eval(func_expr, env)(lambda func_val:
                     map_cps(args_expr, lambda arg_expr: lambda c: eval(arg_expr, env)(c))
                         (lambda args_val: apply(func_val, args_val)(cont)))
 
@@ -49,10 +49,10 @@ def apply(func_val, args_val):
     def _apply(func_val, args_val, cont):
         match func_val:
             case f if callable(f):
-                cont(func_val(args_val))
+                return cont(func_val(args_val))
             case ["func", params, body_expr, env]:
                 env = {"parent": env, "vals": dict(zip(params, args_val))}
-                eval(body_expr, env)(cont)
+                return eval(body_expr, env)(cont)
 
     return lambda cont: _apply(func_val, args_val, cont)
 
@@ -66,13 +66,10 @@ builtins = {
 top_env = {"parent": None, "vals": builtins}
 
 def run(src):
-    def save(val): nonlocal result; result = val
-
-    result, computation = None, lambda: eval(src, top_env)(save)
+    computation = lambda: eval(src, top_env)(lambda r: r)
     while True:
         try:
-            computation()
-            return result
+            return computation()
         except Skip as s:
             computation = s.skip
 
