@@ -53,7 +53,8 @@ def map_cps(l, f, cont):
 
 # evaluator
 
-from functools import reduce
+class Skip(Exception):
+    def __init__(self, skip): self.skip = skip
 
 def eval(expr, env, cont):
     match expr:
@@ -75,6 +76,9 @@ def eval(expr, env, cont):
             eval(cnd_expr, env, lambda cnd:
                  eval(thn_expr, env, cont) if cnd else
                  eval(els_expr, env, cont))
+        case ["letcc", name, body]:
+            def skip(args): raise Skip(lambda: cont(args[0]))
+            apply(["func", [name], body, env], [skip], cont)
         case ["expand", [op_expr, *args_expr]]:
             eval_expand(op_expr, args_expr, env, cont)
         case [op_expr, *args_expr]:
@@ -161,6 +165,9 @@ def slice(args):
         case [arr, start, end]: return arr[start:end]
         case _: assert False, f"Invalid slice: args=`{args}` @ slice"
 
+def error(args):
+    assert False, f"{' '.join(map(str, args))}"
+
 builtins = {
     "+": lambda args: n_ary(2, op.add, args),
     "-": lambda args: n_ary(2, op.sub, args),
@@ -182,6 +189,7 @@ builtins = {
     "slice": slice,
 
     "print": lambda args: print(*args),
+    "error": lambda args: error(args)
 }
 
 top_env = None
@@ -237,28 +245,77 @@ def stdlib():
 
     run(["define", "while", ["macro", ["cnd", "body"], ["qq",
             ["scope", ["do",
-                ["define", "__stdlib_while_loop", ["func", [],
-                    ["when", ["!", "cnd"], ["do", ["!", "body"], ["__stdlib_while_loop"]]]]],
-                ["__stdlib_while_loop"]]]]]])
+                ["define", "break", None],
+                ["define", "continue", ["func", [],
+                    ["when", ["!", "cnd"], ["do", ["!", "body"], ["continue"]]]]],
+                ["letcc", "cc", ["do", ["assign", "break", "cc"], ["continue"]]]]]]]])
+
+    run(["define", "awhile", ["macro", ["cnd", "body"], ["qq",
+            ["scope", ["do",
+                ["define", "break", None],
+                ["define", "continue", ["func", [], ["do",
+                    ["define", "it", ["!", "cnd"]],
+                    ["when", "it", ["do", ["!", "body"], ["continue"]]]]]],
+                ["letcc", "cc", ["do", ["assign", "break", "cc"], ["continue"]]]]]]]])
+
+    run(["define", "gfunc", ["macro", ["params", "body"], ["qq",
+            ["func", ["!", "params"], ["do",
+                ["define", "yd", None],
+                ["define", "nx", None],
+                ["define", "yield", ["func", ["x"],
+                    ["letcc", "cc", ["do",
+                        ["assign", "nx", "cc"],
+                        ["yd", "x"]]]]],
+                ["define", "next", ["func", [],
+                    ["letcc", "cc", ["do",
+                        ["assign", "yd", "cc"],
+                        ["nx", None]]]]],
+                ["assign", "nx", ["func", ["_"], ["do",
+                    ["!", "body"],
+                    ["yield", None]]]],
+                "next"]]]]])
 
     run(["define", "for", ["macro", ["e", "l", "body"], ["qq",
             ["scope", ["do",
                 ["define", "__stdlib_for_index", 0],
                 ["define", ["!", "e"], None],
-                ["while", ["<", "__stdlib_for_index", ["len", ["!", "l"]]], ["do",
-                    ["assign", ["!", "e"], ["getat", ["!", "l"], "__stdlib_for_index"]],
-                    ["!", "body"],
-                    ["assign", "__stdlib_for_index", ["inc", "__stdlib_for_index"]]]]]]]]])
+                ["define", "break", None],
+                ["define", "continue", ["func", [], ["do",
+                    ["assign", "__stdlib_for_index", ["inc", "__stdlib_for_index"]],
+                    ["go"]]]],
+                ["define", "go", ["func", [],
+                    ["when", ["<", "__stdlib_for_index", ["len", ["!", "l"]]],
+                        ["do",
+                            ["assign", ["!", "e"], ["getat", ["!", "l"], "__stdlib_for_index"]],
+                            ["!", "body"],
+                            ["continue"]]]]],
+                ["letcc", "cc", ["do", ["assign", "break", "cc"], ["go"]]]]]]]])
+
+    run(["define", "agen", ["gfunc", ["a"], ["for", "e", "a", ["yield", "e"]]]])
+
+    run(["define", "gfor", ["macro", ["e", "gen", "body"], ["qq",
+            ["scope", ["do",
+                ["define", "__stdlib_gfor_gen", ["!", "gen"]],
+                ["define", ["!", "e"], None],
+                ["while", ["!=", ["assign", ["!", "e"], ["__stdlib_gfor_gen"]], None],
+                    ["!", "body"]]]]]]])
 
     global top_env
     top_env = {"parent": top_env, "vals": {}}
 
-def run(src):
-    def save(val): nonlocal result; result = val
+result = None
 
-    result = None
-    eval(src, top_env, save)
-    return result
+def run(src):
+    def save(val):
+        global result; result = val
+
+    computation = lambda: eval(src, top_env, save)
+    while True:
+        try:
+            computation()
+            return result
+        except Skip as s:
+            computation = s.skip
 
 if __name__ == "__main__":
     init_env()
