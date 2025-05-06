@@ -40,75 +40,101 @@ def extend(env, params, args):
 
     return {"parent": env, "vals": new_env(params, args)}
 
+# CPS operations
+
+def foldl_cps(l, f, init, cont):
+    cont(init) if l == [] else \
+    f(init, l[0], lambda r: foldl_cps(l[1:], f, r, cont))
+
+def map_cps(l, f, cont):
+    foldl_cps(l,
+        lambda acc, e, cont: f(e, lambda r: cont(acc + [r])),
+        [], cont)
+
 # evaluator
 
 from functools import reduce
 
-def eval(expr, env):
+def eval(expr, env, cont):
     match expr:
-        case None | bool(_) | int(_): return expr
-        case str(name): return get(env, name)
-        case ["q", elem]: return elem
-        case ["qq", elem]: return eval_quasiquote(elem, env)
+        case None | bool(_) | int(_): cont(expr)
+        case str(name): cont(get(env, name))
+        case ["q", elem]: cont(elem)
+        case ["qq", elem]: eval_quasiquote(elem, env, cont)
         case ["func", params, body]:
-            return ["func", params, body, env]
+            cont(["func", params, body, env])
         case ["macro", params, body]:
-            return ["macro", params, body, env]
-        case ["define", name, val]:
-            return define(env, name, eval(val, env))
-        case ["assign", name, val]:
-            return assign(env, name, eval(val, env))
+            cont(["macro", params, body, env])
+        case ["define", name, expr]:
+            eval(expr, env, lambda val: cont(define(env, name, val)))
+        case ["assign", name, expr]:
+            eval(expr, env, lambda val: cont(assign(env, name, val)))
         case ["do", *exprs]:
-            return reduce(lambda _, e: eval(e, env), exprs, None)
-        case ["if", cnd, thn, els]:
-            return eval(thn, env) if eval(cnd, env) else eval(els, env)
-        case ["expand", [op, *args]]:
-            return eval_expand(op, args, env)
-        case [op, *args]:
-            return eval_op(op, args, env)
+            foldl_cps(exprs, lambda _, expr, c: eval(expr, env, c), None, cont)
+        case ["if", cnd_expr, thn_expr, els_expr]:
+            eval(cnd_expr, env, lambda cnd:
+                 eval(thn_expr, env, cont) if cnd else
+                 eval(els_expr, env, cont))
+        case ["expand", [op_expr, *args_expr]]:
+            eval_expand(op_expr, args_expr, env, cont)
+        case [op_expr, *args_expr]:
+            eval_op(op_expr, args_expr, env, cont)
         case unexpected:
             assert False, f"Unexpected expression: {unexpected} @ eval"
 
-def eval_quasiquote(expr, env):
-    def qqelems(elems):
-        quoted = []
-        for elem in elems:
-            match elem:
-                case ["!!", e]:
-                    vals = eval(e, env)
-                    assert isinstance(vals, list), f"Cannot splice in quasiquote: {e}"
-                    quoted += vals
-                case _: quoted.append(eval_quasiquote(elem, env))
-        return quoted
+def eval_quasiquote(expr, env, cont):
+    def splice(quoted, elem_vals, cont):
+        assert isinstance(elem_vals, list), \
+            f"Cannot splice: {elem_vals} @ eval_quasiquote"
+        cont(quoted + elem_vals)
+
+    def unquote_splice(quoted, elem, cont):
+        match elem:
+            case ["!!", e]:
+                eval(e, env, lambda e_val: splice(quoted, e_val, cont))
+            case _:
+                eval_quasiquote(elem, env,
+                    lambda elem_val: cont(quoted + [elem_val]))
 
     match expr:
-        case ["!", elem]: return eval(elem, env)
-        case [*elems]: return qqelems(elems)
-        case _: return expr
+        case ["!", elem]: eval(elem, env, cont)
+        case [*elems]: foldl_cps(elems, unquote_splice, [], cont)
+        case _: cont(expr)
 
-def eval_expand(op, args, env):
-    match eval(op, env):
-        case ["macro", params, body, macro_env]:
-            return expand(body, params, args, macro_env)
-        case unexpected:
-            assert False, f"Macro expected: {unexpected} @ eval"
+def eval_expand(op_expr, args_expr, env, cont):
+    def _eval_expand(op):
+        match op:
+            case ["macro", params, body, macro_env]:
+                expand(body, params, args_expr, macro_env, cont)
+            case unexpected:
+                assert False, f"Macro expected: {unexpected} @ eval_expand"
 
-def eval_op(op, args, env):
-    match eval(op, env):
-        case ["macro", params, body, macro_env]:
-            return eval(expand(body, params, args, macro_env), env)
-        case f_val:
-            return apply(f_val, [eval(arg, env) for arg in args])
+    eval(op_expr, env, _eval_expand)
 
-def expand(body, params, args, env):
+def eval_op(op_expr, args_expr, env, cont):
+    def _eval_op(op):
+        match op:
+            case ["macro", params, body, macro_env]:
+                expand(body, params, args_expr, macro_env,
+                    lambda expanded: eval(expanded, env, cont))
+            case func:
+                map_cps(args_expr,
+                    lambda arg_expr, c: eval(arg_expr, env, c),
+                    lambda args: apply(func, args, cont))
+
+    eval(op_expr, env, _eval_op)
+
+def expand(body, params, args, env, cont):
     env = extend(env, params, args)
-    return eval(body, env)
+    eval(body, env, cont)
 
-def apply(f_val, args_val):
-    if callable(f_val): return f_val(args_val)
-    _, params, body, env = f_val
-    env = extend(env, params, args_val)
-    return eval(body, env)
+def apply(func, args, cont):
+    if callable(func):
+        cont(func(args))
+    else:
+        _, params, body, env = func
+        env = extend(env, params, args)
+        eval(body, env, cont)
 
 # runtime
 
@@ -228,7 +254,11 @@ def stdlib():
     top_env = {"parent": top_env, "vals": {}}
 
 def run(src):
-    return eval(src, top_env)
+    def save(val): nonlocal result; result = val
+
+    result = None
+    eval(src, top_env, save)
+    return result
 
 if __name__ == "__main__":
     init_env()

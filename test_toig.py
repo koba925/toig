@@ -2,6 +2,9 @@ import unittest
 from unittest.mock import patch
 from io import StringIO
 
+import sys
+sys.setrecursionlimit(270000)
+
 from toig import init_env, stdlib, run
 
 def fails(src):
@@ -33,7 +36,7 @@ class TestCore(TestToig):
         self.assertEqual(run(["define", "a", ["+", 5, 6]]), 11)
         self.assertEqual(run("a"), 11)
         self.assertTrue(fails(["define", "a", 6]))
-        self.assertTrue(fails(["b"]))
+        self.assertTrue(fails("b"))
         self.assertEqual(printed([["func", [], ["do",
                             ["print", ["define", "a", 5]],
                             ["print", "a"]]]]), (None, "5\n5\n"))
