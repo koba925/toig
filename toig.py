@@ -13,39 +13,41 @@ class Skip(Exception):
 
 def eval(expr, env, cont):
     match expr:
-        case None | bool(_) | int(_): cont(expr)
-        case ["func", params, body]: cont(["func", params, body, env])
-        case str(name): cont(get(env, name))
+        case None | bool(_) | int(_): return lambda: cont(expr)
+        case ["func", params, body]: return lambda: cont(["func", params, body, env])
+        case str(name): return lambda: cont(get(env, name))
         case ["define", name, expr]:
-            eval(expr, env, lambda val: [define(env, name, val), cont(None)][1])
+            return lambda: eval(expr, env, lambda val: lambda: [
+                define(env, name, val),
+                cont(None)][1])
         case ["if", cnd_expr, thn_expr, els_expr]:
-            eval(cnd_expr, env, lambda cnd:
-                 eval(thn_expr, env, cont) if cnd else
-                 eval(els_expr, env, cont))
+            return lambda: eval(cnd_expr, env, lambda cnd: lambda: (
+                eval(thn_expr, env, cont) if cnd else
+                eval(els_expr, env, cont)))
         case ["letcc", name, body]:
             def skip(args): raise Skip(lambda: cont(args[0]))
-            apply(["func", [name], body, env], [skip], cont)
+            return lambda: apply(["func", [name], body, env], [skip], cont)
         case [func_expr, *args_expr]:
-            eval(func_expr, env, lambda func_val:
-                map_cps(args_expr,
-                    lambda arg_expr, c: eval(arg_expr, env, c),
-                    lambda args_val: apply(func_val, args_val, cont)))
+            return lambda: eval(func_expr, env, lambda func_val:
+                lambda: map_cps(args_expr,
+                    lambda arg_expr, c: lambda: eval(arg_expr, env, c),
+                    lambda args_val: lambda: apply(func_val, args_val, cont)))
 
 def foldl_cps(l, f, init, cont):
-    cont(init) if l == [] else \
-    f(init, l[0], lambda r: foldl_cps(l[1:], f, r, cont))
+    return lambda: cont(init) if l == [] else \
+        f(init, l[0], lambda r: lambda: foldl_cps(l[1:], f, r, cont))
 
 def map_cps(l, f, cont):
-    foldl_cps(l,
-        lambda acc, e, cont: f(e, lambda r: cont(acc + [r])),
+    return lambda: foldl_cps(l,
+        lambda acc, e, cont: lambda: f(e, lambda r: cont(acc + [r])),
         [], cont)
 
 def apply(func_val, args_val, cont):
     match func_val:
-        case f if callable(f): cont(func_val(args_val))
+        case f if callable(f): return lambda: cont(func_val(args_val))
         case ["func", params, body_expr, env]:
             env = {"parent": env, "vals": dict(zip(params, args_val))}
-            eval(body_expr, env, cont)
+            return lambda: eval(body_expr, env, cont)
 
 # runtime
 
@@ -57,15 +59,13 @@ builtins = {
 top_env = {"parent": None, "vals": builtins}
 
 def run(src):
-    def save(val): nonlocal result; result = val
-
-    result, computation = None, lambda: eval(src, top_env, save)
-    while True:
+    computation = lambda: eval(src, top_env, lambda result: result)
+    while callable(computation):
         try:
-            computation()
-            return result
+            computation = computation()
         except Skip as s:
             computation = s.skip
+    return computation
 
 # tests
 
@@ -86,9 +86,6 @@ assert run(["=", 5, 5]) == True
 assert run(["=", 5, 6]) == False
 
 assert run([["func", ["n"], ["+", 5, "n"]], 6]) == 11
-
-import sys
-sys.setrecursionlimit(14000)
 
 run(["define", "fib", ["func", ["n"],
         ["if", ["=", "n", 0], 0,
