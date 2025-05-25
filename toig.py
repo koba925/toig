@@ -17,8 +17,7 @@ def eval(expr, env, cont):
         case ["func", params, body]: cont(["func", params, body, env])
         case str(name): cont(get(env, name))
         case ["define", name, expr]:
-            eval(expr, env, lambda val: define(env, name, val))
-            cont(None)
+            eval(expr, env, lambda val: [define(env, name, val), cont(None)][1])
         case ["if", cnd_expr, thn_expr, els_expr]:
             eval(cnd_expr, env, lambda cnd:
                  eval(thn_expr, env, cont) if cnd else
