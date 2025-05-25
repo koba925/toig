@@ -431,3 +431,68 @@ factorial_cps_cc(const_cps(2))(print)
 factorial_cps_cc(const_cps(5))(print)
 
 get_cps_full("cc")(const_cps(3))
+
+# def factorial_cps(n, cont):
+#     if n == 1:
+#         cont(1)
+#     else:
+#         factorial_cps(n - 1, lambda r: cont(n * r))
+
+#   factorial(4, print)
+# = factorial(3, λ r1: print(4 * r1))
+# = factorial(2, λ r2: (λ r1: print(4 * r1))(3 * r2))
+# = factorial(1, λ r3: (λ r2: (λ r1: print(4 * r1))(3 * r2))(2 * r3))
+# = (λ r3: (λ r2: (λ r1: print(4 * r1))(3 * r2))(2 * r3))(1)
+# = (λ r2: (λ r1: print(4 * r1))(3 * r2))(2 * 1)
+# = (λ r1: print(4 * r1))(3 * (2 * 1))
+# = print(4 * (3 * (2 * 1)))
+
+print("## factorial_cps_trampoline")
+def factorial_cps_trampoline(n, cont):
+    if n == 1:
+        return lambda: cont(1)
+    else:
+        return lambda: factorial_cps_trampoline(n - 1, lambda r: lambda: cont(n * r))
+
+def trampoline(computation):
+    while callable(computation):
+        computation = computation()
+
+#   factorial(4, print)
+# = λ: factorial(3, λ r1: λ: print(4 * r1)) # → computation
+
+#   computation()
+# = (λ: factorial(3, λ r1: λ: print(4 * r1)))()
+# = factorial(3, λ r1: λ: print(4 * r1))
+# = λ: factorial(2, λ r2: λ: (λ r1: λ: print(4 * r1))(3 * r2)) # → computation
+
+#   computation()
+# = (λ: factorial(2, λ r2: λ: (λ r1: λ: print(4 * r1))(3 * r2)))()
+# = factorial(2, λ r2: λ: (λ r1: λ: print(4 * r1))(3 * r2))
+# = λ: factorial(1, λ r3: λ: (λ r2: λ: (λ r1: λ: print(4 * r1))(3 * r2))(2 * r3)) # → computation
+
+#   computation()
+# = (λ: factorial(1, λ r3: λ: (λ r2: λ: (λ r1: λ: print(4 * r1))(3 * r2))(2 * r3)))()
+# = factorial(1, λ r3: λ: (λ r2: λ: (λ r1: λ: print(4 * r1))(3 * r2))(2 * r3))
+# = λ: (λ r3: λ: (λ r2: λ: (λ r1: λ: print(4 * r1))(3 * r2))(2 * r3))(1) # → computation
+
+#   computation()
+# = (λ: (λ r3: λ: (λ r2: λ: (λ r1: λ: print(4 * r1))(3 * r2))(2 * r3))(1))()
+# = (λ r3: λ: (λ r2: λ: (λ r1: λ: print(4 * r1))(3 * r2))(2 * r3))(1)
+# = λ: (λ r2: λ: (λ r1: λ: print(4 * r1))(3 * r2))(2 * 1) # → computation
+
+#   computation()
+# = (λ: (λ r2: λ: (λ r1: λ: print(4 * r1))(3 * r2))(2 * 1))()
+# = (λ r2: λ: (λ r1: λ: print(4 * r1))(3 * r2))(2 * 1)
+# = λ: (λ r1: λ: print(4 * r1))(3 * (2 * 1)) # → computation
+
+#   computation()
+# = (λ: (λ r1: λ: print(4 * r1))(3 * (2 * 1)))()
+# = (λ r1: λ: print(4 * r1))(3 * (2 * 1))
+# = λ: print(4 * (3 * (2 * 1))) # → computation
+
+#   computation()
+# = (λ: print(4 * (3 * (2 * 1))))()
+# = print(4 * (3 * (2 * 1))) # → computation
+
+trampoline(factorial_cps_trampoline(1500, print))
