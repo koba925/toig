@@ -2,9 +2,6 @@ import unittest
 from unittest.mock import patch
 from io import StringIO
 
-import sys
-sys.setrecursionlimit(270000)
-
 from toig import init_env, stdlib, run
 
 def fails(src):
@@ -409,6 +406,15 @@ class TestStdlib(TestToig):
                          (None, "2\n4\n"))
 
 class TestProblems(TestToig):
+    def test_factorial(self):
+        run(["define", "factorial", ["func", ["n"],
+                ["if", ["=", "n", 1],
+                    1,
+                    ["*", "n", ["factorial", ["-", "n", 1]]]]]])
+        self.assertEqual(run(["factorial", 1]), 1)
+        self.assertEqual(run(["factorial", 10]), 3628800)
+        # print(run(["factorial", 1500]))
+
     def test_fib(self):
         run(["define", "fib", ["func", ["n"],
                 ["if", ["=", "n", 0], 0,
