@@ -1,3 +1,50 @@
+# scanner
+
+def scanner(src):
+    def advance(): nonlocal pos; pos += 1
+    def current_char(): return src[pos] if pos < len(src) else "$EOF"
+
+    def append_char():
+        nonlocal token
+        token += current_char()
+        advance()
+
+    def is_name_first(c): return c.isalpha() or c == "_"
+    def is_name_rest(c): return c.isalnum() or c == "_"
+
+    def word():
+        nonlocal token
+        match token:
+            case "None": return None
+            case "True": return True
+            case "False": return False
+            case _ : return token
+
+    def next_token():
+        while current_char().isspace(): advance()
+
+        nonlocal token
+        token = ""
+
+        match current_char():
+            case "$EOF": return "$EOF"
+            case c if is_name_first(c):
+                append_char()
+                while is_name_rest(current_char()): append_char()
+                return word()
+            case c if c.isnumeric():
+                while current_char().isnumeric(): append_char()
+                return int(token)
+
+    pos = 0; token = ""
+    return next_token
+
+# parser
+
+def parse(src):
+    next_token = scanner(src)
+    return next_token()
+
 # environment
 
 def define(env, name, val):
@@ -57,7 +104,7 @@ def map_cps(l, f, cont):
 class Skip(Exception):
     def __init__(self, skip): self.skip = skip
 
-def eval(expr, env, cont):
+def eval_expr(expr, env, cont):
     match expr:
         case None | bool(_) | int(_): return lambda: cont(expr)
         case str(name): return lambda: cont(get(env, name))
@@ -68,19 +115,19 @@ def eval(expr, env, cont):
         case ["macro", params, body]:
             return lambda: cont(["macro", params, body, env])
         case ["define", name, expr]:
-            return lambda: eval(expr, env,
+            return lambda: eval_expr(expr, env,
                 lambda val: cont(define(env, name, val)))
         case ["assign", name, expr]:
-            return lambda: eval(expr, env,
+            return lambda: eval_expr(expr, env,
                 lambda val: cont(assign(env, name, val)))
         case ["do", *exprs]:
             return lambda: foldl_cps(exprs,
-                lambda _, expr, c: eval(expr, env, c),
+                lambda _, expr, c: eval_expr(expr, env, c),
                 None, cont)
         case ["if", cnd_expr, thn_expr, els_expr]:
-            return lambda: eval(cnd_expr, env, lambda cnd:
-                eval(thn_expr, env, cont) if cnd else
-                eval(els_expr, env, cont))
+            return lambda: eval_expr(cnd_expr, env, lambda cnd:
+                eval_expr(thn_expr, env, cont) if cnd else
+                eval_expr(els_expr, env, cont))
         case ["letcc", name, body]:
             def skip(args): raise Skip(lambda: cont(args[0]))
             return lambda: apply(["func", [name], body, env], [skip], cont)
@@ -100,14 +147,14 @@ def eval_quasiquote(expr, env, cont):
     def unquote_splice(quoted, elem, cont):
         match elem:
             case ["!!", e]:
-                return lambda: eval(e, env,
+                return lambda: eval_expr(e, env,
                     lambda e_val: splice(quoted, e_val, cont))
             case _:
                 return lambda: eval_quasiquote(elem, env,
                     lambda elem_val: cont(quoted + [elem_val]))
 
     match expr:
-        case ["!", elem]: return lambda: eval(elem, env, cont)
+        case ["!", elem]: return lambda: eval_expr(elem, env, cont)
         case [*elems]: return lambda: foldl_cps(elems, unquote_splice, [], cont)
         case _: return lambda: cont(expr)
 
@@ -119,24 +166,24 @@ def eval_expand(op_expr, args_expr, env, cont):
             case unexpected:
                 assert False, f"Macro expected: {unexpected} @ eval_expand"
 
-    return lambda: eval(op_expr, env, _eval_expand)
+    return lambda: eval_expr(op_expr, env, _eval_expand)
 
 def eval_op(op_expr, args_expr, env, cont):
     def _eval_op(op):
         match op:
             case ["macro", params, body, macro_env]:
                 return lambda: expand(body, params, args_expr, macro_env,
-                    lambda expanded: eval(expanded, env, cont))
+                    lambda expanded: eval_expr(expanded, env, cont))
             case func:
                 return lambda: map_cps(args_expr,
-                    lambda arg_expr, c: eval(arg_expr, env, c),
+                    lambda arg_expr, c: eval_expr(arg_expr, env, c),
                     lambda args: apply(func, args, cont))
 
-    return lambda: eval(op_expr, env, _eval_op)
+    return lambda: eval_expr(op_expr, env, _eval_op)
 
 def expand(body, params, args, env, cont):
     env = extend(env, params, args)
-    return lambda: eval(body, env, cont)
+    return lambda: eval_expr(body, env, cont)
 
 def apply(func, args, cont):
     if callable(func):
@@ -144,7 +191,7 @@ def apply(func, args, cont):
     else:
         _, params, body, env = func
         env = extend(env, params, args)
-        return lambda: eval(body, env, cont)
+        return lambda: eval_expr(body, env, cont)
 
 # runtime
 
@@ -206,57 +253,57 @@ def init_env():
     top_env = {"parent": top_env, "vals": {}}
 
 def stdlib():
-    run(["define", "id", ["func", ["x"], "x"]])
+    eval(["define", "id", ["func", ["x"], "x"]])
 
-    run(["define", "inc", ["func", ["x"], ["+", "x", 1]]])
-    run(["define", "dec", ["func", ["x"], ["-", "x", 1]]])
+    eval(["define", "inc", ["func", ["x"], ["+", "x", 1]]])
+    eval(["define", "dec", ["func", ["x"], ["-", "x", 1]]])
 
-    run(["define", "first", ["func", ["l"], ["getat", "l", 0]]])
-    run(["define", "rest", ["func", ["l"], ["slice", "l", 1]]])
-    run(["define", "last", ["func", ["l"], ["getat", "l", -1]]])
-    run(["define", "append", ["func", ["l", "a"], ["+", "l", ["arr", "a"]]]])
-    run(["define", "prepend", ["func", ["a", "l"], ["+", ["arr", "a"], "l"]]])
+    eval(["define", "first", ["func", ["l"], ["getat", "l", 0]]])
+    eval(["define", "rest", ["func", ["l"], ["slice", "l", 1]]])
+    eval(["define", "last", ["func", ["l"], ["getat", "l", -1]]])
+    eval(["define", "append", ["func", ["l", "a"], ["+", "l", ["arr", "a"]]]])
+    eval(["define", "prepend", ["func", ["a", "l"], ["+", ["arr", "a"], "l"]]])
 
-    run(["define", "foldl", ["func", ["l", "f", "init"],
+    eval(["define", "foldl", ["func", ["l", "f", "init"],
             ["if", ["=", "l", ["arr"]],
                 "init",
                 ["foldl", ["rest", "l"], "f", ["f", "init", ["first", "l"]]]]]])
-    run(["define", "unfoldl", ["func", ["x", "p", "h", "t"], ["do",
+    eval(["define", "unfoldl", ["func", ["x", "p", "h", "t"], ["do",
             ["define", "_unfoldl", ["func", ["x", "b"],
                 ["if", ["p", "x"],
                     "b",
                     ["_unfoldl", ["t", "x"], ["+", "b", ["arr", ["h", "x"]]]]]]],
             ["_unfoldl", "x", ["arr"]]]]])
 
-    run(["define", "map", ["func", ["l", "f"],
+    eval(["define", "map", ["func", ["l", "f"],
             ["foldl", "l", ["func", ["acc", "e"], ["append", "acc", ["f", "e"]]], ["arr"]]]])
-    run(["define", "range", ["func", ["s", "e"],
+    eval(["define", "range", ["func", ["s", "e"],
             ["unfoldl", "s", ["func", ["x"], [">=", "x", "e"]], "id", "inc"]]])
 
-    run(["define", "scope", ["macro", ["body"],
+    eval(["define", "scope", ["macro", ["body"],
             ["qq", [["func", [], ["!", "body"]]]]]])
 
-    run(["define", "when", ["macro", ["cnd", "thn"],
+    eval(["define", "when", ["macro", ["cnd", "thn"],
             ["qq", ["if", ["!", "cnd"], ["!", "thn"], None]]]])
 
-    run(["define", "aif", ["macro", ["cnd", "thn", "els"],
+    eval(["define", "aif", ["macro", ["cnd", "thn", "els"],
             ["qq", ["scope", ["do",
                 ["define", "it", ["!", "cnd"]],
                 ["if", "it", ["!", "thn"], ["!", "els"]]]]]]])
 
-    run(["define", "and", ["macro", ["a", "b"],
+    eval(["define", "and", ["macro", ["a", "b"],
             ["qq", ["aif", ["!", "a"], ["!", "b"], "it"]]]])
-    run(["define", "or", ["macro", ["a", "b"],
+    eval(["define", "or", ["macro", ["a", "b"],
             ["qq", ["aif", ["!", "a"], "it", ["!", "b"]]]]])
 
-    run(["define", "while", ["macro", ["cnd", "body"], ["qq",
+    eval(["define", "while", ["macro", ["cnd", "body"], ["qq",
             ["scope", ["do",
                 ["define", "break", None],
                 ["define", "continue", ["func", [],
                     ["when", ["!", "cnd"], ["do", ["!", "body"], ["continue"]]]]],
                 ["letcc", "cc", ["do", ["assign", "break", "cc"], ["continue"]]]]]]]])
 
-    run(["define", "awhile", ["macro", ["cnd", "body"], ["qq",
+    eval(["define", "awhile", ["macro", ["cnd", "body"], ["qq",
             ["scope", ["do",
                 ["define", "break", None],
                 ["define", "continue", ["func", [], ["do",
@@ -264,7 +311,7 @@ def stdlib():
                     ["when", "it", ["do", ["!", "body"], ["continue"]]]]]],
                 ["letcc", "cc", ["do", ["assign", "break", "cc"], ["continue"]]]]]]]])
 
-    run(["define", "gfunc", ["macro", ["params", "body"], ["qq",
+    eval(["define", "gfunc", ["macro", ["params", "body"], ["qq",
             ["func", ["!", "params"], ["do",
                 ["define", "yd", None],
                 ["define", "nx", None],
@@ -281,7 +328,7 @@ def stdlib():
                     ["yield", None]]]],
                 "next"]]]]])
 
-    run(["define", "for", ["macro", ["e", "l", "body"], ["qq",
+    eval(["define", "for", ["macro", ["e", "l", "body"], ["qq",
             ["scope", ["do",
                 ["define", "__stdlib_for_index", 0],
                 ["define", ["!", "e"], None],
@@ -297,9 +344,9 @@ def stdlib():
                             ["continue"]]]]],
                 ["letcc", "cc", ["do", ["assign", "break", "cc"], ["go"]]]]]]]])
 
-    run(["define", "agen", ["gfunc", ["a"], ["for", "e", "a", ["yield", "e"]]]])
+    eval(["define", "agen", ["gfunc", ["a"], ["for", "e", "a", ["yield", "e"]]]])
 
-    run(["define", "gfor", ["macro", ["e", "gen", "body"], ["qq",
+    eval(["define", "gfor", ["macro", ["e", "gen", "body"], ["qq",
             ["scope", ["do",
                 ["define", "__stdlib_gfor_gen", ["!", "gen"]],
                 ["define", ["!", "e"], None],
@@ -311,8 +358,8 @@ def stdlib():
 
 result = None
 
-def run(src):
-    computation = lambda: eval(src, top_env, lambda result: result)
+def eval(expr):
+    computation = lambda: eval_expr(expr, top_env, lambda result: result)
     while callable(computation):
         try:
             computation = computation()
@@ -320,7 +367,10 @@ def run(src):
             computation = s.skip
     return computation
 
+def run(src):
+    return eval(parse(src))
+
 if __name__ == "__main__":
     init_env()
     stdlib()
-    run(["print", ["q", "hello"], ["q", "world"]])
+    print(run("  5  "))
