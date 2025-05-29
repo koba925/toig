@@ -23,7 +23,7 @@ class TestEval(unittest.TestCase):
         stdlib()
 
 class TestCore(TestEval):
-    def test_primitives(self):
+    def test_primary(self):
         self.assertEqual(eval(None), None)
         self.assertEqual(eval(5), 5)
         self.assertEqual(eval(True), True)

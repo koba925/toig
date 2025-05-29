@@ -1,5 +1,10 @@
 # scanner
 
+def is_name_first(c): return c.isalpha() or c == "_"
+def is_name_rest(c): return c.isalnum() or c == "_"
+def is_name(expr): return isinstance(expr, str) and is_name_first(expr[0])
+def is_punctuation(c): return c in ":="
+
 def scanner(src):
     def advance(): nonlocal pos; pos += 1
     def current_char(): return src[pos] if pos < len(src) else "$EOF"
@@ -9,11 +14,12 @@ def scanner(src):
         token += current_char()
         advance()
 
-    def is_name_first(c): return c.isalpha() or c == "_"
-    def is_name_rest(c): return c.isalnum() or c == "_"
+    def word(is_rest):
+        append_char()
+        while is_rest(current_char()): append_char()
 
-    def word():
-        nonlocal token
+    def name():
+        word(is_name_rest)
         match token:
             case "None": return None
             case "True": return True
@@ -29,12 +35,13 @@ def scanner(src):
         match current_char():
             case "$EOF": return "$EOF"
             case c if is_name_first(c):
-                append_char()
-                while is_name_rest(current_char()): append_char()
-                return word()
+                return name()
             case c if c.isnumeric():
-                while current_char().isnumeric(): append_char()
+                word(str.isnumeric)
                 return int(token)
+            case c if is_punctuation(c):
+                word(is_punctuation)
+        return token
 
     pos = 0; token = ""
     return next_token
@@ -42,8 +49,20 @@ def scanner(src):
 # parser
 
 def parse(src):
+    def parse_expr():
+        return parse_define()
+
+    def parse_define():
+        left = parse_primary()
+        if next_token() == ":=":
+            return ["define", left, parse_expr()]
+        return left
+
+    def parse_primary():
+        return next_token()
+
     next_token = scanner(src)
-    return next_token()
+    return parse_expr()
 
 # environment
 
@@ -115,6 +134,7 @@ def eval_expr(expr, env, cont):
         case ["macro", params, body]:
             return lambda: cont(["macro", params, body, env])
         case ["define", name, expr]:
+            assert is_name(name), f"Invalid name: `{name}` @ eval_define"
             return lambda: eval_expr(expr, env,
                 lambda val: cont(define(env, name, val)))
         case ["assign", name, expr]:
