@@ -39,8 +39,12 @@ def scanner(src):
             case c if c.isnumeric():
                 word(str.isnumeric)
                 return int(token)
-            case c if is_punctuation(c):
-                word(is_punctuation)
+            case ":":
+                append_char()
+                if current_char() == "=": append_char()
+            case "=" | ";":
+                append_char()
+
         return token
 
     pos = 0; token = ""
@@ -62,8 +66,12 @@ def parse(src):
             return [ops[op], left, parse_binary_right(ops, sub_elem)]
         return left
 
-    def parse_expr():
-        return parse_define_assign()
+    def parse_sequence():
+        exprs = [parse_define_assign()]
+        while current_token == ";":
+            advance()
+            exprs.append(parse_define_assign())
+        return exprs[0] if len(exprs) == 1 else ["do"] + exprs
 
     def parse_define_assign():
         return parse_binary_right({
@@ -76,7 +84,7 @@ def parse(src):
 
     next_token = scanner(src)
     current_token = next_token()
-    return parse_expr()
+    return parse_sequence()
 
 # environment
 

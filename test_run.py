@@ -36,3 +36,14 @@ class TestCore(TestEval):
         self.assertEqual(run("y"), 7)
         self.assertTrue(fails("z = 5"))
         self.assertTrue(fails("6 = 5"))
+
+    def test_sequence(self):
+        self.assertEqual(run("x := 5; y := 6"), 6)
+        self.assertEqual(run("x"), 5)
+        self.assertEqual(run("y"), 6)
+        self.assertEqual(run("x = 6; y = 7; z := 8"), 8)
+        self.assertEqual(run("x"), 6)
+        self.assertEqual(run("y"), 7)
+        self.assertEqual(run("z"), 8)
+        self.assertTrue(fails(";"))
+
