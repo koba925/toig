@@ -30,7 +30,7 @@ class TestCore(TestEval):
         self.assertEqual(eval(False), False)
 
     def test_define(self):
-        self.assertEqual(eval(["define", "a", ["+", 5, 6]]), 11)
+        self.assertEqual(eval(["define", "a", ["add", 5, 6]]), 11)
         self.assertEqual(eval("a"), 11)
         self.assertTrue(fails(["define", "a", 6]))
         self.assertTrue(fails("b"))
@@ -41,7 +41,7 @@ class TestCore(TestEval):
 
     def test_assign(self):
         self.assertEqual(eval(["define", "a", 5]), 5)
-        self.assertEqual(eval(["assign", "a", ["+", 5, 6]]), 11)
+        self.assertEqual(eval(["assign", "a", ["add", 5, 6]]), 11)
         self.assertEqual(eval("a"), 11)
         self.assertTrue(fails(["assign", "b", 6]))
         self.assertEqual(eval([["func", [], ["assign", "a", 6]]]), 6)
@@ -58,42 +58,42 @@ class TestCore(TestEval):
         self.assertEqual(printed(["do", ["print", 5], ["print", 6]]), (None, "5\n6\n"))
 
     def test_if(self):
-        self.assertEqual(eval(["if", ["=", 5, 5], ["+", 7, 8], ["+", 9, 10]]), 15)
-        self.assertEqual(eval(["if", ["=", 5, 6], ["+", 7, 8], ["+", 9, 10]]), 19)
+        self.assertEqual(eval(["if", ["equal", 5, 5], ["add", 7, 8], ["add", 9, 10]]), 15)
+        self.assertEqual(eval(["if", ["equal", 5, 6], ["add", 7, 8], ["add", 9, 10]]), 19)
         self.assertTrue(fails(["if", True, 5]))
 
     def test_builtin_math(self):
-        self.assertEqual(eval(["+", ["+", 5, 6], ["+", 7, 8]]), 26)
-        self.assertEqual(eval(["-", ["-", 26, 8], ["+", 5, 6]]), 7)
-        self.assertEqual(eval(["*", ["*", 5, 6], ["*", 7, 8]]), 1680)
-        self.assertEqual(eval(["/", ["/", 1680, 8], ["*", 5, 6]]), 7)
-        self.assertTrue(fails(["+", 5]))
-        self.assertTrue(fails(["+", 5, 6, 7]))
+        self.assertEqual(eval(["add", ["add", 5, 6], ["add", 7, 8]]), 26)
+        self.assertEqual(eval(["sub", ["sub", 26, 8], ["add", 5, 6]]), 7)
+        self.assertEqual(eval(["mul", ["mul", 5, 6], ["mul", 7, 8]]), 1680)
+        self.assertEqual(eval(["div", ["div", 1680, 8], ["mul", 5, 6]]), 7)
+        self.assertTrue(fails(["add", 5]))
+        self.assertTrue(fails(["add", 5, 6, 7]))
 
     def test_builtin_equality(self):
-        self.assertEqual(eval(["=", ["+", 5, 6], ["+", 6, 5]]), True)
-        self.assertEqual(eval(["=", ["+", 5, 6], ["+", 7, 8]]), False)
-        self.assertEqual(eval(["!=", ["+", 5, 6], ["+", 6, 5]]), False)
-        self.assertEqual(eval(["!=", ["+", 5, 6], ["+", 7, 8]]), True)
+        self.assertEqual(eval(["equal", ["add", 5, 6], ["add", 6, 5]]), True)
+        self.assertEqual(eval(["equal", ["add", 5, 6], ["add", 7, 8]]), False)
+        self.assertEqual(eval(["not_equal", ["add", 5, 6], ["add", 6, 5]]), False)
+        self.assertEqual(eval(["not_equal", ["add", 5, 6], ["add", 7, 8]]), True)
 
     def test_builtin_comparison(self):
-        self.assertEqual(eval(["<", ["+", 5, 6], ["+", 3, 7]]), False)
-        self.assertEqual(eval(["<", ["+", 5, 6], ["+", 4, 7]]), False)
-        self.assertEqual(eval(["<", ["+", 5, 6], ["+", 4, 8]]), True)
-        self.assertEqual(eval([">", ["+", 5, 6], ["+", 3, 7]]), True)
-        self.assertEqual(eval([">", ["+", 5, 6], ["+", 4, 7]]), False)
-        self.assertEqual(eval([">", ["+", 5, 6], ["+", 4, 8]]), False)
+        self.assertEqual(eval(["less", ["add", 5, 6], ["add", 3, 7]]), False)
+        self.assertEqual(eval(["less", ["add", 5, 6], ["add", 4, 7]]), False)
+        self.assertEqual(eval(["less", ["add", 5, 6], ["add", 4, 8]]), True)
+        self.assertEqual(eval(["greater", ["add", 5, 6], ["add", 3, 7]]), True)
+        self.assertEqual(eval(["greater", ["add", 5, 6], ["add", 4, 7]]), False)
+        self.assertEqual(eval(["greater", ["add", 5, 6], ["add", 4, 8]]), False)
 
-        self.assertEqual(eval(["<=", ["+", 5, 6], ["+", 3, 7]]), False)
-        self.assertEqual(eval(["<=", ["+", 5, 6], ["+", 4, 7]]), True)
-        self.assertEqual(eval(["<=", ["+", 5, 6], ["+", 4, 8]]), True)
-        self.assertEqual(eval([">=", ["+", 5, 6], ["+", 3, 7]]), True)
-        self.assertEqual(eval([">=", ["+", 5, 6], ["+", 4, 7]]), True)
-        self.assertEqual(eval([">=", ["+", 5, 6], ["+", 4, 8]]), False)
+        self.assertEqual(eval(["less_equal", ["add", 5, 6], ["add", 3, 7]]), False)
+        self.assertEqual(eval(["less_equal", ["add", 5, 6], ["add", 4, 7]]), True)
+        self.assertEqual(eval(["less_equal", ["add", 5, 6], ["add", 4, 8]]), True)
+        self.assertEqual(eval(["greater_equal", ["add", 5, 6], ["add", 3, 7]]), True)
+        self.assertEqual(eval(["greater_equal", ["add", 5, 6], ["add", 4, 7]]), True)
+        self.assertEqual(eval(["greater_equal", ["add", 5, 6], ["add", 4, 8]]), False)
 
     def test_builtin_logic(self):
-        self.assertEqual(eval(["not", ["=", ["+", 5, 6], ["+", 6, 5]]]), False)
-        self.assertEqual(eval(["not", ["=", ["+", 5, 6], ["+", 7, 8]]]), True)
+        self.assertEqual(eval(["not", ["equal", ["add", 5, 6], ["add", 6, 5]]]), False)
+        self.assertEqual(eval(["not", ["equal", ["add", 5, 6], ["add", 7, 8]]]), True)
 
     def test_print(self):
         self.assertEqual(printed(["print", None]), (None, "None\n"))
@@ -104,9 +104,9 @@ class TestCore(TestEval):
         self.assertEqual(printed(["print", 5, 6]), (None, "5 6\n"))
 
     def test_func(self):
-        self.assertEqual(eval([["func", ["n"], ["+", 5, "n"]], 6]), 11)
-        self.assertTrue(fails([["func", ["n"], ["+", 5, "n"]]]))
-        self.assertTrue(fails([["func", ["n"], ["+", 5, "n"]], 6, 7]))
+        self.assertEqual(eval([["func", ["n"], ["add", 5, "n"]], 6]), 11)
+        self.assertTrue(fails([["func", ["n"], ["add", 5, "n"]]]))
+        self.assertTrue(fails([["func", ["n"], ["add", 5, "n"]], 6, 7]))
 
         self.assertEqual(eval([["func", [["*", "rest"]], "rest"]]), [])
         self.assertEqual(eval([["func", ["a", ["*", "rest"]], ["arr", "a", "rest"]], 5]), [5, []])
@@ -116,13 +116,13 @@ class TestCore(TestEval):
 
     def test_closure_adder(self):
         eval(["define", "make_adder", ["func", ["n"],
-                ["func", ["m"], ["+", "n", "m"]]]])
+                ["func", ["m"], ["add", "n", "m"]]]])
         self.assertEqual(eval([["make_adder", 5], 6]), 11)
 
     def test_closure_counter(self):
         eval(["define", "make_counter", ["func", [], ["do",
                 ["define", "c", 0],
-                ["func", [], ["assign", "c", ["+", "c", 1]]]]]])
+                ["func", [], ["assign", "c", ["add", "c", 1]]]]]])
         eval(["define", "counter1", ["make_counter"]])
         eval(["define", "counter2", ["make_counter"]])
         self.assertEqual(eval(["counter1"]), 1)
@@ -134,7 +134,7 @@ class TestCore(TestEval):
 
     def test_array(self):
         self.assertEqual(eval(["arr"]), [])
-        self.assertEqual(eval(["arr", ["+", 5, 6]]), [11])
+        self.assertEqual(eval(["arr", ["add", 5, 6]]), [11])
 
         eval(["define", "a", ["arr", 5, 6, ["arr", 7, 8]]])
         self.assertEqual(eval("a"), [5, 6, [7, 8]])
@@ -171,58 +171,58 @@ class TestCore(TestEval):
         self.assertEqual(eval(["slice", "a", 1, -1]), [9])
         self.assertTrue(fails(["slice", "a", 1, 2, 3]))
 
-        self.assertEqual(eval(["+", ["arr", 5], ["arr", 6]]), [5, 6])
+        self.assertEqual(eval(["add", ["arr", 5], ["arr", 6]]), [5, 6])
 
     def test_quote(self):
         self.assertEqual(eval(["q", 5]), 5)
-        self.assertEqual(eval(["q", ["+", 5, 6]]), ["+", 5, 6])
+        self.assertEqual(eval(["q", ["add", 5, 6]]), ["add", 5, 6])
 
     def test_qq(self):
         self.assertEqual(eval(["qq", 5]), 5)
-        self.assertEqual(eval(["qq", ["+", 5, 6]]), ["+", 5, 6])
-        self.assertEqual(eval(["qq", ["!", ["+", 5, 6]]]), 11)
-        self.assertEqual(eval(["qq", ["*", 4, ["!", ["+", 5, 6]]]]), ["*", 4, 11])
-        self.assertEqual(eval(["qq", ["+", ["!!", ["arr", 5, 6]]]]), ["+", 5, 6])
-        self.assertTrue(fails(["qq", ["+", ["!!", 5]]]))
+        self.assertEqual(eval(["qq", ["add", 5, 6]]), ["add", 5, 6])
+        self.assertEqual(eval(["qq", ["!", ["add", 5, 6]]]), 11)
+        self.assertEqual(eval(["qq", ["mul", 4, ["!", ["add", 5, 6]]]]), ["mul", 4, 11])
+        self.assertEqual(eval(["qq", ["add", ["!!", ["arr", 5, 6]]]]), ["add", 5, 6])
+        self.assertTrue(fails(["qq", ["add", ["!!", 5]]]))
 
     def test_macro(self):
         self.assertEqual(expanded([["macro", [], ["q", "abc"]]]), "abc")
         self.assertEqual(
-            expanded([["macro", ["a"], ["arr", ["q", "*"], "a", "a"]], ["+", 5, 6]]),
-            ["*", ["+", 5, 6], ["+", 5, 6]])
+            expanded([["macro", ["a"], ["arr", ["q", "mul"], "a", "a"]], ["add", 5, 6]]),
+            ["mul", ["add", 5, 6], ["add", 5, 6]])
 
         eval(["define", "build_exp", ["macro", ["op", ["*", "r"]],
-                ["+", ["arr", "op"], "r"]]])
-        self.assertEqual(expanded(["build_exp", "+"]), ["+"])
-        self.assertEqual(expanded(["build_exp", "+", 5]), ["+", 5])
-        self.assertEqual(expanded(["build_exp", "+", 5, 6]), ["+", 5, 6])
+                ["add", ["arr", "op"], "r"]]])
+        self.assertEqual(expanded(["build_exp", "add"]), ["add"])
+        self.assertEqual(expanded(["build_exp", "add", 5]), ["add", 5])
+        self.assertEqual(expanded(["build_exp", "add", 5, 6]), ["add", 5, 6])
 
         self.assertTrue(fails([["macro", [["*", "r"], "a"], 5]]))
 
     def test_letcc(self):
-        self.assertEqual(eval(["letcc", "skip-to", ["+", 5, 6]]), 11)
-        self.assertEqual(eval(["letcc", "skip-to", ["+", ["skip-to", 5], 6]]), 5)
-        self.assertEqual(eval(["+", 5, ["letcc", "skip-to", ["skip-to", 6]]]), 11)
-        self.assertEqual(eval(["letcc", "skip1", ["+", ["skip1", ["letcc", "skip2", ["+", ["skip2", 5], 6]]], 7]]), 5)
+        self.assertEqual(eval(["letcc", "skip-to", ["add", 5, 6]]), 11)
+        self.assertEqual(eval(["letcc", "skip-to", ["add", ["skip-to", 5], 6]]), 5)
+        self.assertEqual(eval(["add", 5, ["letcc", "skip-to", ["skip-to", 6]]]), 11)
+        self.assertEqual(eval(["letcc", "skip1", ["add", ["skip1", ["letcc", "skip2", ["add", ["skip2", 5], 6]]], 7]]), 5)
 
         eval(["define", "inner", ["func", ["raise"], ["raise", 5]]])
         eval(["define", "outer", ["func", [],
-                [ "letcc", "raise", ["+", ["inner", "raise"], 6]]]])
+                [ "letcc", "raise", ["add", ["inner", "raise"], 6]]]])
         self.assertEqual(eval(["outer"]), 5)
 
     def test_letcc_reuse(self):
         eval(["define", "add5", None])
-        self.assertEqual(eval(["+", 5, ["letcc", "cc", ["do", ["assign", "add5", "cc"], 6]]]), 11)
+        self.assertEqual(eval(["add", 5, ["letcc", "cc", ["do", ["assign", "add5", "cc"], 6]]]), 11)
         self.assertEqual(eval(["add5", 7]), 12)
         self.assertEqual(eval(["add5", 8]), 13)
 
 class TestStdlib(TestEval):
     def test_id(self):
-        self.assertEqual(eval(["id", ["+", 5, 6]]), 11)
+        self.assertEqual(eval(["id", ["add", 5, 6]]), 11)
 
     def test_inc_dec(self):
-        self.assertEqual(eval(["inc", ["+", 5, 6]]), 12)
-        self.assertEqual(eval(["dec", ["+", 5, 6]]), 10)
+        self.assertEqual(eval(["inc", ["add", 5, 6]]), 12)
+        self.assertEqual(eval(["dec", ["add", 5, 6]]), 10)
 
     def test_first_rest_last(self):
         self.assertEqual(eval(["first", ["arr", 5, 6, 7]]), 5)
@@ -251,21 +251,21 @@ class TestStdlib(TestEval):
 
     def test_when(self):
         self.assertEqual(eval(["expand",
-                            ["when", ["not", ["=", "b", 0]], ["/", "a", "b"]]]),
-                         ["if", ["not", ["=", "b", 0]], ["/", "a", "b"], None])
+                            ["when", ["not", ["equal", "b", 0]], ["div", "a", "b"]]]),
+                         ["if", ["not", ["equal", "b", 0]], ["div", "a", "b"], None])
         eval(["define", "a", 30])
         eval(["define", "b", 5])
-        self.assertEqual(eval(["when", ["not", ["=", "b", 0]], ["/", "a", "b"]]), 6)
+        self.assertEqual(eval(["when", ["not", ["equal", "b", 0]], ["div", "a", "b"]]), 6)
         eval(["assign", "b", 0])
-        self.assertEqual(eval(["when", ["not", ["=", "b", 0]], ["/", "a", "b"]]), None)
+        self.assertEqual(eval(["when", ["not", ["equal", "b", 0]], ["div", "a", "b"]]), None)
 
     def test_aif(self):
         self.assertEqual(eval(["aif", ["inc", 5], ["inc", "it"], 8]), 7)
         self.assertEqual(eval(["aif", ["dec", 1], 5, "it"]), 0)
 
     def test_and_or(self):
-        self.assertEqual(expanded(["and", ["=", "a", 0], ["=", "b", 0]]),
-                         ["aif", ["=", "a", 0], ["=", "b", 0], "it"])
+        self.assertEqual(expanded(["and", ["equal", "a", 0], ["equal", "b", 0]]),
+                         ["aif", ["equal", "a", 0], ["equal", "b", 0], "it"])
         self.assertEqual(eval(["and", False, "nosuchvariable"]), False)
         self.assertEqual(eval(["and", None, "nosuchvariable"]), None)
         self.assertEqual(eval(["and", True, False]), False)
@@ -273,8 +273,8 @@ class TestStdlib(TestEval):
         self.assertEqual(eval(["and", True, True]), True)
         self.assertEqual(eval(["and", True, 5]), 5)
 
-        self.assertEqual(expanded(["or", ["=", "a", 0], ["=", "b", 0]]),
-                         ["aif", ["=", "a", 0], "it", ["=", "b", 0]])
+        self.assertEqual(expanded(["or", ["equal", "a", 0], ["equal", "b", 0]]),
+                         ["aif", ["equal", "a", 0], "it", ["equal", "b", 0]])
         self.assertEqual(eval(["or", False, False]), False)
         self.assertEqual(eval(["or", False, None]), None)
         self.assertEqual(eval(["or", False, True]), True)
@@ -290,21 +290,21 @@ class TestStdlib(TestEval):
         ]]), (None, "5\ndefault\n"))
 
         self.assertEqual(
-            expanded(["and", ["or", ["=", 5, 6], ["=", 7, 7]], ["=", 8, 8]]),
-            ["aif", ["or", ["=", 5, 6], ["=", 7, 7]], ["=", 8, 8], "it"])
+            expanded(["and", ["or", ["equal", 5, 6], ["equal", 7, 7]], ["equal", 8, 8]]),
+            ["aif", ["or", ["equal", 5, 6], ["equal", 7, 7]], ["equal", 8, 8], "it"])
         self.assertEqual(
-            eval(["and", ["or", ["=", 5, 6], ["=", 7, 7]], ["=", 8, 8]]),
+            eval(["and", ["or", ["equal", 5, 6], ["equal", 7, 7]], ["equal", 8, 8]]),
             True)
 
     def test_while(self):
         eval(["do",
                 ["define", "a", 0],
                 ["define", "b", ["arr"]],
-                ["while", ["<", "a", 10], ["do",
-                    ["when", ["=", "a", 5], ["break", None]],
-                    ["assign", "a", ["+", "a", 1]],
-                    ["when", ["=", "a", 3], ["continue"]],
-                    ["assign", "b", ["+", "b", ["arr", "a"]]],
+                ["while", ["less", "a", 10], ["do",
+                    ["when", ["equal", "a", 5], ["break", None]],
+                    ["assign", "a", ["add", "a", 1]],
+                    ["when", ["equal", "a", 3], ["continue"]],
+                    ["assign", "b", ["add", "b", ["arr", "a"]]],
                     ]]])
         self.assertEqual(eval("a"), 5)
         self.assertEqual(eval("b"), [1, 2, 4, 5])
@@ -312,23 +312,23 @@ class TestStdlib(TestEval):
         eval(["do",
                 ["define", "r", ["arr"]],
                 ["define", "c", ["arr"]],
-                ["while", ["<", ["len", "r"], 3],
+                ["while", ["less", ["len", "r"], 3],
                     ["do",
                         ["assign", "c", ["arr"]],
-                        ["while", ["<", ["len", "c"], 3],
-                            ["assign", "c", ["+", "c", ["arr", 0]]]],
-                        ["assign", "r", ["+", "r", ["arr", "c"]]]]]])
+                        ["while", ["less", ["len", "c"], 3],
+                            ["assign", "c", ["add", "c", ["arr", 0]]]],
+                        ["assign", "r", ["add", "r", ["arr", "c"]]]]]])
         self.assertEqual(eval("r"), [[0, 0, 0], [0, 0, 0], [0, 0, 0]])
 
     def test_awhile(self):
         eval(["do",
                 ["define", "a", 0],
                 ["define", "b", ["arr"]],
-                ["awhile", ["<", "a", 10], ["do",
-                    ["when", ["=", "a", 5], ["break", None]],
-                    ["assign", "a", ["+", "a", 1]],
-                    ["when", ["=", "a", 3], ["continue"]],
-                    ["assign", "b", ["+", "b", ["arr", "a"]]],
+                ["awhile", ["less", "a", 10], ["do",
+                    ["when", ["equal", "a", 5], ["break", None]],
+                    ["assign", "a", ["add", "a", 1]],
+                    ["when", ["equal", "a", 3], ["continue"]],
+                    ["assign", "b", ["add", "b", ["arr", "a"]]],
                     ]]])
         self.assertEqual(eval("a"), 5)
         self.assertEqual(eval("b"), [1, 2, 4, 5])
@@ -336,34 +336,34 @@ class TestStdlib(TestEval):
         eval(["do",
                 ["define", "r", ["arr"]],
                 ["define", "c", ["arr"]],
-                ["awhile", ["<", ["len", "r"], 3],
+                ["awhile", ["less", ["len", "r"], 3],
                     ["do",
                         ["assign", "c", ["arr"]],
-                        ["awhile", ["<", ["len", "c"], 3],
-                            ["assign", "c", ["+", "c", ["arr", 0]]]],
-                        ["assign", "r", ["+", "r", ["arr", "c"]]]]]])
+                        ["awhile", ["less", ["len", "c"], 3],
+                            ["assign", "c", ["add", "c", ["arr", 0]]]],
+                        ["assign", "r", ["add", "r", ["arr", "c"]]]]]])
         self.assertEqual(eval("r"), [[0, 0, 0], [0, 0, 0], [0, 0, 0]])
 
     def test_for(self):
         self.assertEqual(eval(["do",
             ["define", "sum", 0],
             ["for", "i", ["arr", 5, 6, 7, 8, 9], ["do",
-                ["when", ["=", "i", 7], ["continue"]],
-                ["when", ["=", "i", 9], ["break", None]],
-                ["assign", "sum", ["+", "sum", "i"]]]],
+                ["when", ["equal", "i", 7], ["continue"]],
+                ["when", ["equal", "i", 9], ["break", None]],
+                ["assign", "sum", ["add", "sum", "i"]]]],
             "sum"]), 19)
 
     # see https://zenn.dev/link/comments/ea605f282d4c97
     def test_letcc_generator(self):
         eval(["define", "g3", ["gfunc", ["n"], ["do",
                 ["yield", "n"],
-                ["assign", "n", ["+", "n", 1]],
+                ["assign", "n", ["add", "n", 1]],
                 ["yield", "n"],
-                ["assign", "n", ["+", "n", 1]],
+                ["assign", "n", ["add", "n", 1]],
                 ["yield", "n"]]]])
 
         eval(["define", "gsum", ["func", ["gen"],
-                ["aif", ["gen"], ["+", "it", ["gsum", "gen"]], 0]]])
+                ["aif", ["gen"], ["add", "it", ["gsum", "gen"]], 0]]])
         self.assertEqual(eval(["gsum", ["g3", 2]]), 9)
         self.assertEqual(eval(["gsum", ["g3", 5]]), 18)
 
@@ -400,26 +400,26 @@ class TestStdlib(TestEval):
                          (None, "2\n3\n4\n"))
         self.assertEqual(printed(["gfor", "n", ["agen", ["q", [2, 3, 4, 5, 6]]],
                                     ["do",
-                                        ["when", ["=", "n", 5], ["break", None]],
-                                        ["when", ["=", "n", 3], ["continue"]],
+                                        ["when", ["equal", "n", 5], ["break", None]],
+                                        ["when", ["equal", "n", 3], ["continue"]],
                                         ["print", "n"]]]),
                          (None, "2\n4\n"))
 
 class TestProblems(TestEval):
     def test_factorial(self):
         eval(["define", "factorial", ["func", ["n"],
-                ["if", ["=", "n", 1],
+                ["if", ["equal", "n", 1],
                     1,
-                    ["*", "n", ["factorial", ["-", "n", 1]]]]]])
+                    ["mul", "n", ["factorial", ["sub", "n", 1]]]]]])
         self.assertEqual(eval(["factorial", 1]), 1)
         self.assertEqual(eval(["factorial", 10]), 3628800)
         # print(run(["factorial", 1500]))
 
     def test_fib(self):
         eval(["define", "fib", ["func", ["n"],
-                ["if", ["=", "n", 0], 0,
-                ["if", ["=", "n", 1], 1,
-                ["+", ["fib", ["-", "n", 1]], ["fib", ["-", "n", 2]]]]]]])
+                ["if", ["equal", "n", 0], 0,
+                ["if", ["equal", "n", 1], 1,
+                ["add", ["fib", ["sub", "n", 1]], ["fib", ["sub", "n", 2]]]]]]])
         self.assertEqual(eval(["fib", 0]), 0)
         self.assertEqual(eval(["fib", 1]), 1)
         self.assertEqual(eval(["fib", 2]), 1)
@@ -439,17 +439,17 @@ class TestProblems(TestEval):
                         [False, True])
 
     def test_sieve(self):
-        eval(["define", "sieve", ["+",
-                ["*", ["arr", False], 2],
-                ["*", ["arr", True], 28]]])
+        eval(["define", "sieve", ["add",
+                ["mul", ["arr", False], 2],
+                ["mul", ["arr", True], 28]]])
         eval(["define", "j", None])
         eval(["for", "i", ["range", 2, 30],
                 ["when", ["getat", "sieve", "i"],
                     ["do",
-                        ["assign", "j", ["*", "i", "i"]],
-                        ["while", ["<", "j", 30], ["do",
+                        ["assign", "j", ["mul", "i", "i"]],
+                        ["while", ["less", "j", 30], ["do",
                             ["setat", "sieve", "j", False],
-                            ["assign", "j", ["+", "j", "i"]]]]]]])
+                            ["assign", "j", ["add", "j", "i"]]]]]]])
         eval(["define", "primes", ["arr"]])
         eval(["for", "i", ["range", 0, 30],
                 ["when", ["getat", "sieve", "i"],
@@ -466,18 +466,18 @@ class TestProblems(TestEval):
                 ["qq", ["scope", ["do",
                     ["!!", ["defines", "bindings"]],
                     ["!","body"]]]]]]])
-        self.assertEqual(expanded(["let", [["a", 5], ["b", 6]], ["+", "a", "b"]]),
+        self.assertEqual(expanded(["let", [["a", 5], ["b", 6]], ["add", "a", "b"]]),
                          ["scope", ["do",
                              ["define", "a", 5],
                              ["define", "b", 6],
-                             ["+", "a", "b"]]])
-        self.assertEqual(eval(["let", [["a", 5], ["b", 6]], ["+", "a", "b"]]), 11)
+                             ["add", "a", "b"]]])
+        self.assertEqual(eval(["let", [["a", 5], ["b", 6]], ["add", "a", "b"]]), 11)
 
     def test_cond(self):
         eval(["define", "cond", ["macro", [["*", "clauses"]],
                 ["do",
                     ["define", "_cond", ["func", ["clauses"],
-                        ["if", ["=", "clauses", ["arr"]],
+                        ["if", ["equal", "clauses", ["arr"]],
                             None,
                             ["do",
                                 ["define", "clause", ["first", "clauses"]],
@@ -489,19 +489,19 @@ class TestProblems(TestEval):
                     ["_cond", "clauses"]]]])
         self.assertEqual(expanded(
             ["cond",
-                [["=", "n", 0], 0],
-                [["=", "n", 1], 1],
-                [True, ["+", ["fib", ["-", "n", 1]], ["fib", ["-", "n", 2]]]]]),
-            ["if", ["=", "n", 0], 0,
-                ["if", ["=", "n", 1], 1,
+                [["equal", "n", 0], 0],
+                [["equal", "n", 1], 1],
+                [True, ["add", ["fib", ["sub", "n", 1]], ["fib", ["sub", "n", 2]]]]]),
+            ["if", ["equal", "n", 0], 0,
+                ["if", ["equal", "n", 1], 1,
                     ["if", True,
-                        ["+", ["fib", ["-", "n", 1]], ["fib", ["-", "n", 2]]],
+                        ["add", ["fib", ["sub", "n", 1]], ["fib", ["sub", "n", 2]]],
                         None]]])
         eval(["define", "fib", ["func", ["n"],
                 ["cond",
-                    [["=", "n", 0], 0],
-                    [["=", "n", 1], 1],
-                    [True, ["+", ["fib", ["-", "n", 1]], ["fib", ["-", "n", 2]]]]]]])
+                    [["equal", "n", 0], 0],
+                    [["equal", "n", 1], 1],
+                    [True, ["add", ["fib", ["sub", "n", 1]], ["fib", ["sub", "n", 2]]]]]]])
         self.assertEqual(eval(["fib", 0]), 0)
         self.assertEqual(eval(["fib", 1]), 1)
         self.assertEqual(eval(["fib", 2]), 1)
@@ -511,7 +511,7 @@ class TestProblems(TestEval):
     def test_letcc_return(self):
         eval(["define", "early-return", ["func", ["n"],
                 ["letcc", "return", ["do",
-                    ["if", ["=", "n", 1], ["return", 5], 6],
+                    ["if", ["equal", "n", 1], ["return", 5], 6],
                     7]]]])
         self.assertEqual(eval(["early-return", 1]), 5)
         self.assertEqual(eval(["early-return", 2]), 7)
@@ -519,20 +519,20 @@ class TestProblems(TestEval):
         eval(["define", "runc", ["macro", ["params", "body"], ["qq",
                 ["func", ["!", "params"], ["letcc", "return", ["!", "body"]]]]]])
         eval(["define", "early_return_runc", ["runc", ["n"], ["do",
-                ["if", ["=", "n", 1], ["return", 5], 6],
+                ["if", ["equal", "n", 1], ["return", 5], 6],
                 7]]])
         self.assertEqual(eval(["early_return_runc", 1]), 5)
         self.assertEqual(eval(["early_return_runc", 2]), 7)
 
         eval(["define", "early_return_runc2", ["runc", ["n"], ["do",
-                ["if", ["=", ["early_return_runc", "n"], 5], ["return", 6], 7],
+                ["if", ["equal", ["early_return_runc", "n"], 5], ["return", 6], 7],
                 8]]])
         self.assertEqual(eval(["early_return_runc2", 1]), 6)
         self.assertEqual(eval(["early_return_runc2", 2]), 8)
 
     def test_letcc_escape(self):
         eval(["define", "riskyfunc", ["func", ["n", "escape"], ["do",
-                ["if", ["=", "n", 1], ["escape", 5], 6],
+                ["if", ["equal", "n", 1], ["escape", 5], 6],
                 7]]])
         eval(["define", "middlefunc", ["func", ["n", "escape"], ["do",
                 ["riskyfunc", "n", "escape"],
@@ -545,7 +545,7 @@ class TestProblems(TestEval):
     def test_letcc_except(self):
         eval(["define", "raise", None])
         eval(["define", "riskyfunc", ["func", ["n"], ["do",
-                ["if", ["=", "n", 1], ["raise", 5], None],
+                ["if", ["equal", "n", 1], ["raise", 5], None],
                 ["print", 6]]]])
         eval(["define", "middlefunc", ["func", ["n"], ["do",
                 ["riskyfunc", "n"],
@@ -572,7 +572,7 @@ class TestProblems(TestEval):
                     ["assign", "raise", "prev-raise"]]]]]])
 
         eval(["define", "riskyfunc", ["func", ["n"], ["do",
-                ["if", ["=", "n", 1], ["raise", 5], None],
+                ["if", ["equal", "n", 1], ["raise", 5], None],
                 ["print", 6]]]])
         eval(["define", "middlefunc", ["func", ["n"], ["do",
                 ["riskyfunc", "n"],
@@ -590,14 +590,14 @@ class TestProblems(TestEval):
 
         eval(["define", "nested", ["func", ["n"], ["do",
                 ["try", ["do",
-                    ["if", ["=", "n", 1], ["raise", 5], None],
+                    ["if", ["equal", "n", 1], ["raise", 5], None],
                     ["print", 6],
                     ["try", ["do",
-                        ["if", ["=", "n", 2], ["raise", 7], None],
+                        ["if", ["equal", "n", 2], ["raise", 7], None],
                         ["print", 8]],
                         "except", "e", ["do",
                             ["print", ["q", "exception inner try:"], "e"]]],
-                    ["if", ["=", "n", 3], ["raise", 9], None],
+                    ["if", ["equal", "n", 3], ["raise", 9], None],
                     ["print", 10]],
                     "except", "e", ["do",
                         ["print", ["q", "exception outer try:"], "e"]]],
@@ -615,7 +615,7 @@ class TestProblems(TestEval):
         eval(["define", "add-task", ["func", ["t"],
                 ["assign", "tasks", ["append", "tasks", "t"]]]])
         eval(["define", "start", ["func", [],
-                ["while", ["!=", "tasks", ["arr"]], ["do",
+                ["while", ["not_equal", "tasks", ["arr"]], ["do",
                     ["define", "next-task", ["first", "tasks"]],
                     ["assign", "tasks", ["rest", "tasks"]],
                     ["when", ["next-task"], ["add-task", "next-task"]]]]]])

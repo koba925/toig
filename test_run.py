@@ -26,3 +26,13 @@ class TestCore(TestEval):
         self.assertEqual(run("y"), 6)
         self.assertEqual(run("z"), 6)
         self.assertTrue(fails("6 := 5"), 5)
+
+    def test_assign(self):
+        self.assertEqual(run("x := y := 5"), 5)
+        self.assertEqual(run("x = 6"), 6)
+        self.assertEqual(run("x"), 6)
+        self.assertEqual(run("x = y = 7"), 7)
+        self.assertEqual(run("x"), 7)
+        self.assertEqual(run("y"), 7)
+        self.assertTrue(fails("z = 5"))
+        self.assertTrue(fails("6 = 5"))

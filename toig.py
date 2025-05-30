@@ -49,19 +49,33 @@ def scanner(src):
 # parser
 
 def parse(src):
-    def parse_expr():
-        return parse_define()
+    def advance():
+        nonlocal current_token
+        prev_token = current_token
+        current_token = next_token()
+        return prev_token
 
-    def parse_define():
-        left = parse_primary()
-        if next_token() == ":=":
-            return ["define", left, parse_expr()]
+    def parse_binary_right(ops, sub_elem):
+        left = sub_elem()
+        if (op := current_token) in ops:
+            advance()
+            return [ops[op], left, parse_binary_right(ops, sub_elem)]
         return left
 
+    def parse_expr():
+        return parse_define_assign()
+
+    def parse_define_assign():
+        return parse_binary_right({
+            ":=": "define",
+            "=": "assign"
+        }, parse_primary)
+
     def parse_primary():
-        return next_token()
+        return advance()
 
     next_token = scanner(src)
+    current_token = next_token()
     return parse_expr()
 
 # environment
@@ -242,16 +256,16 @@ def error(args):
     assert False, f"{' '.join(map(str, args))}"
 
 builtins = {
-    "+": lambda args: n_ary(2, op.add, args),
-    "-": lambda args: n_ary(2, op.sub, args),
-    "*": lambda args: n_ary(2, op.mul, args),
-    "/": lambda args: n_ary(2, op.truediv, args),
-    "=": lambda args: n_ary(2, op.eq, args),
-    "!=": lambda args: n_ary(2, op.ne, args),
-    "<": lambda args: n_ary(2, op.lt, args),
-    ">": lambda args: n_ary(2, op.gt, args),
-    "<=": lambda args: n_ary(2, op.le, args),
-    ">=": lambda args: n_ary(2, op.ge, args),
+    "add": lambda args: n_ary(2, op.add, args),
+    "sub": lambda args: n_ary(2, op.sub, args),
+    "mul": lambda args: n_ary(2, op.mul, args),
+    "div": lambda args: n_ary(2, op.truediv, args),
+    "equal": lambda args: n_ary(2, op.eq, args),
+    "not_equal": lambda args: n_ary(2, op.ne, args),
+    "less": lambda args: n_ary(2, op.lt, args),
+    "greater": lambda args: n_ary(2, op.gt, args),
+    "less_equal": lambda args: n_ary(2, op.le, args),
+    "greater_equal": lambda args: n_ary(2, op.ge, args),
     "not": lambda args: n_ary(1, op.not_, args),
 
     "arr": lambda args: args,
@@ -275,30 +289,30 @@ def init_env():
 def stdlib():
     eval(["define", "id", ["func", ["x"], "x"]])
 
-    eval(["define", "inc", ["func", ["x"], ["+", "x", 1]]])
-    eval(["define", "dec", ["func", ["x"], ["-", "x", 1]]])
+    eval(["define", "inc", ["func", ["x"], ["add", "x", 1]]])
+    eval(["define", "dec", ["func", ["x"], ["sub", "x", 1]]])
 
     eval(["define", "first", ["func", ["l"], ["getat", "l", 0]]])
     eval(["define", "rest", ["func", ["l"], ["slice", "l", 1]]])
     eval(["define", "last", ["func", ["l"], ["getat", "l", -1]]])
-    eval(["define", "append", ["func", ["l", "a"], ["+", "l", ["arr", "a"]]]])
-    eval(["define", "prepend", ["func", ["a", "l"], ["+", ["arr", "a"], "l"]]])
+    eval(["define", "append", ["func", ["l", "a"], ["add", "l", ["arr", "a"]]]])
+    eval(["define", "prepend", ["func", ["a", "l"], ["add", ["arr", "a"], "l"]]])
 
     eval(["define", "foldl", ["func", ["l", "f", "init"],
-            ["if", ["=", "l", ["arr"]],
+            ["if", ["equal", "l", ["arr"]],
                 "init",
                 ["foldl", ["rest", "l"], "f", ["f", "init", ["first", "l"]]]]]])
     eval(["define", "unfoldl", ["func", ["x", "p", "h", "t"], ["do",
             ["define", "_unfoldl", ["func", ["x", "b"],
                 ["if", ["p", "x"],
                     "b",
-                    ["_unfoldl", ["t", "x"], ["+", "b", ["arr", ["h", "x"]]]]]]],
+                    ["_unfoldl", ["t", "x"], ["add", "b", ["arr", ["h", "x"]]]]]]],
             ["_unfoldl", "x", ["arr"]]]]])
 
     eval(["define", "map", ["func", ["l", "f"],
             ["foldl", "l", ["func", ["acc", "e"], ["append", "acc", ["f", "e"]]], ["arr"]]]])
     eval(["define", "range", ["func", ["s", "e"],
-            ["unfoldl", "s", ["func", ["x"], [">=", "x", "e"]], "id", "inc"]]])
+            ["unfoldl", "s", ["func", ["x"], ["greater_equal", "x", "e"]], "id", "inc"]]])
 
     eval(["define", "scope", ["macro", ["body"],
             ["qq", [["func", [], ["!", "body"]]]]]])
@@ -357,7 +371,7 @@ def stdlib():
                     ["assign", "__stdlib_for_index", ["inc", "__stdlib_for_index"]],
                     ["go"]]]],
                 ["define", "go", ["func", [],
-                    ["when", ["<", "__stdlib_for_index", ["len", ["!", "l"]]],
+                    ["when", ["less", "__stdlib_for_index", ["len", ["!", "l"]]],
                         ["do",
                             ["assign", ["!", "e"], ["getat", ["!", "l"], "__stdlib_for_index"]],
                             ["!", "body"],
@@ -370,7 +384,7 @@ def stdlib():
             ["scope", ["do",
                 ["define", "__stdlib_gfor_gen", ["!", "gen"]],
                 ["define", ["!", "e"], None],
-                ["while", ["!=", ["assign", ["!", "e"], ["__stdlib_gfor_gen"]], None],
+                ["while", ["not_equal", ["assign", ["!", "e"], ["__stdlib_gfor_gen"]], None],
                     ["!", "body"]]]]]]])
 
     global top_env
