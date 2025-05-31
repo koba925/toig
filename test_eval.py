@@ -67,6 +67,8 @@ class TestCore(TestEval):
         self.assertEqual(eval(["sub", ["sub", 26, 8], ["add", 5, 6]]), 7)
         self.assertEqual(eval(["mul", ["mul", 5, 6], ["mul", 7, 8]]), 1680)
         self.assertEqual(eval(["div", ["div", 1680, 8], ["mul", 5, 6]]), 7)
+        self.assertEqual(eval(["mod", ["div", 1704, 8], ["mul", 5, 6]]), 3)
+        self.assertEqual(eval(["neg", ["add", 5, 6]]), -11)
         self.assertTrue(fails(["add", 5]))
         self.assertTrue(fails(["add", 5, 6, 7]))
 

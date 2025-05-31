@@ -42,7 +42,7 @@ def scanner(src):
             case ":":
                 append_char()
                 if current_char() == "=": append_char()
-            case "=" | ";":
+            case c if c in "+-*/%()=;":
                 append_char()
 
         return token
@@ -59,32 +59,70 @@ def parse(src):
         current_token = next_token()
         return prev_token
 
-    def parse_binary_right(ops, sub_elem):
+    def consume(expected):
+        assert current_token in expected, \
+            f"Expected `{expected}`, found `{current_token}` @ consume"
+        return advance()
+
+    def binary_left(ops, sub_elem):
+        left = sub_elem()
+        while (op := current_token) in ops:
+            advance()
+            left = [ops[op], left, sub_elem()]
+        return left
+
+    def binary_right(ops, sub_elem):
         left = sub_elem()
         if (op := current_token) in ops:
             advance()
-            return [ops[op], left, parse_binary_right(ops, sub_elem)]
+            return [ops[op], left, binary_right(ops, sub_elem)]
         return left
 
-    def parse_sequence():
-        exprs = [parse_define_assign()]
+    def unary(ops, sub_elem):
+        if (op := current_token) not in ops:
+            return sub_elem()
+        advance()
+        return [ops[op], unary(ops, sub_elem)]
+
+    def expression():
+        return sequence()
+
+    def sequence():
+        exprs = [define_assign()]
         while current_token == ";":
             advance()
-            exprs.append(parse_define_assign())
+            exprs.append(define_assign())
         return exprs[0] if len(exprs) == 1 else ["do"] + exprs
 
-    def parse_define_assign():
-        return parse_binary_right({
-            ":=": "define",
-            "=": "assign"
-        }, parse_primary)
+    def define_assign():
+        return binary_right({
+            ":=": "define", "=": "assign"
+        }, add_sub)
 
-    def parse_primary():
+    def add_sub():
+        return binary_left({
+            "+": "add", "-": "sub"
+        }, mul_div_mod)
+
+    def mul_div_mod():
+        return binary_left({
+            "*": "mul", "/": "div", "%": "mod"
+        }, unary_minus)
+
+    def unary_minus():
+        return unary({
+            "-": "neg"
+        }, primary)
+
+    def primary():
+        if current_token == "(":
+            advance(); expr = expression(); consume(")")
+            return expr
         return advance()
 
     next_token = scanner(src)
     current_token = next_token()
-    return parse_sequence()
+    return expression()
 
 # environment
 
@@ -267,7 +305,9 @@ builtins = {
     "add": lambda args: n_ary(2, op.add, args),
     "sub": lambda args: n_ary(2, op.sub, args),
     "mul": lambda args: n_ary(2, op.mul, args),
-    "div": lambda args: n_ary(2, op.truediv, args),
+    "div": lambda args: n_ary(2, op.floordiv, args),
+    "mod": lambda args: n_ary(2, op.mod, args),
+    "neg": lambda args: n_ary(1, op.neg, args),
     "equal": lambda args: n_ary(2, op.eq, args),
     "not_equal": lambda args: n_ary(2, op.ne, args),
     "less": lambda args: n_ary(2, op.lt, args),
@@ -415,4 +455,4 @@ def run(src):
 if __name__ == "__main__":
     init_env()
     stdlib()
-    print(run("  5  "))
+    print(eval(["q", "hello, world!"]))
