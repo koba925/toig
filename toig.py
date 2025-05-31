@@ -39,10 +39,10 @@ def scanner(src):
             case c if c.isnumeric():
                 word(str.isnumeric)
                 return int(token)
-            case ":":
+            case c if c in "=!<>:":
                 append_char()
                 if current_char() == "=": append_char()
-            case c if c in "+-*/%()=;":
+            case c if c in "+-*/%();":
                 append_char()
 
         return token
@@ -53,6 +53,9 @@ def scanner(src):
 # parser
 
 def parse(src):
+
+    # helpers
+
     def advance():
         nonlocal current_token
         prev_token = current_token
@@ -84,6 +87,8 @@ def parse(src):
         advance()
         return [ops[op], unary(ops, sub_elem)]
 
+    # grammar
+
     def expression():
         return sequence()
 
@@ -97,6 +102,13 @@ def parse(src):
     def define_assign():
         return binary_right({
             ":=": "define", "=": "assign"
+        }, comparison)
+
+    def comparison():
+        return binary_left({
+            "==": "equal", "!=": "not_equal",
+            "<": "less", ">": "greater",
+            "<=": "less_equal", ">=": "greater_equal"
         }, add_sub)
 
     def add_sub():
