@@ -102,7 +102,16 @@ def parse(src):
     def define_assign():
         return binary_right({
             ":=": "define", "=": "assign"
-        }, comparison)
+        }, or_)
+
+    def or_():
+        return binary_left({"or": "or"}, and_)
+
+    def and_():
+        return binary_left({"and": "and"}, not_)
+
+    def not_():
+        return unary({"not": "not"}, comparison)
 
     def comparison():
         return binary_left({
@@ -122,9 +131,7 @@ def parse(src):
         }, unary_minus)
 
     def unary_minus():
-        return unary({
-            "-": "neg"
-        }, primary)
+        return unary({"-": "neg"}, primary)
 
     def primary():
         if current_token == "(":
