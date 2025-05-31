@@ -134,10 +134,27 @@ def parse(src):
         return unary({"-": "neg"}, primary)
 
     def primary():
+        if current_token == "if":
+            advance(); return if_()
         if current_token == "(":
             advance(); expr = expression(); consume(")")
             return expr
         return advance()
+
+    def if_():
+        cnd = expression()
+        consume("then")
+        thn = expression()
+        if current_token == "elif":
+            advance()
+            return ["if", cnd, thn, if_()]
+        if current_token == "else":
+            advance()
+            els = expression()
+            consume("end")
+            return ["if", cnd, thn, els]
+        consume("end")
+        return ["if", cnd, thn, None]
 
     next_token = scanner(src)
     current_token = next_token()

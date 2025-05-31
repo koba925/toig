@@ -122,8 +122,24 @@ class TestCore(TestEval):
         self.assertEqual(run("5 * -6"), -30)
 
     def test_paren(self):
-        self.assertEqual(run("(5 + 6) * 7"), 77)
-        self.assertEqual(run("5 * (6 + 7)"), 65)
+        self.assertEqual(run("(5; 6) * 7"), 42)
+        self.assertEqual(run("5 * (6; 7)"), 35)
         self.assertEqual(run("(5) + 6"), 11)
 
+        self.assertTrue(fails("(5"))
+
+    def test_if(self):
+        self.assertEqual(run("if 5; True then 6; 7 end"), 7)
+        self.assertEqual(run("if 5; False then 6; 7 end"), None)
+        self.assertEqual(run("if 5; True then 6; 7 else 8; 9 end"), 7)
+        self.assertEqual(run("if 5; False then 6; 7 else 8; 9 end"), 9)
+        self.assertEqual(run("if 5; True then 6; 7 elif 8; True then 9; 10 else 11; 12 end"), 7)
+        self.assertEqual(run("if 5; False then 6; 7 elif 8; True then 9; 10 else 11; 12 end"), 10)
+        self.assertEqual(run("if 5; False then 6; 7 elif 8; False then 9; 10 else 11; 12 end"), 12)
+
+        self.assertEqual(run("-if 5; True then 6; 7 end"), -7)
+
+        self.assertTrue(fails("if True end"))
+        self.assertTrue(fails("if True then"))
+        self.assertTrue(fails("if True then 5 else"))
 
