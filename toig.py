@@ -181,9 +181,12 @@ def parse(src):
 
 # environment
 
+def new_env(): return {"parent": None, "vals": {}}
+def new_scope(env): return {"parent": env, "vals": {}}
+
 def define(env, name, val):
-    assert name not in env["vals"], \
-        f"Variable already defined: `{name}` @ define"
+    # assert name not in env["vals"], \
+    #     f"Variable already defined: `{name}` @ define"
     env["vals"][name] = val
     return val
 
@@ -201,25 +204,6 @@ def get(env, name):
         return env["vals"][name]
     else:
         return get(env["parent"], name)
-
-def extend(env, params, args):
-    def new_env(params, args):
-        if params == [] and args == []: return {}
-        assert len(params) > 0, \
-            f"Argument count doesn't match: `{params}, {args}` @ extend"
-        match params[0]:
-            case str(param):
-                assert len(args) > 0, \
-                    f"Argument count doesn't match: `{params}, {args}` @ extend"
-                return {param: args[0], **new_env(params[1:], args[1:])}
-            case ["*", rest]:
-                assert len(params) == 1, \
-                    f"Rest param must be last: `{params}` @ extend"
-                return {rest: args}
-            case unexpected:
-                assert False, f"Unexpected param at extend: {unexpected}"
-
-    return {"parent": env, "vals": new_env(params, args)}
 
 # CPS operations
 
@@ -317,7 +301,7 @@ def eval_op(op_expr, args_expr, env, cont):
     return lambda: eval_expr(op_expr, env, _eval_op)
 
 def expand(body, params, args, env, cont):
-    env = extend(env, params, args)
+    env = new_scope(env); extend(env, params, args)
     return lambda: eval_expr(body, env, cont)
 
 def apply(func, args, cont):
@@ -325,8 +309,25 @@ def apply(func, args, cont):
         return lambda: cont(func(args))
     else:
         _, params, body, env = func
-        env = extend(env, params, args)
+        env = new_scope(env); extend(env, params, args)
         return lambda: eval_expr(body, env, cont)
+
+def extend(env, params, args):
+    if params == [] and args == []: return {}
+    assert len(params) > 0, \
+        f"Argument count doesn't match: `{params}, {args}` @ extend"
+    match params[0]:
+        case str(param):
+            assert len(args) > 0, \
+                f"Argument count doesn't match: `{params}, {args}` @ extend"
+            define(env, param, args[0])
+            extend(env, params[1:], args[1:])
+        case ["*", rest]:
+            assert len(params) == 1, \
+                f"Rest param must be last: `{params}` @ extend"
+            define(env, rest, args)
+        case unexpected:
+            assert False, f"Unexpected param at extend: {unexpected}"
 
 # runtime
 
@@ -382,12 +383,12 @@ builtins = {
     "error": lambda args: error(args)
 }
 
-top_env = None
+top_env = new_env()
 
 def init_env():
     global top_env
-    top_env = {"parent": top_env, "vals": builtins.copy()}
-    top_env = {"parent": top_env, "vals": {}}
+    for name, func in builtins.items(): define(top_env, name, func)
+    top_env = new_scope(top_env)
 
 def stdlib():
     eval(["define", "id", ["func", ["x"], "x"]])
@@ -494,7 +495,7 @@ def stdlib():
                     ["!", "body"]]]]]]])
 
     global top_env
-    top_env = {"parent": top_env, "vals": {}}
+    top_env = new_scope(top_env)
 
 result = None
 

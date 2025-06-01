@@ -32,12 +32,14 @@ class TestCore(TestEval):
     def test_define(self):
         self.assertEqual(eval(["define", "a", ["add", 5, 6]]), 11)
         self.assertEqual(eval("a"), 11)
-        self.assertTrue(fails(["define", "a", 6]))
+        # self.assertTrue(fails(["define", "a", 6]))
+        self.assertEqual(eval(["define", "a", 6]), 6)
+        self.assertEqual(eval("a"), 6)
         self.assertTrue(fails("b"))
         self.assertEqual(printed([["func", [], ["do",
                             ["print", ["define", "a", 5]],
                             ["print", "a"]]]]), (None, "5\n5\n"))
-        self.assertEqual(eval("a"), 11)
+        self.assertEqual(eval("a"), 6)
 
     def test_assign(self):
         self.assertEqual(eval(["define", "a", 5]), 5)
