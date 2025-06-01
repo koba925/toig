@@ -1,5 +1,8 @@
 # environment
 
+def new_env(): return {"parent": None, "vals": {}}
+def new_scope(env): return {"parent": env, "vals": {}}
+
 def define(env, name, val):
     env["vals"][name] = val
 
@@ -23,7 +26,8 @@ def eval(expr, env):
 def apply(f_val, args_val):
     if callable(f_val): return f_val(args_val)
     _, params, body, env = f_val
-    env = {"parent": env, "vals": dict(zip(params, args_val))}
+    env = new_scope(env)
+    for param, arg in zip(params, args_val): define(env, param, arg)
     return eval(body, env)
 
 # runtime
@@ -33,7 +37,10 @@ builtins = {
     "-": lambda args: args[0] - args[1],
     "=": lambda args: args[0] == args[1],
 }
-top_env = {"parent": None, "vals": builtins}
+
+top_env = new_env()
+for name in builtins: define(top_env, name, builtins[name])
+top_env = new_scope(top_env)
 
 def run(src):
     return eval(src, top_env)
