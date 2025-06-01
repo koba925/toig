@@ -152,3 +152,17 @@ class TestCore(TestEval):
                 sum
             end
         """), 45)
+
+    def test_break_continue(self):
+        self.assertEqual(run("""
+            i := sum := 0;
+            while True do
+                if i == 5 then i = i + 1; continue end;
+                if i >= 10 then break sum end;
+                sum = sum + i;
+                i = i + 1
+            end
+        """), 40)
+
+        self.assertTrue(fails("break 5"))
+        self.assertTrue(fails("continue"))

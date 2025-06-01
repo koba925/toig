@@ -93,11 +93,20 @@ def parse(src):
         return sequence()
 
     def sequence():
-        exprs = [define_assign()]
+        exprs = [break_continue()]
         while current_token == ";":
             advance()
-            exprs.append(define_assign())
+            exprs.append(break_continue())
         return exprs[0] if len(exprs) == 1 else ["do"] + exprs
+
+    def break_continue():
+        if current_token == "break":
+            advance()
+            return ["break", define_assign()]
+        if current_token == "continue":
+            advance()
+            return ["continue"]
+        return define_assign()
 
     def define_assign():
         return binary_right({
@@ -504,4 +513,4 @@ def run(src):
 if __name__ == "__main__":
     init_env()
     stdlib()
-    print(eval(["q", "hello, world!"]))
+    print(run("break 5"))
