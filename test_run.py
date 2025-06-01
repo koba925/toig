@@ -143,3 +143,12 @@ class TestCore(TestEval):
         self.assertTrue(fails("if True then"))
         self.assertTrue(fails("if True then 5 else"))
 
+    def test_while(self):
+        self.assertEqual(run("""
+            i := sum := 0;
+            while i < 10 do
+                sum = sum + i;
+                i = i + 1;
+                sum
+            end
+        """), 45)

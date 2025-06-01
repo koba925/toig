@@ -134,11 +134,14 @@ def parse(src):
         return unary({"-": "neg"}, primary)
 
     def primary():
-        if current_token == "if":
-            advance(); return if_()
-        if current_token == "(":
-            advance(); expr = expression(); consume(")")
-            return expr
+        match current_token:
+            case "(":
+                advance(); expr = expression(); consume(")")
+                return expr
+            case "if":
+                advance(); return if_()
+            case "while":
+                advance(); return while_()
         return advance()
 
     def if_():
@@ -147,14 +150,21 @@ def parse(src):
         thn = expression()
         if current_token == "elif":
             advance()
-            return ["if", cnd, thn, if_()]
+            return ["if", cnd, ["scope", thn], if_()]
         if current_token == "else":
             advance()
             els = expression()
             consume("end")
-            return ["if", cnd, thn, els]
+            return ["if", cnd, ["scope", thn], ["scope", els]]
         consume("end")
-        return ["if", cnd, thn, None]
+        return ["if", cnd, ["scope", thn], None]
+
+    def while_():
+        cnd = expression()
+        consume("do")
+        body = expression()
+        consume("end")
+        return ["while", cnd, ["scope", body]]
 
     next_token = scanner(src)
     current_token = next_token()
@@ -417,8 +427,11 @@ def stdlib():
     eval(["define", "while", ["macro", ["cnd", "body"], ["qq",
             ["scope", ["do",
                 ["define", "break", None],
+                ["define", "val", None],
                 ["define", "continue", ["func", [],
-                    ["when", ["!", "cnd"], ["do", ["!", "body"], ["continue"]]]]],
+                    ["if", ["!", "cnd"],
+                        ["do", ["assign", "val", ["!", "body"]], ["continue"]],
+                        "val"]]],
                 ["letcc", "cc", ["do", ["assign", "break", "cc"], ["continue"]]]]]]]])
 
     eval(["define", "awhile", ["macro", ["cnd", "body"], ["qq",

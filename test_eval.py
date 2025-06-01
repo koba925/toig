@@ -299,6 +299,15 @@ class TestStdlib(TestEval):
             True)
 
     def test_while(self):
+        self.assertEqual(eval(["do",
+            ["define", "i", 0],
+            ["define", "sum", 0],
+            ["while", ["less", "i", 10], ["do",
+                ["assign", "sum", ["add", "sum", "i"]],
+                ["assign", "i", ["add", "i", 1]],
+                "sum"]]
+        ]), 45)
+
         eval(["do",
                 ["define", "a", 0],
                 ["define", "b", ["arr"]],
