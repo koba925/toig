@@ -42,7 +42,7 @@ def scanner(src):
             case c if c in "=!<>:":
                 append_char()
                 if current_char() == "=": append_char()
-            case c if c in "+-*/%();":
+            case c if c in "+-*/%(),;":
                 append_char()
 
         return token
@@ -140,7 +140,24 @@ def parse(src):
         }, unary_minus)
 
     def unary_minus():
-        return unary({"-": "neg"}, primary)
+        return unary({"-": "neg"}, call)
+
+    def call():
+        op = primary()
+        while current_token == "(":
+            advance()
+            op = [op] + args()
+        return op
+
+    def args():
+        args = []
+        if current_token != ")":
+            args.append(expression())
+            while current_token == ",":
+                advance()
+                args.append(expression())
+        consume(")")
+        return args
 
     def primary():
         match current_token:

@@ -166,3 +166,17 @@ class TestCore(TestEval):
 
         self.assertTrue(fails("break 5"))
         self.assertTrue(fails("continue"))
+
+    def test_call(self):
+        self.assertEqual(run("add(5; 6, 7; 8)"), 14)
+        self.assertEqual(run("inc(5; 6)"), 7)
+        self.assertEqual(run("and(True, False)"), False)
+        self.assertEqual(run("""
+            i := sum := 0;
+            awhile(True,
+                if i == 5 then i = i + 1; continue end;
+                if i >= 10 then break sum end;
+                sum = sum + i;
+                i = i + 1
+            )
+        """), 40)
