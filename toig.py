@@ -63,7 +63,7 @@ def parse(src):
         return prev_token
 
     def consume(expected):
-        assert current_token in expected, \
+        assert isinstance(current_token, str) and current_token in expected, \
             f"Expected `{expected}`, found `{current_token}` @ consume"
         return advance()
 
@@ -86,6 +86,16 @@ def parse(src):
             return sub_elem()
         advance()
         return [ops[op], unary(ops, sub_elem)]
+
+    def comma_separated_exprs(closing_token):
+        cse = []
+        if current_token != closing_token:
+            cse.append(expression())
+            while current_token == ",":
+                advance()
+                cse.append(expression())
+        consume(closing_token)
+        return cse
 
     # grammar
 
@@ -137,27 +147,17 @@ def parse(src):
     def mul_div_mod():
         return binary_left({
             "*": "mul", "/": "div", "%": "mod"
-        }, unary_minus)
+        }, unary_ops)
 
-    def unary_minus():
-        return unary({"-": "neg"}, call)
+    def unary_ops():
+        return unary({"-": "neg", "*": "*"}, call)
 
     def call():
         op = primary()
         while current_token == "(":
             advance()
-            op = [op] + args()
+            op = [op] + comma_separated_exprs(")")
         return op
-
-    def args():
-        args = []
-        if current_token != ")":
-            args.append(expression())
-            while current_token == ",":
-                advance()
-                args.append(expression())
-        consume(")")
-        return args
 
     def primary():
         match current_token:
@@ -168,6 +168,8 @@ def parse(src):
                 advance(); return if_()
             case "while":
                 advance(); return while_()
+            case "func":
+                advance(); return func_()
         return advance()
 
     def if_():
@@ -191,6 +193,14 @@ def parse(src):
         body = expression()
         consume("end")
         return ["while", cnd, ["scope", body]]
+
+    def func_():
+        consume("(")
+        params = comma_separated_exprs(")")
+        body = expression()
+        consume("end")
+        return ["func", params, body]
+
 
     next_token = scanner(src)
     current_token = next_token()
@@ -531,4 +541,4 @@ def run(src):
 if __name__ == "__main__":
     init_env()
     stdlib()
-    print(run("break 5"))
+    print(run("func (a, b + c) a + b end (5, 6)"))

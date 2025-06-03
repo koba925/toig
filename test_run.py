@@ -1,4 +1,6 @@
 import unittest
+from unittest.mock import patch
+from io import StringIO
 
 from toig import init_env, stdlib, run
 
@@ -6,6 +8,11 @@ def fails(expr):
     try: run(expr)
     except AssertionError: return True
     else: return False
+
+def printed(expr):
+    with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+        val = run(expr)
+        return (val, mock_stdout.getvalue())
 
 class TestEval(unittest.TestCase):
     def setUp(self):
@@ -180,3 +187,20 @@ class TestCore(TestEval):
                 i = i + 1
             )
         """), 40)
+
+        self.assertTrue(fails("inc(5"))
+        self.assertTrue(fails("inc(5 6)"))
+
+    def test_func(self):
+        self.assertEqual(run("func (a, b) a + b end (5, 6)"), 11)
+        self.assertEqual(run("func (*args) args end ()"), [])
+        self.assertEqual(run("func (*args) args end (5)"), [5])
+        self.assertEqual(run("func (*args) args end (5, 6)"), [5, 6])
+        self.assertEqual(run("func (*(args)) args end (5, 6)"), [5, 6])
+
+        self.assertTrue(fails("*a"))
+        self.assertTrue(fails("func (a, b) a + b"))
+        self.assertTrue(fails("func a, b) a + b end (5, 6)"))
+        self.assertTrue(fails("func (a, b a + b end (5, 6)"))
+        self.assertTrue(fails("func (a b) a + b end (5, 6)"))
+        self.assertTrue(fails("func (a, b + c) a + b end (5, 6)"))
