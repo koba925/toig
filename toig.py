@@ -42,7 +42,7 @@ def scanner(src):
             case c if c in "=!<>:":
                 append_char()
                 if current_char() == "=": append_char()
-            case c if c in "+-*/%(),;":
+            case c if c in "+-*/%()[],;":
                 append_char()
 
         return token
@@ -150,20 +150,67 @@ def parse(src):
         }, unary_ops)
 
     def unary_ops():
-        return unary({"-": "neg", "*": "*"}, call)
+        return unary({"-": "neg", "*": "*"}, call_index)
 
-    def call():
-        op = primary()
-        while current_token == "(":
+    def call_index():
+        target = primary()
+        while current_token in ("(", "["):
+            match current_token:
+                case "(":
+                    advance()
+                    target = [target] + comma_separated_exprs(")")
+                case "[":
+                    advance()
+                    # target = ["getat", target, expression()]
+                    # consume("]")
+                    target = index_slice(target)
+        return target
+
+    def index_slice(target):
+        start = end = step = None
+
+        if current_token == "]":
+            assert False, f"Invalid index/slice: `{current_token}` @ index_slice"
+        if current_token != ":":
+            start = expression()
+        if current_token == "]":
             advance()
-            op = [op] + comma_separated_exprs(")")
-        return op
+            return ["getat", target, start]
+        if current_token != ":":
+            assert False, f"Invalid index/slice: `{current_token}` @ index_slice"
+        advance()
+
+        if current_token == "]":
+            advance()
+            return ["slice", target, start, end, step]
+        if current_token != ":":
+            end = expression()
+        if current_token == "]":
+            advance()
+            return ["slice", target, start, end, step]
+
+        if current_token != ":":
+            assert False, f"Invalid index/slice: `{current_token}` @ index_slice"
+        advance()
+        if current_token == "]":
+            advance()
+            return ["slice", target, start, end, step]
+        if current_token != ":":
+            step = expression()
+        if current_token == "]":
+            advance()
+            return ["slice", target, start, end, step]
+
+        assert False, f"Invalid index/slice: `{current_token}` @ index_slice"
 
     def primary():
         match current_token:
             case "(":
                 advance(); expr = expression(); consume(")")
                 return expr
+            case "[":
+                advance(); elems = comma_separated_exprs("]")
+                return ["arr"] + elems
             case "if":
                 advance(); return if_()
             case "while":
@@ -200,7 +247,6 @@ def parse(src):
         body = expression()
         consume("end")
         return ["func", params, body]
-
 
     next_token = scanner(src)
     current_token = next_token()
@@ -374,11 +420,12 @@ def setat(args):
     args[0][args[1]] = args[2]
     return args[0]
 
-def slice(args):
+def slice_(args):
     match args:
         case [arr]: return arr[:]
         case [arr, start]: return arr[start:]
         case [arr, start, end]: return arr[start:end]
+        case [arr, start, end, step]: return arr[slice(start, end, step)]
         case _: assert False, f"Invalid slice: args=`{args}` @ slice"
 
 def error(args):
@@ -404,7 +451,7 @@ builtins = {
     "len": lambda args: n_ary(1, len, args),
     "getat": lambda args: n_ary(2, lambda arr, ind: arr[ind], args),
     "setat": setat,
-    "slice": slice,
+    "slice": slice_,
 
     "print": lambda args: print(*args),
     "error": lambda args: error(args)
@@ -541,4 +588,4 @@ def run(src):
 if __name__ == "__main__":
     init_env()
     stdlib()
-    print(run("func (a, b + c) a + b end (5, 6)"))
+    print(run(""))

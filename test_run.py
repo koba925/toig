@@ -204,3 +204,69 @@ class TestCore(TestEval):
         self.assertTrue(fails("func (a, b a + b end (5, 6)"))
         self.assertTrue(fails("func (a b) a + b end (5, 6)"))
         self.assertTrue(fails("func (a, b + c) a + b end (5, 6)"))
+
+    def test_array_by_builtins(self):
+        self.assertEqual(run("arr()"), [])
+        self.assertEqual(run("arr(5; 6)"), [6])
+        self.assertEqual(run("arr(5; 6, 7; 8)"), [6, 8])
+        self.assertTrue(run("is_arr(arr())"))
+        self.assertFalse(run("is_arr(1)"))
+        self.assertEqual(run("len(arr(5, 6, 7))"), 3)
+        self.assertEqual(run("getat(arr(5, 6, 7), 1)"), 6)
+        self.assertEqual(run("setat(arr(5, 6, 7), 1, 8)"), [5, 8, 7])
+        self.assertEqual(run("slice(arr(5, 6, 7), 1, 2)"), [6])
+
+        self.assertEqual(printed("""
+            a := arr(5, 6, 7);
+            g := agen(a);
+            print(g(), g(), g())
+        """), (None, "5 6 7\n"))
+
+    def test_array_literal(self):
+        self.assertEqual(run("[]"), [])
+        self.assertEqual(run("[5; 6]"), [6])
+        self.assertEqual(run("[5; 6, 7; 8]"), [6, 8])
+
+    def test_is_arr(self):
+        self.assertTrue(run("is_arr([])"))
+        self.assertFalse(run("is_arr(1)"))
+
+    def test_array_len(self):
+        self.assertEqual(run("len([5, 6, 7])"), 3)
+
+    def test_array_index_slice(self):
+        run("a := [5, 6, 7, 8, 9]")
+        self.assertTrue(fails("a[]"))
+        self.assertEqual(run("a[1]"), 6)
+        self.assertEqual(run("a[:])"), [5, 6, 7, 8, 9])
+        self.assertTrue(fails("a[1,]"))
+        self.assertEqual(run("a[1:])"), [6, 7, 8, 9])
+        self.assertEqual(run("a[1:4])"), [6, 7, 8])
+        self.assertEqual(run("a[:4])"), [5, 6, 7, 8])
+        self.assertTrue(fails("a[1:2,]"))
+        self.assertEqual(run("a[3:1:-1])"), [8, 7])
+        self.assertEqual(run("a[:1:-1])"), [9, 8, 7])
+        self.assertEqual(run("a[3::-1])"), [8, 7, 6, 5])
+        self.assertEqual(run("a[1:4:])"), [6, 7, 8])
+        self.assertEqual(run("a[::-1])"), [9, 8, 7, 6, 5])
+        self.assertEqual(run("a[:3:])"), [5, 6, 7])
+        self.assertEqual(run("a[1::])"), [6, 7, 8, 9])
+        self.assertEqual(run("a[::])"), [5, 6, 7, 8, 9])
+        self.assertTrue(fails("a[1:2:3,"))
+
+        self.assertEqual(run("a[0;3:0;1:0;-1])"), [8, 7])
+
+        self.assertEqual(run("[[5, 6, 7], [15, 16, 17], [25, 26, 27]][1]"), [15, 16, 17])
+        self.assertEqual(run("[[5, 6, 7], [15, 16, 17], [25, 26, 27]][1][2]"), 17)
+        self.assertEqual(run("[add, sub][0](5, 6)"), 11)
+        self.assertEqual(run("func (a, b) [a, b] end (5, 6)[1]"), 6)
+
+    def test_array_set(self):
+        self.assertEqual(run("setat([5, 6, 7], 1, 8)"), [5, 8, 7])
+
+    def test_array_generator(self):
+        self.assertEqual(printed("""
+            a := arr(5, 6, 7);
+            g := agen(a);
+            print(g(), g(), g())
+        """), (None, "5 6 7\n"))

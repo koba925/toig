@@ -173,7 +173,8 @@ class TestCore(TestEval):
         self.assertEqual(eval(["slice", "a", -2]), [9, [7, 10]])
         self.assertEqual(eval(["slice", "a", 1, 2]), [9])
         self.assertEqual(eval(["slice", "a", 1, -1]), [9])
-        self.assertTrue(fails(["slice", "a", 1, 2, 3]))
+        self.assertEqual(eval(["slice", "a", 2, 0, -1]), [[7, 10], 9])
+        self.assertTrue(fails(["slice", "a", 1, 2, 3, 4]))
 
         self.assertEqual(eval(["add", ["arr", 5], ["arr", 6]]), [5, 6])
 
