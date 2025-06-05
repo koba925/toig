@@ -176,6 +176,7 @@ def parse(src):
         if current_token == "]":
             advance()
             return ["getat", target, start]
+
         if current_token != ":":
             assert False, f"Invalid index/slice: `{current_token}` @ index_slice"
         advance()
@@ -309,9 +310,8 @@ def eval_expr(expr, env, cont):
             assert is_name(name), f"Invalid name: `{name}` @ eval_define"
             return lambda: eval_expr(expr, env,
                 lambda val: cont(define(env, name, val)))
-        case ["assign", name, expr]:
-            return lambda: eval_expr(expr, env,
-                lambda val: cont(assign(env, name, val)))
+        case ["assign", left, expr]:
+            return lambda: eval_assign(left, expr, env, cont)
         case ["do", *exprs]:
             return lambda: foldl_cps(exprs,
                 lambda _, expr, c: eval_expr(expr, env, c),
@@ -329,6 +329,19 @@ def eval_expr(expr, env, cont):
             return lambda: eval_op(op_expr, args_expr, env, cont)
         case unexpected:
             assert False, f"Unexpected expression: {unexpected} @ eval"
+
+def eval_assign(left, expr, env, cont):
+    def eval_assign(val):
+        match left:
+            case str(name):
+                return cont(assign(env, name, val))
+            case ["getat", arr, idx]:
+                return eval_expr(arr, env,
+                    lambda arr_val: eval_expr(idx, env,
+                        lambda idx_val: cont(setat([arr_val, idx_val, val]))))
+        assert False, f"Invalid assign target: {left} @ eval_assign"
+
+    return lambda: eval_expr(expr, env, eval_assign)
 
 def eval_quasiquote(expr, env, cont):
     def splice(quoted, elem_vals, cont):
@@ -418,7 +431,7 @@ def setat(args):
     assert len(args) == 3, \
         f"Argument count doesn't match: `{args}` @ setat"
     args[0][args[1]] = args[2]
-    return args[0]
+    return args[2]
 
 def slice_(args):
     match args:
@@ -588,4 +601,4 @@ def run(src):
 if __name__ == "__main__":
     init_env()
     stdlib()
-    print(run(""))
+    print(parse("a[0][2] = 8"))

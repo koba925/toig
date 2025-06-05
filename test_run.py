@@ -213,7 +213,7 @@ class TestCore(TestEval):
         self.assertFalse(run("is_arr(1)"))
         self.assertEqual(run("len(arr(5, 6, 7))"), 3)
         self.assertEqual(run("getat(arr(5, 6, 7), 1)"), 6)
-        self.assertEqual(run("setat(arr(5, 6, 7), 1, 8)"), [5, 8, 7])
+        self.assertEqual(run("setat(arr(5, 6, 7), 1, 8)"), 8)
         self.assertEqual(run("slice(arr(5, 6, 7), 1, 2)"), [6])
 
         self.assertEqual(printed("""
@@ -262,7 +262,17 @@ class TestCore(TestEval):
         self.assertEqual(run("func (a, b) [a, b] end (5, 6)[1]"), 6)
 
     def test_array_set(self):
-        self.assertEqual(run("setat([5, 6, 7], 1, 8)"), [5, 8, 7])
+        run("a := [5, 6, 7]")
+        self.assertEqual(run("a[0; 1] = True or False"), True)
+        self.assertEqual(run("a"), [5, True, 7])
+
+        run("a := [[5, 6, 7], [15, 16, 17], [25, 26, 27]]")
+        self.assertEqual(run("a[1] = []"), [])
+        self.assertEqual(run("a"), [[5, 6, 7], [], [25, 26, 27]])
+        self.assertEqual(run("a[0][2] = 8"), 8)
+        self.assertEqual(run("a"), [[5, 6, 8], [], [25, 26, 27]])
+
+        self.assertTrue(fails("5 + 6 = 7"))
 
     def test_array_generator(self):
         self.assertEqual(printed("""

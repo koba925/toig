@@ -160,9 +160,9 @@ class TestCore(TestEval):
         self.assertTrue(fails(["getat", "a"]))
         self.assertTrue(fails(["getat", "a", 5, 6]))
 
-        self.assertEqual(eval(["setat", "a", 1, 9]), [5, 9, [7, 8]])
+        self.assertEqual(eval(["setat", "a", 1, 9]), 9)
         self.assertEqual(eval("a"), [5, 9, [7, 8]])
-        self.assertEqual(eval(["setat", ["getat", "a", 2], -1, 10]), [7, 10])
+        self.assertEqual(eval(["setat", ["getat", "a", 2], -1, 10]), 10)
         self.assertEqual(eval("a"), [5, 9, [7, 10]])
         self.assertTrue(fails(["setat", "a", 1]))
         self.assertTrue(fails(["setat", "a", 1, 5, 6]))
