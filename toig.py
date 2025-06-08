@@ -251,7 +251,10 @@ def parse(src):
 
     next_token = scanner(src)
     current_token = next_token()
-    return expression()
+    expr = expression()
+    assert current_token == "$EOF", \
+        f"Unexpected token at end: `{current_token}` @ parse"
+    return expr
 
 # environment
 
@@ -331,7 +334,7 @@ def eval_expr(expr, env, cont):
             assert False, f"Unexpected expression: {unexpected} @ eval"
 
 def eval_assign(left, expr, env, cont):
-    def eval_assign(val):
+    def _eval_assign(val):
         match left:
             case str(name):
                 return cont(assign(env, name, val))
@@ -339,9 +342,16 @@ def eval_assign(left, expr, env, cont):
                 return eval_expr(arr, env,
                     lambda arr_val: eval_expr(idx, env,
                         lambda idx_val: cont(setat([arr_val, idx_val, val]))))
+            case ["slice", arr, start, end, step]:
+                return eval_expr(arr, env,
+                    lambda arr_val: eval_expr(start, env,
+                        lambda start_val: eval_expr(end, env,
+                            lambda end_val: eval_expr(step, env,
+                                lambda step_val: cont(set_slice(
+                                    [arr_val, start_val, end_val, step_val, val]))))))
         assert False, f"Invalid assign target: {left} @ eval_assign"
 
-    return lambda: eval_expr(expr, env, eval_assign)
+    return lambda: eval_expr(expr, env, _eval_assign)
 
 def eval_quasiquote(expr, env, cont):
     def splice(quoted, elem_vals, cont):
@@ -441,6 +451,11 @@ def slice_(args):
         case [arr, start, end, step]: return arr[slice(start, end, step)]
         case _: assert False, f"Invalid slice: args=`{args}` @ slice"
 
+def set_slice(args):
+    arr, start, end, step, val = args
+    arr[start:end:step] = val
+    return val
+
 def error(args):
     assert False, f"{' '.join(map(str, args))}"
 
@@ -465,6 +480,7 @@ builtins = {
     "getat": lambda args: n_ary(2, lambda arr, ind: arr[ind], args),
     "setat": setat,
     "slice": slice_,
+    "set_slice": set_slice,
 
     "print": lambda args: print(*args),
     "error": lambda args: error(args)
