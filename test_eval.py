@@ -17,12 +17,12 @@ def printed(expr):
         val = eval(expr)
         return (val, mock_stdout.getvalue())
 
-class TestEval(unittest.TestCase):
+class TestToig(unittest.TestCase):
     def setUp(self):
         init_env()
         stdlib()
 
-class TestCore(TestEval):
+class TestCore(TestToig):
     def test_primary(self):
         self.assertEqual(eval(None), None)
         self.assertEqual(eval(5), 5)
@@ -107,35 +107,6 @@ class TestCore(TestEval):
         self.assertEqual(printed(["print"]), (None, "\n"))
         self.assertEqual(printed(["print", 5, 6]), (None, "5 6\n"))
 
-    def test_func(self):
-        self.assertEqual(eval([["func", ["n"], ["add", 5, "n"]], 6]), 11)
-        self.assertTrue(fails([["func", ["n"], ["add", 5, "n"]]]))
-        self.assertTrue(fails([["func", ["n"], ["add", 5, "n"]], 6, 7]))
-
-        self.assertEqual(eval([["func", [["*", "rest"]], "rest"]]), [])
-        self.assertEqual(eval([["func", ["a", ["*", "rest"]], ["arr", "a", "rest"]], 5]), [5, []])
-        self.assertEqual(eval([["func", ["a", ["*", "rest"]], ["arr", "a", "rest"]], 5, 6]), [5, [6]])
-        self.assertEqual(eval([["func", ["a", ["*", "rest"]], ["arr", "a", "rest"]], 5, 6, 7]), [5, [6, 7]])
-        self.assertTrue(fails([["func", [["*", "rest"], "a"], ["arr", "a", "rest"]], 5]))
-
-    def test_closure_adder(self):
-        eval(["define", "make_adder", ["func", ["n"],
-                ["func", ["m"], ["add", "n", "m"]]]])
-        self.assertEqual(eval([["make_adder", 5], 6]), 11)
-
-    def test_closure_counter(self):
-        eval(["define", "make_counter", ["func", [], ["do",
-                ["define", "c", 0],
-                ["func", [], ["assign", "c", ["add", "c", 1]]]]]])
-        eval(["define", "counter1", ["make_counter"]])
-        eval(["define", "counter2", ["make_counter"]])
-        self.assertEqual(eval(["counter1"]), 1)
-        self.assertEqual(eval(["counter1"]), 2)
-        self.assertEqual(eval(["counter2"]), 1)
-        self.assertEqual(eval(["counter2"]), 2)
-        self.assertEqual(eval(["counter1"]), 3)
-        self.assertEqual(eval(["counter2"]), 3)
-
     def test_array(self):
         self.assertEqual(eval(["arr"]), [])
         self.assertEqual(eval(["arr", ["add", 5, 6]]), [11])
@@ -177,6 +148,35 @@ class TestCore(TestEval):
         self.assertTrue(fails(["slice", "a", 1, 2, 3, 4]))
 
         self.assertEqual(eval(["add", ["arr", 5], ["arr", 6]]), [5, 6])
+
+    def test_func(self):
+        self.assertEqual(eval([["func", ["n"], ["add", 5, "n"]], 6]), 11)
+        self.assertTrue(fails([["func", ["n"], ["add", 5, "n"]]]))
+        self.assertTrue(fails([["func", ["n"], ["add", 5, "n"]], 6, 7]))
+
+        self.assertEqual(eval([["func", [["*", "rest"]], "rest"]]), [])
+        self.assertEqual(eval([["func", ["a", ["*", "rest"]], ["arr", "a", "rest"]], 5]), [5, []])
+        self.assertEqual(eval([["func", ["a", ["*", "rest"]], ["arr", "a", "rest"]], 5, 6]), [5, [6]])
+        self.assertEqual(eval([["func", ["a", ["*", "rest"]], ["arr", "a", "rest"]], 5, 6, 7]), [5, [6, 7]])
+        self.assertTrue(fails([["func", [["*", "rest"], "a"], ["arr", "a", "rest"]], 5]))
+
+    def test_closure_adder(self):
+        eval(["define", "make_adder", ["func", ["n"],
+                ["func", ["m"], ["add", "n", "m"]]]])
+        self.assertEqual(eval([["make_adder", 5], 6]), 11)
+
+    def test_closure_counter(self):
+        eval(["define", "make_counter", ["func", [], ["do",
+                ["define", "c", 0],
+                ["func", [], ["assign", "c", ["add", "c", 1]]]]]])
+        eval(["define", "counter1", ["make_counter"]])
+        eval(["define", "counter2", ["make_counter"]])
+        self.assertEqual(eval(["counter1"]), 1)
+        self.assertEqual(eval(["counter1"]), 2)
+        self.assertEqual(eval(["counter2"]), 1)
+        self.assertEqual(eval(["counter2"]), 2)
+        self.assertEqual(eval(["counter1"]), 3)
+        self.assertEqual(eval(["counter2"]), 3)
 
     def test_quote(self):
         self.assertEqual(eval(["q", 5]), 5)
@@ -221,7 +221,7 @@ class TestCore(TestEval):
         self.assertEqual(eval(["add5", 7]), 12)
         self.assertEqual(eval(["add5", 8]), 13)
 
-class TestStdlib(TestEval):
+class TestStdlib(TestToig):
     def test_id(self):
         self.assertEqual(eval(["id", ["add", 5, 6]]), 11)
 
@@ -255,9 +255,6 @@ class TestStdlib(TestEval):
             ["print", "a"]]), (None, "6\n5\n"))
 
     def test_when(self):
-        self.assertEqual(eval(["expand",
-                            ["when", ["not", ["equal", "b", 0]], ["div", "a", "b"]]]),
-                         ["if", ["not", ["equal", "b", 0]], ["div", "a", "b"], None])
         eval(["define", "a", 30])
         eval(["define", "b", 5])
         self.assertEqual(eval(["when", ["not", ["equal", "b", 0]], ["div", "a", "b"]]), 6)
@@ -358,18 +355,36 @@ class TestStdlib(TestEval):
                         ["assign", "r", ["add", "r", ["arr", "c"]]]]]])
         self.assertEqual(eval("r"), [[0, 0, 0], [0, 0, 0], [0, 0, 0]])
 
+    def test_is_name(self):
+        self.assertEqual(eval(["is_name", "a"]), True)
+        self.assertEqual(eval(["is_name", 5]), False)
+        self.assertEqual(eval(["is_name", ["neg", 5]]), False)
+
     def test_for(self):
         self.assertEqual(eval(["do",
             ["define", "sum", 0],
             ["for", "i", ["arr", 5, 6, 7, 8, 9], ["do",
-                ["when", ["equal", "i", 7], ["continue"]],
-                ["when", ["equal", "i", 9], ["break", None]],
                 ["assign", "sum", ["add", "sum", "i"]]]],
-            "sum"]), 19)
+            "sum"]), 35)
+
+        self.assertEqual(eval(["do",
+            ["define", "sum", 0],
+            ["for", "i", ["arr", 5, 6, 7, 8, 9], ["do",
+                ["when", ["equal", "i", 8], ["break", None]],
+                ["assign", "sum", ["add", "sum", "i"]]]],
+            "sum"]), 18)
+
+        self.assertEqual(eval(["do",
+            ["define", "sum", 0],
+            ["for", "i", ["arr", 5, 6, 7, 8, 9], ["do",
+                ["when", ["equal", "i", 7], ["continue"]],
+                ["assign", "sum", ["add", "sum", "i"]]]],
+            "sum"]), 28)
+
 
     # see https://zenn.dev/link/comments/ea605f282d4c97
     def test_letcc_generator(self):
-        eval(["define", "g3", ["gfunc", ["n"], ["do",
+        eval(["define", "g3", ["gfunc", "n", ["do",
                 ["yield", "n"],
                 ["assign", "n", ["add", "n", 1]],
                 ["yield", "n"],
@@ -381,7 +396,7 @@ class TestStdlib(TestEval):
         self.assertEqual(eval(["gsum", ["g3", 2]]), 9)
         self.assertEqual(eval(["gsum", ["g3", 5]]), 18)
 
-        eval(["define", "walk", ["gfunc", ["tree"], ["do",
+        eval(["define", "walk", ["gfunc", "tree", ["do",
                 ["define", "_walk", ["func",["t"], ["do",
                     ["if", ["is_arr", ["first", "t"]],
                         ["_walk", ["first", "t"]],
@@ -419,7 +434,7 @@ class TestStdlib(TestEval):
                                         ["print", "n"]]]),
                          (None, "2\n4\n"))
 
-class TestProblems(TestEval):
+class TestProblems(TestToig):
     def test_factorial(self):
         eval(["define", "factorial", ["func", ["n"],
                 ["if", ["equal", "n", 1],
@@ -453,19 +468,20 @@ class TestProblems(TestEval):
                         [False, True])
 
     def test_sieve(self):
+        eval(["define", "n", 30])
         eval(["define", "sieve", ["add",
                 ["mul", ["arr", False], 2],
-                ["mul", ["arr", True], 28]]])
+                ["mul", ["arr", True], ["sub", "n", 2]]]])
         eval(["define", "j", None])
-        eval(["for", "i", ["range", 2, 30],
+        eval(["for", "i", ["range", 2, "n"],
                 ["when", ["getat", "sieve", "i"],
                     ["do",
                         ["assign", "j", ["mul", "i", "i"]],
-                        ["while", ["less", "j", 30], ["do",
+                        ["while", ["less", "j", "n"], ["do",
                             ["setat", "sieve", "j", False],
                             ["assign", "j", ["add", "j", "i"]]]]]]])
         eval(["define", "primes", ["arr"]])
-        eval(["for", "i", ["range", 0, 30],
+        eval(["for", "i", ["range", 0, "n"],
                 ["when", ["getat", "sieve", "i"],
                     ["assign", "primes", ["append", "primes", "i"]]]])
         self.assertEqual(eval("primes"), [2, 3, 5, 7, 11, 13, 17, 19, 23, 29])
@@ -575,7 +591,7 @@ class TestProblems(TestEval):
         self.assertEqual(printed(["parentfunc", 2]), (None, "6\n7\n8\n9\n"))
 
     def test_letcc_try(self):
-        eval(["define", "raise", ["func", ["e"],["error", ["q", "Raised outside of try:"], "e"]]])
+        eval(["define", "raise", ["func", ["e"], ["error", ["q", "Raised outside of try:"], "e"]]])
         eval(["define", "try", ["macro", ["try-expr", "_", "exc-var", "exc-expr"], ["qq",
                 ["scope", ["do",
                     ["define", "prev-raise", "raise"],
@@ -634,7 +650,7 @@ class TestProblems(TestEval):
                     ["assign", "tasks", ["rest", "tasks"]],
                     ["when", ["next-task"], ["add-task", "next-task"]]]]]])
 
-        eval(["define", "three-times", ["gfunc", ["n"], ["do",
+        eval(["define", "three-times", ["gfunc", "n", ["do",
                 ["print", "n"],
                 ["yield", True],
                 ["print", "n"],

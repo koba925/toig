@@ -9,31 +9,25 @@ def fails(expr):
     except AssertionError: return True
     else: return False
 
+def expanded(expr):
+    return run(f"expand({expr})")
+
 def printed(expr):
     with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
         val = run(expr)
         return (val, mock_stdout.getvalue())
 
-class TestEval(unittest.TestCase):
+class TestToig(unittest.TestCase):
     def setUp(self):
         init_env()
         stdlib()
 
-class TestCore(TestEval):
+class TestCore(TestToig):
     def test_primary(self):
         self.assertEqual(run("None"), None)
         self.assertEqual(run("5"), 5)
         self.assertEqual(run("True"), True)
         self.assertEqual(run("False"), False)
-
-    def test_sequence(self):
-        self.assertEqual(run("x := 5; y := 6; x + y"), 11)
-        self.assertEqual(run("x"), 5)
-        self.assertEqual(run("y"), 6)
-        self.assertEqual(run("x = 6; y = 7; x * y"), 42)
-        self.assertEqual(run("x"), 6)
-        self.assertEqual(run("y"), 7)
-        self.assertTrue(fails(";"))
 
     def test_define(self):
         self.assertEqual(run("x := 5"), 5)
@@ -52,6 +46,15 @@ class TestCore(TestEval):
         self.assertEqual(run("y"), 7)
         self.assertTrue(fails("z = 5"))
         self.assertTrue(fails("6 = 5"))
+
+    def test_sequence(self):
+        self.assertEqual(run("x := 5; y := 6; x + y"), 11)
+        self.assertEqual(run("x"), 5)
+        self.assertEqual(run("y"), 6)
+        self.assertEqual(run("x = 6; y = 7; x * y"), 42)
+        self.assertEqual(run("x"), 6)
+        self.assertEqual(run("y"), 7)
+        self.assertTrue(fails(";"))
 
     def test_or(self):
         self.assertTrue(run("5 == 5 or 5 == 5"))
@@ -128,82 +131,28 @@ class TestCore(TestEval):
         self.assertEqual(run("-5 * 6"), -30)
         self.assertEqual(run("5 * -6"), -30)
 
+    def test_call(self):
+        self.assertEqual(run("add(5; 6, 7; 8)"), 14)
+        self.assertEqual(run("inc(5; 6)"), 7)
+        self.assertEqual(run("and(True, False)"), False)
+
+        self.assertTrue(fails("inc(5"))
+        self.assertTrue(fails("inc(5 6)"))
+
+    def test_print(self):
+        self.assertEqual(printed("print(None)"), (None, "None\n"))
+        self.assertEqual(printed("print(5)"), (None, "5\n"))
+        self.assertEqual(printed("print(True)"), (None, "True\n"))
+        self.assertEqual(printed("print(False)"), (None, "False\n"))
+        self.assertEqual(printed("print()"), (None, "\n"))
+        self.assertEqual(printed("print(5, 6)"), (None, "5 6\n"))
+
     def test_paren(self):
         self.assertEqual(run("(5; 6) * 7"), 42)
         self.assertEqual(run("5 * (6; 7)"), 35)
         self.assertEqual(run("(5) + 6"), 11)
 
         self.assertTrue(fails("(5"))
-
-    def test_if(self):
-        self.assertEqual(run("if 5; True then 6; 7 end"), 7)
-        self.assertEqual(run("if 5; False then 6; 7 end"), None)
-        self.assertEqual(run("if 5; True then 6; 7 else 8; 9 end"), 7)
-        self.assertEqual(run("if 5; False then 6; 7 else 8; 9 end"), 9)
-        self.assertEqual(run("if 5; True then 6; 7 elif 8; True then 9; 10 else 11; 12 end"), 7)
-        self.assertEqual(run("if 5; False then 6; 7 elif 8; True then 9; 10 else 11; 12 end"), 10)
-        self.assertEqual(run("if 5; False then 6; 7 elif 8; False then 9; 10 else 11; 12 end"), 12)
-
-        self.assertEqual(run("-if 5; True then 6; 7 end"), -7)
-
-        self.assertTrue(fails("if True end"))
-        self.assertTrue(fails("if True then"))
-        self.assertTrue(fails("if True then 5 else"))
-
-    def test_while(self):
-        self.assertEqual(run("""
-            i := sum := 0;
-            while i < 10 do
-                sum = sum + i;
-                i = i + 1;
-                sum
-            end
-        """), 45)
-
-    def test_break_continue(self):
-        self.assertEqual(run("""
-            i := sum := 0;
-            while True do
-                if i == 5 then i = i + 1; continue end;
-                if i >= 10 then break sum end;
-                sum = sum + i;
-                i = i + 1
-            end
-        """), 40)
-
-        self.assertTrue(fails("break 5"))
-        self.assertTrue(fails("continue"))
-
-    def test_call(self):
-        self.assertEqual(run("add(5; 6, 7; 8)"), 14)
-        self.assertEqual(run("inc(5; 6)"), 7)
-        self.assertEqual(run("and(True, False)"), False)
-        self.assertEqual(run("""
-            i := sum := 0;
-            awhile(True,
-                if i == 5 then i = i + 1; continue end;
-                if i >= 10 then break sum end;
-                sum = sum + i;
-                i = i + 1
-            )
-        """), 40)
-
-        self.assertTrue(fails("inc(5"))
-        self.assertTrue(fails("inc(5 6)"))
-
-    def test_func(self):
-        self.assertEqual(run("func (a, b) a + b end (5, 6)"), 11)
-        self.assertEqual(run("func (*args) args end ()"), [])
-        self.assertEqual(run("func (*args) args end (5)"), [5])
-        self.assertEqual(run("func (*args) args end (5, 6)"), [5, 6])
-        self.assertEqual(run("func (*(args)) args end (5, 6)"), [5, 6])
-
-        self.assertTrue(fails("*a"))
-        self.assertTrue(fails("func (a, b) a + b"))
-        self.assertTrue(fails("func a, b) a + b end (5, 6)"))
-        self.assertTrue(fails("func (a, b a + b end (5, 6)"))
-        self.assertTrue(fails("func (a b) a + b end (5, 6)"))
-        self.assertTrue(fails("func (a, b + c) a + b end (5, 6)"))
 
     def test_array_by_builtins(self):
         self.assertEqual(run("arr()"), [])
@@ -215,12 +164,6 @@ class TestCore(TestEval):
         self.assertEqual(run("getat(arr(5, 6, 7), 1)"), 6)
         self.assertEqual(run("setat(arr(5, 6, 7), 1, 8)"), 8)
         self.assertEqual(run("slice(arr(5, 6, 7), 1, 2)"), [6])
-
-        self.assertEqual(printed("""
-            a := arr(5, 6, 7);
-            g := agen(a);
-            print(g(), g(), g())
-        """), (None, "5 6 7\n"))
 
     def test_array_literal(self):
         self.assertEqual(run("[]"), [])
@@ -282,9 +225,545 @@ class TestCore(TestEval):
 
         self.assertTrue(fails("5 + 6 = 7"))
 
-    def test_array_generator(self):
+    def test_func(self):
+        self.assertEqual(run("func (a, b) a + b end (5, 6)"), 11)
+        self.assertEqual(run("func (*args) args end ()"), [])
+        self.assertEqual(run("func (*args) args end (5)"), [5])
+        self.assertEqual(run("func (*args) args end (5, 6)"), [5, 6])
+        self.assertEqual(run("func (*(args)) args end (5, 6)"), [5, 6])
+
+        self.assertTrue(fails("*a"))
+        self.assertTrue(fails("func (a, b) a + b"))
+        self.assertTrue(fails("func a, b) a + b end (5, 6)"))
+        self.assertTrue(fails("func (a, b a + b end (5, 6)"))
+        self.assertTrue(fails("func (a b) a + b end (5, 6)"))
+        self.assertTrue(fails("func (a, b + c) a + b end (5, 6)"))
+
+    def test_closure_adder(self):
+        run("make_adder := func (n) func (m) n + m end end")
+        self.assertEqual(run("make_adder(5)(6)"), 11)
+
+    def test_closure_counter(self):
+        run("""
+            make_counter := func () c := 0; func() c = c + 1 end end;
+            counter1 := make_counter();
+            counter2 := make_counter()
+        """)
+        self.assertEqual(run("counter1()"), 1)
+        self.assertEqual(run("counter1()"), 2)
+        self.assertEqual(run("counter2()"), 1)
+        self.assertEqual(run("counter2()"), 2)
+        self.assertEqual(run("counter1()"), 3)
+        self.assertEqual(run("counter2()"), 3)
+
+    def test_q(self):
+        self.assertEqual(run("q(5)"), 5)
+        self.assertEqual(run("q(None)"), None)
+        self.assertEqual(run("q(foo)"), "foo")
+        self.assertEqual(run("q([5, 6])"), ["arr", 5, 6])
+        self.assertEqual(run("q(add(5, 6))"), ["add", 5, 6])
+        self.assertEqual(run("q(5 + 6)"), ["add", 5, 6])
+
+    def test_qq(self):
+        self.assertEqual(run("qq(5)"), 5)
+        self.assertEqual(run("qq(None)"), None)
+        self.assertEqual(run("qq(foo)"), "foo")
+        self.assertEqual(run("qq([5, 6])"), ["arr", 5, 6])
+        self.assertEqual(run("qq(add(5, 6))"), ["add", 5, 6])
+        self.assertEqual(run("qq(5 + 6)"), ["add", 5, 6])
+
+        self.assertEqual(run("qq(!(add(5, 6)))"), 11)
+        self.assertEqual(run("qq(add(5, !(6 ; 7)))"), ["add", 5, 7])
+        self.assertEqual(run("qq(!(5 + 6))"), 11)
+        self.assertEqual(run("qq(5 + !(6; 7))"), ["add", 5, 7])
+        self.assertEqual(run("qq(add(!!([5, 6])))"), ["add", 5, 6])
+        self.assertEqual(run("qq(add(5, !!([6])))"), ["add", 5, 6])
+
+        self.assertEqual(run("qq(if a == 5 then 6; 7 else !(8; 9) end)"),
+                         ["if", ["equal", "a", 5], ["scope", ["do", 6, 7]], ["scope", 9]])
+
+    def test_macro(self):
+        self.assertEqual(expanded("macro () q(abc) end ()"), "abc")
+
+        self.assertEqual(expanded("macro (a) qq(!(a) * !(a)) end (5 + 6)"),
+            ["mul", ["add", 5, 6], ["add", 5, 6]])
+
+        run("build_exp := macro (op, *r) qq(!(op)(!!(r))) end")
+        self.assertEqual(expanded("build_exp(add)"), ["add"])
+        self.assertEqual(expanded("build_exp(add, 5)"), ["add", 5])
+        self.assertEqual(expanded("build_exp(add, 5, 6)"), ["add", 5, 6])
+
+        self.assertTrue(fails("macro (*r, a) 5 end ()"))
+
+    def test_if(self):
+        self.assertEqual(run("if 5; True then 6; 7 end"), 7)
+        self.assertEqual(run("if 5; False then 6; 7 end"), None)
+        self.assertEqual(run("if 5; True then 6; 7 else 8; 9 end"), 7)
+        self.assertEqual(run("if 5; False then 6; 7 else 8; 9 end"), 9)
+        self.assertEqual(run("if 5; True then 6; 7 elif 8; True then 9; 10 else 11; 12 end"), 7)
+        self.assertEqual(run("if 5; False then 6; 7 elif 8; True then 9; 10 else 11; 12 end"), 10)
+        self.assertEqual(run("if 5; False then 6; 7 elif 8; False then 9; 10 else 11; 12 end"), 12)
+
+        self.assertEqual(run("-if 5; True then 6; 7 end"), -7)
+
+        self.assertTrue(fails("if True end"))
+        self.assertTrue(fails("if True then"))
+        self.assertTrue(fails("if True then 5 else"))
+
+    def test_letcc(self):
+        self.assertEqual(run("letcc cc do 5 + 6 end"), 11)
+        self.assertEqual(run("letcc cc do cc(5) + 6 end"), 5)
+        self.assertEqual(run("5 + letcc cc do cc(6) end"), 11)
+        self.assertEqual(run("letcc cc1 do cc1(letcc cc2 do cc2(5) + 6 end) + 7 end"), 5)
+
+        self.assertEqual(run("""
+            inner := func (raise) raise(5) end;
+            outer := func () letcc raise do inner(raise) + 6 end end;
+            outer()
+        """), 5)
+
+        run("add5 := None")
+        self.assertEqual(run("5 + letcc cc do add5 = cc; 6 end"), 11)
+        self.assertEqual(run("add5(7)"), 12)
+        self.assertEqual(run("add5(8)"), 13)
+
+class TestStdlib(TestToig):
+
+    def test_id(self):
+        self.assertEqual(run("id(5 + 6)"), 11)
+
+    def test_inc_dec(self):
+        self.assertEqual(run("inc(5 + 6)"), 12)
+        self.assertEqual(run("dec(5 + 6)"), 10)
+
+    def test_first_rest_last(self):
+        run("a := [5, 6, 7]")
+        self.assertEqual(run("first(a)"), 5)
+        self.assertEqual(run("rest(a)"), [6, 7])
+        self.assertEqual(run("last(a)"), 7)
+
+    def test_append_prepend(self):
+        run("a := [5, 6, 7]")
+        self.assertEqual(run("append(a, 8)"), [5, 6, 7, 8])
+        self.assertEqual(run("prepend(8, a)"), [8, 5, 6, 7])
+
+    def test_foldl(self):
+        self.assertEqual(run("foldl([5, 6, 7], add, 0)"), 18)
+        self.assertEqual(run("foldl([5, 6, 7], append, [])"), [5, 6, 7])
+
+    def test_unfoldl(self):
+        self.assertEqual(run(
+            "unfoldl(5, func (n) n == 0 end, func (n) n * 2 end, func (n) n - 1 end)"),
+            [10, 8, 6, 4, 2])
+
+    def test_map(self):
+        self.assertEqual(run("map([5, 6, 7], inc)"), [6, 7, 8])
+
+    def test_range(self):
+        self.assertEqual(run("range(5, 5)"), [])
+        self.assertEqual(run("range(5, 8)"), [5, 6, 7])
+
+    def test_scope(self):
         self.assertEqual(printed("""
-            a := arr(5, 6, 7);
-            g := agen(a);
-            print(g(), g(), g())
-        """), (None, "5 6 7\n"))
+            a := 5;
+            scope(a := 6; print(a));
+            print(a)
+        """), (None, "6\n5\n"))
+
+    def test_when(self):
+        self.assertEqual(run("when(5 == 5, 5 / 5)"), 1)
+        self.assertEqual(run("when(5 == 0, 5 / 0)"), None)
+
+    def test_aif(self):
+        self.assertEqual(run("aif(inc(5), inc(it), 8)"), 7)
+        self.assertEqual(run("aif(dec(1), 5, inc(it))"), 1)
+
+    def test_while(self):
+        # self.assertEqual(run("""
+        #     i := sum := 0;
+        #     while i < 10 do
+        #         sum = sum + i;
+        #         i = i + 1;
+        #         sum
+        #     end
+        # """), 45)
+
+        self.assertEqual(run("""
+            i := sum := 0;
+            while(i < 10,
+                sum = sum + i;
+                i = i + 1;
+                sum)
+        """), 45)
+
+        self.assertEqual(run("""
+            r := c := [];
+            while (len(r) < 3,
+                c = [];
+                while (len(c) < 3,
+                    c = c + [0]);
+                r = r + [c])
+        """), [[0, 0, 0], [0, 0, 0], [0, 0, 0]])
+
+    def test_while_break(self):
+        self.assertEqual(run("""
+            i := sum := 0;
+            while(True,
+                if i >= 10 then break(sum) end;
+                sum = sum + i;
+                i = i + 1
+            )
+        """), 45)
+
+        self.assertTrue(fails("break(5)"))
+
+    def test_while_continue(self):
+        self.assertEqual(run("""
+            i := sum := 0;
+            while(i < 10,
+                if i == 5 then i = i + 1; continue() end;
+                sum = sum + i;
+                i = i + 1;
+                sum
+            )
+        """), 40)
+
+        self.assertTrue(fails("continue(None)"))
+
+    def test_awhile(self):
+        self.assertEqual(run("""
+            a := [5, 6, 7, 8, 9, False];
+            i := sum := 0;
+            awhile(a[i],
+                i = i + 1;
+                sum = sum + it)
+        """), 35)
+
+        self.assertEqual(run("""
+            a := [5, 6, 7, 8, 9, False];
+            i := sum := 0;
+            awhile(a[i],
+                i = i + 1;
+                if it == 8 then break(sum) end;
+                sum = sum + it)
+        """), 18)
+
+        self.assertEqual(run("""
+            a := [5, 6, 7, 8, 9, False];
+            i := sum := 0;
+            awhile(a[i],
+                i = i + 1;
+                if it == 8 then continue() end;
+                sum = sum + it)
+        """), 27)
+
+    def test_is_name(self):
+        self.assertTrue(run("is_name(a)"))
+        self.assertFalse(run("is_name(5)"))
+        self.assertFalse(run("is_name(5 + 6)"))
+
+    def test_for(self):
+        self.assertEqual(run("""
+            sum := 0;
+            for (i, [5, 6, 7, 8, 9],
+                sum = sum + i)"""),
+            35)
+
+        self.assertEqual(run("""
+            sum := 0;
+            for (i, [5, 6, 7, 8, 9],
+                if i == 8 then break(sum) end;
+                sum = sum + i)"""),
+            18)
+
+        self.assertEqual(run("""
+            sum := 0;
+            for (i, [5, 6, 7, 8, 9],
+                if i == 8 then continue() end;
+                sum = sum + i)"""),
+            27)
+
+        self.assertTrue(fails("for(3 + 7, [1,2,3], print(i))"))
+
+    def test_letcc_generator(self):
+        run("""
+            g3 := gfunc(n,
+                yield(n); n = inc(n);
+                yield(n); n = inc(n);
+                yield(n));
+            gsum := func (gen) aif(gen(), it + gsum(gen), 0) end
+        """)
+        self.assertEqual(run("gsum(g3(2))"), 9)
+        self.assertEqual(run("gsum(g3(5))"), 18)
+
+        run("""
+            walk := gfunc(tree,
+                _walk := func (t)
+                    if is_arr(first(t)) then _walk(first(t)) else yield(first(t)) end;
+                    if is_arr(last(t)) then _walk(last(t)) else yield(last(t)) end
+                end;
+                _walk(tree));
+            gen := walk([[[5, 6], 7], [8, [9, 10]]])
+        """)
+        self.assertEqual(
+            printed("awhile(gen(), print(it))"),
+            (None, "5\n6\n7\n8\n9\n10\n"))
+
+    def test_agen(self):
+        run("gen := agen([5, 6, 7])")
+        self.assertEqual(run("gen()"), 5)
+        self.assertEqual(run("gen()"), 6)
+        self.assertEqual(run("gen()"), 7)
+        self.assertEqual(run("gen()"), None)
+
+        run("gen0 := agen([])")
+        self.assertEqual(run("gen0()"), None)
+
+    def test_gfor(self):
+        self.assertEqual(printed("""
+            gfor(n, agen([]), print(n))
+        """), (None, ""))
+        self.assertEqual(printed("""
+            gfor(n, agen([5, 6, 7, 8, 9]), print(n))
+        """), (None, "5\n6\n7\n8\n9\n"))
+        self.assertEqual(printed("""
+            gfor(n, agen([5, 6, 7, 8, 9]),
+                if n == 8 then break(None) end;
+                print(n))
+        """), (None, "5\n6\n7\n"))
+        self.assertEqual(printed("""
+            gfor(n, agen([5, 6, 7, 8, 9]),
+                if n == 8 then continue() end;
+                print(n))
+        """), (None, "5\n6\n7\n9\n"))
+
+class TestProblems(TestToig):
+    def test_factorial(self):
+        run("""
+            factorial := func (n)
+                if n == 1 then 1 else n * factorial(n - 1) end
+            end
+        """)
+        self.assertEqual(run("factorial(1)"), 1)
+        self.assertEqual(run("factorial(10)"), 3628800)
+
+    def test_fib(self):
+        run("""
+            fib := func (n) if
+                n == 0 then 0 elif
+                n == 1 then 1 else
+                fib(n - 1) + fib(n - 2) end
+            end
+        """)
+        self.assertEqual(run("fib(0)"), 0)
+        self.assertEqual(run("fib(1)"), 1)
+        self.assertEqual(run("fib(2)"), 1)
+        self.assertEqual(run("fib(3)"), 2)
+        self.assertEqual(run("fib(10)"), 55)
+
+    def test_macro_firstclass(self):
+        self.assertEqual(run("func(op, a, b) op(a, b) end (and, True, False)"), False)
+        self.assertEqual(run("func(op, a, b) op(a, b) end (or, True, False)"), True)
+
+        self.assertEqual(run("func() and end ()(True, False)"), False)
+        self.assertEqual(run("func() or end ()(True, False)"), True)
+
+        self.assertEqual(run("map([and, or], func(op) op(True, False) end)"), [False, True])
+
+    def test_sieve(self):
+        self.assertEqual(run("""
+            n := 30;
+            sieve := [False] * 2 + [True] * (n - 2);
+            j := None;
+            for(i, range(2, n),
+                when(sieve[i],
+                    j = i * i;
+                    while(j < n,
+                        sieve[j] = False;
+                        j = j + i)));
+            primes := [];
+            for(i, range(0, n),
+                when(sieve[i], primes = append(primes, i)))
+        """), [2, 3, 5, 7, 11, 13, 17, 19, 23, 29])
+
+    def test_let(self):
+        run("""
+            let := macro(bindings, body)
+                defines := func (bindings)
+                    map(bindings[1:], func (b)
+                        qq(!(b[1]) := !(b[2]))
+                    end)
+                end;
+                qq(scope(!!(defines(bindings)); !(body)))
+            end
+        """)
+
+        self.assertEqual(run("let([[a, 5], [b, 6]], a + b)"), 11)
+
+    def test_cond(self):
+        run("""
+            cond := macro(*clauses)
+                _cond := func (clauses)
+                    if clauses == [] then None else
+                        clause := first(clauses);
+                        cnd := clause[1];
+                        thn := clause[2];
+                        qq(if !(cnd) then !(thn) else !(_cond(rest(clauses))) end)
+                    end
+                end;
+                _cond(clauses)
+            end
+        """)
+        run("""
+            fib := func (n) cond(
+                [n == 0, 0],
+                [n == 1, 1],
+                [True, fib(n - 1) + fib(n - 2)]
+            ) end
+        """)
+        self.assertEqual(run("fib(0)"), 0)
+        self.assertEqual(run("fib(1)"), 1)
+        self.assertEqual(run("fib(2)"), 1)
+        self.assertEqual(run("fib(3)"), 2)
+        self.assertEqual(run("fib(10)"), 55)
+
+    def test_letcc_return(self):
+        run("""
+        early_return := func (n) letcc return do
+            if n == 1 then return(5) else 6 end;
+            7
+        end end
+        """)
+        self.assertEqual(run("early_return(1)"), 5)
+        self.assertEqual(run("early_return(2)"), 7)
+
+        run("""
+            runc := macro (params, body) qq(
+                func (!!(rest(params))) letcc return do !(body) end end
+            ) end;
+            early_return_runc := runc([n], if n == 1 then return(5) else 6 end; 7);
+            early_return_runc2 := runc([n], if early_return_runc(n) == 5 then return(6) else 7 end; 8)
+        """)
+        self.assertEqual(run("early_return_runc(1)"), 5)
+        self.assertEqual(run("early_return_runc(2)"), 7)
+        self.assertEqual(run("early_return_runc2(1)"), 6)
+        self.assertEqual(run("early_return_runc2(2)"), 8)
+
+    def test_letcc_escape(self):
+        run("""
+            riskyfunc := func (n, escape)
+                if n == 1 then escape(5) else 6 end; 7
+            end;
+            middlefunc := func (n, escape)
+                riskyfunc(n, escape); 8
+            end;
+            parentfunc := func (n)
+                letcc escape do middlefunc(n, escape) end
+            end
+        """)
+        self.assertEqual(run("parentfunc(1)"), 5)
+        self.assertEqual(run("parentfunc(2)"), 8)
+
+    def test_letcc_except(self):
+        run("""
+            raise := None;
+            riskyfunc := func (n)
+                if n == 1 then raise(5) end; print(6)
+            end;
+            middlefunc := func (n)
+                riskyfunc(n); print(7)
+            end;
+            parentfunc := func (n)
+                letcc escape do
+                    raise = func (e) escape(print(e)) end;
+                    middlefunc(n);
+                    print(8)
+                end;
+                print(9)
+            end
+        """)
+        self.assertEqual(printed("parentfunc(1) "), (None, "5\n9\n"))
+        self.assertEqual(printed("parentfunc(2) "), (None, "6\n7\n8\n9\n"))
+
+    def test_letcc_try(self):
+        run("""
+            raise := func (e) error(q(raised_outside_of_try), e) end;
+            try := macro (try_expr, exc_var, exc_expr) qq(scope(
+                prev_raise := raise;
+                letcc escape do
+                    raise = func (!(exc_var)) escape(!(exc_expr)) end;
+                    !(try_expr)
+                end;
+                raise = prev_raise
+            )) end;
+            riskyfunc := func (n)
+                if n == 1 then raise(5) end; print(6)
+            end;
+            middlefunc := func (n)
+                riskyfunc(n); print(7)
+            end;
+            parentfunc := func (n)
+                try(
+                    middlefunc(n); print(8),
+                    e, print(e)
+                );
+                print(9)
+            end
+        """)
+        self.assertEqual(printed("parentfunc(1) "), (None, "5\n9\n"))
+        self.assertEqual(printed("parentfunc(2) "), (None, "6\n7\n8\n9\n"))
+
+        run("""
+            nested := func (n)
+                try(
+                    if n == 1 then raise(5) end;
+                    print(6);
+                    try(
+                        if n == 2 then raise(7) end;
+                        print(8),
+                        e, print(q(exception_inner_try), e)
+                    );
+                    if n == 3 then raise(9) end;
+                    print(10),
+                    e, print(q(exception_outer_try), e)
+                );
+                print(11)
+            end
+        """)
+        self.assertEqual(printed("nested(1)"),  (None, "exception_outer_try 5\n11\n"))
+        self.assertEqual(printed("nested(2)"),  (None, "6\nexception_inner_try 7\n10\n11\n"))
+        self.assertEqual(printed("nested(3)"),  (None, "6\n8\nexception_outer_try 9\n11\n"))
+        self.assertEqual(printed("nested(4)"),  (None, "6\n8\n10\n11\n"))
+
+        self.assertTrue(fails("raise(5)"))
+
+    def test_letcc_concurrent(self):
+        run("""
+            tasks := [];
+            add_task := func (t) tasks = append(tasks, t) end;
+            start := func ()
+                while(tasks != [],
+                    next_task := first(tasks);
+                    tasks = rest(tasks);
+                    if next_task() then add_task(next_task) end
+                )
+            end;
+
+            three_times := gfunc(n,
+                print(n); yield(True);
+                print(n); yield(True);
+                print(n));
+
+            add_task(three_times(5));
+            add_task(three_times(6));
+            add_task(three_times(7))
+        """)
+        self.assertEqual(printed("start()"), (None, "5\n6\n7\n5\n6\n7\n5\n6\n7\n"))
+
+    def test_replace_AST_element(self):
+        run("""
+            force_minus := macro(expr)
+                expr[0] = q(sub); expr
+            end
+        """)
+        self.assertEqual(run("force_minus(5 + 6)"), -1)

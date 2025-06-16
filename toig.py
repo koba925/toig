@@ -3,7 +3,6 @@
 def is_name_first(c): return c.isalpha() or c == "_"
 def is_name_rest(c): return c.isalnum() or c == "_"
 def is_name(expr): return isinstance(expr, str) and is_name_first(expr[0])
-def is_punctuation(c): return c in ":="
 
 def scanner(src):
     def advance(): nonlocal pos; pos += 1
@@ -39,7 +38,11 @@ def scanner(src):
             case c if c.isnumeric():
                 word(str.isnumeric)
                 return int(token)
-            case c if c in "=!<>:":
+            case c if c in "!":
+                append_char()
+                if current_char() == "=" or current_char() == "!":
+                    append_char()
+            case c if c in "=<>:":
                 append_char()
                 if current_char() == "=": append_char()
             case c if c in "+-*/%()[],;":
@@ -103,20 +106,11 @@ def parse(src):
         return sequence()
 
     def sequence():
-        exprs = [break_continue()]
+        exprs = [define_assign()]
         while current_token == ";":
             advance()
-            exprs.append(break_continue())
+            exprs.append(define_assign())
         return exprs[0] if len(exprs) == 1 else ["do"] + exprs
-
-    def break_continue():
-        if current_token == "break":
-            advance()
-            return ["break", define_assign()]
-        if current_token == "continue":
-            advance()
-            return ["continue"]
-        return define_assign()
 
     def define_assign():
         return binary_right({
@@ -161,8 +155,6 @@ def parse(src):
                     target = [target] + comma_separated_exprs(")")
                 case "[":
                     advance()
-                    # target = ["getat", target, expression()]
-                    # consume("]")
                     target = index_slice(target)
         return target
 
@@ -212,12 +204,14 @@ def parse(src):
             case "[":
                 advance(); elems = comma_separated_exprs("]")
                 return ["arr"] + elems
-            case "if":
-                advance(); return if_()
-            case "while":
-                advance(); return while_()
             case "func":
                 advance(); return func_()
+            case "macro":
+                advance(); return macro()
+            case "if":
+                advance(); return if_()
+            case "letcc":
+                advance(); return letcc()
         return advance()
 
     def if_():
@@ -235,12 +229,13 @@ def parse(src):
         consume("end")
         return ["if", cnd, ["scope", thn], None]
 
-    def while_():
-        cnd = expression()
+    def letcc():
+        name = advance()
+        assert is_name(name), f"Invalid name: `{name}` @ letcc"
         consume("do")
         body = expression()
         consume("end")
-        return ["while", cnd, ["scope", body]]
+        return ["letcc", name, ["scope", body]]
 
     def func_():
         consume("(")
@@ -248,6 +243,13 @@ def parse(src):
         body = expression()
         consume("end")
         return ["func", params, body]
+
+    def macro():
+        consume("(")
+        params = comma_separated_exprs(")")
+        body = expression()
+        consume("end")
+        return ["macro", params, body]
 
     next_token = scanner(src)
     current_token = next_token()
@@ -324,7 +326,7 @@ def eval_expr(expr, env, cont):
                 eval_expr(thn_expr, env, cont) if cnd else
                 eval_expr(els_expr, env, cont))
         case ["letcc", name, body]:
-            def skip(args): raise Skip(lambda: cont(args[0]))
+            def skip(args): raise Skip(lambda: cont(args[0] if len(args) > 0 else None))
             return lambda: apply(["func", [name], body, env], [skip], cont)
         case ["expand", [op_expr, *args_expr]]:
             return lambda: eval_expand(op_expr, args_expr, env, cont)
@@ -482,6 +484,8 @@ builtins = {
     "slice": slice_,
     "set_slice": set_slice,
 
+    "is_name": lambda args: n_ary(1, is_name, args),
+
     "print": lambda args: print(*args),
     "error": lambda args: error(args)
 }
@@ -494,108 +498,118 @@ def init_env():
     top_env = new_scope(top_env)
 
 def stdlib():
-    eval(["define", "id", ["func", ["x"], "x"]])
+    run("id := func (x) x end")
 
-    eval(["define", "inc", ["func", ["x"], ["add", "x", 1]]])
-    eval(["define", "dec", ["func", ["x"], ["sub", "x", 1]]])
+    run("inc := func (n) n + 1 end")
+    run("dec := func (n) n - 1 end")
 
-    eval(["define", "first", ["func", ["l"], ["getat", "l", 0]]])
-    eval(["define", "rest", ["func", ["l"], ["slice", "l", 1]]])
-    eval(["define", "last", ["func", ["l"], ["getat", "l", -1]]])
-    eval(["define", "append", ["func", ["l", "a"], ["add", "l", ["arr", "a"]]]])
-    eval(["define", "prepend", ["func", ["a", "l"], ["add", ["arr", "a"], "l"]]])
+    run("first := func (l) l[0] end")
+    run("rest := func (l) l[1:] end")
+    run("last := func (l) l[-1] end")
+    run("append := func (l, a) l + [a] end")
+    run("prepend := func (a, l) [a] + l end")
 
-    eval(["define", "foldl", ["func", ["l", "f", "init"],
-            ["if", ["equal", "l", ["arr"]],
-                "init",
-                ["foldl", ["rest", "l"], "f", ["f", "init", ["first", "l"]]]]]])
-    eval(["define", "unfoldl", ["func", ["x", "p", "h", "t"], ["do",
-            ["define", "_unfoldl", ["func", ["x", "b"],
-                ["if", ["p", "x"],
-                    "b",
-                    ["_unfoldl", ["t", "x"], ["add", "b", ["arr", ["h", "x"]]]]]]],
-            ["_unfoldl", "x", ["arr"]]]]])
+    run("""
+        foldl := func (l, f, init)
+            if l == [] then init else
+                foldl(rest(l), f, f(init, first(l)))
+            end
+        end
+    """)
+    run("""
+        unfoldl := func (x, p, h, t)
+            _unfoldl := func (x, b)
+                if p(x) then b else _unfoldl(t(x), b + [h(x)]) end
+            end;
+            _unfoldl(x, [])
+        end
+    """)
 
-    eval(["define", "map", ["func", ["l", "f"],
-            ["foldl", "l", ["func", ["acc", "e"], ["append", "acc", ["f", "e"]]], ["arr"]]]])
-    eval(["define", "range", ["func", ["s", "e"],
-            ["unfoldl", "s", ["func", ["x"], ["greater_equal", "x", "e"]], "id", "inc"]]])
+    run("map := func (l, f) foldl(l, func(acc, e) append(acc, f(e)) end, []) end")
+    run("range := func (s, e) unfoldl(s, func (x) x >= e end, id, inc) end")
 
-    eval(["define", "scope", ["macro", ["body"],
-            ["qq", [["func", [], ["!", "body"]]]]]])
+    run("scope := macro (body) qq(func () !(body) end ()) end")
 
-    eval(["define", "when", ["macro", ["cnd", "thn"],
-            ["qq", ["if", ["!", "cnd"], ["!", "thn"], None]]]])
+    run("when := macro (cnd, thn) qq(if !(cnd) then !(thn) end) end")
 
-    eval(["define", "aif", ["macro", ["cnd", "thn", "els"],
-            ["qq", ["scope", ["do",
-                ["define", "it", ["!", "cnd"]],
-                ["if", "it", ["!", "thn"], ["!", "els"]]]]]]])
+    run("""
+        aif := macro (cnd, thn, els) qq(scope(
+            it := !(cnd);
+            if it then !(thn) else !(els) end
+        )) end
+    """)
 
-    eval(["define", "and", ["macro", ["a", "b"],
-            ["qq", ["aif", ["!", "a"], ["!", "b"], "it"]]]])
-    eval(["define", "or", ["macro", ["a", "b"],
-            ["qq", ["aif", ["!", "a"], "it", ["!", "b"]]]]])
+    run("and := macro (a, b) qq(aif(!(a), !(b), it)) end")
+    run("or := macro (a, b) qq(aif(!(a), it, !(b))) end")
 
-    eval(["define", "while", ["macro", ["cnd", "body"], ["qq",
-            ["scope", ["do",
-                ["define", "break", None],
-                ["define", "val", None],
-                ["define", "continue", ["func", [],
-                    ["if", ["!", "cnd"],
-                        ["do", ["assign", "val", ["!", "body"]], ["continue"]],
-                        "val"]]],
-                ["letcc", "cc", ["do", ["assign", "break", "cc"], ["continue"]]]]]]]])
+    run("""
+        while := macro (cnd, body) qq(scope(
+            break := continue := val := None;
+            loop := func()
+                letcc cc do continue = cc end;
+                if !(cnd) then val = !(body); loop() else val end
+            end;
+            letcc cc do break = cc; loop() end))
+        end
+    """)
 
-    eval(["define", "awhile", ["macro", ["cnd", "body"], ["qq",
-            ["scope", ["do",
-                ["define", "break", None],
-                ["define", "continue", ["func", [], ["do",
-                    ["define", "it", ["!", "cnd"]],
-                    ["when", "it", ["do", ["!", "body"], ["continue"]]]]]],
-                ["letcc", "cc", ["do", ["assign", "break", "cc"], ["continue"]]]]]]]])
+    run("""
+        awhile := macro (cnd, body) qq(scope(
+            break := continue := val := None;
+            loop := func()
+                letcc cc do continue = cc end;
+                it := !(cnd);
+                if it then val = !(body); loop() else val end
+            end;
+            letcc cc do break = cc; loop() end
+        )) end
+    """)
 
-    eval(["define", "gfunc", ["macro", ["params", "body"], ["qq",
-            ["func", ["!", "params"], ["do",
-                ["define", "yd", None],
-                ["define", "nx", None],
-                ["define", "yield", ["func", ["x"],
-                    ["letcc", "cc", ["do",
-                        ["assign", "nx", "cc"],
-                        ["yd", "x"]]]]],
-                ["define", "next", ["func", [],
-                    ["letcc", "cc", ["do",
-                        ["assign", "yd", "cc"],
-                        ["nx", None]]]]],
-                ["assign", "nx", ["func", ["_"], ["do",
-                    ["!", "body"],
-                    ["yield", None]]]],
-                "next"]]]]])
+    run("""
+        __stdlib_is_name_before := is_name;
+        is_name := macro (e) qq(__stdlib_is_name_before(q(!(e)))) end
+    """)
 
-    eval(["define", "for", ["macro", ["e", "l", "body"], ["qq",
-            ["scope", ["do",
-                ["define", "__stdlib_for_index", 0],
-                ["define", ["!", "e"], None],
-                ["define", "break", None],
-                ["define", "continue", ["func", [], ["do",
-                    ["assign", "__stdlib_for_index", ["inc", "__stdlib_for_index"]],
-                    ["go"]]]],
-                ["define", "go", ["func", [],
-                    ["when", ["less", "__stdlib_for_index", ["len", ["!", "l"]]],
-                        ["do",
-                            ["assign", ["!", "e"], ["getat", ["!", "l"], "__stdlib_for_index"]],
-                            ["!", "body"],
-                            ["continue"]]]]],
-                ["letcc", "cc", ["do", ["assign", "break", "cc"], ["go"]]]]]]]])
+    run("""
+        for := macro (e, l, body) qq(scope(do(
+            __stdlib_for_index := -1;
+            if not is_name(!(e)) then error(q(must_be_a_name), q(_), !(e), q(at_for)) end;
+            __stdlib_for_l := !(l);
+            break := continue := __stdlib_for_val := !(e) := None;
+            loop := func ()
+                letcc __stdlib_for_cc do continue = __stdlib_for_cc end;
+                __stdlib_for_index = __stdlib_for_index + 1;
+                if __stdlib_for_index < len(__stdlib_for_l) then
+                    !(e) = __stdlib_for_l[__stdlib_for_index];
+                    __stdlib_for_val = !(body);
+                    loop()
+                else __stdlib_for_val end
+            end;
+            letcc __stdlib_for_cc do break = __stdlib_for_cc; loop() end
+        ))) end
+    """)
 
-    eval(["define", "agen", ["gfunc", ["a"], ["for", "e", "a", ["yield", "e"]]]])
+    run("""
+        gfunc := macro (params, body) qq(
+            func (!(params))
+                yd := nx := None;
+                yield := func (x) letcc cc do nx = cc; yd(x) end end;
+                next := func () letcc cc do yd = cc; nx(None) end end;
+                nx := func (_) !(body); yield(None) end;
+                next
+            end
+        ) end
+    """)
 
-    eval(["define", "gfor", ["macro", ["e", "gen", "body"], ["qq",
-            ["scope", ["do",
-                ["define", "__stdlib_gfor_gen", ["!", "gen"]],
-                ["define", ["!", "e"], None],
-                ["while", ["not_equal", ["assign", ["!", "e"], ["__stdlib_gfor_gen"]], None],
-                    ["!", "body"]]]]]]])
+    run("agen := gfunc(a, for(e, a, yield(e)))")
+
+    run("""
+        gfor := macro(e, gen, body) qq(scope(
+            __stdlib_gfor_gen := !(gen);
+            !(e) := None;
+            while((!(e) = __stdlib_gfor_gen()) != None, !(body))
+        )) end
+    """)
 
     global top_env
     top_env = new_scope(top_env)
@@ -617,4 +631,4 @@ def run(src):
 if __name__ == "__main__":
     init_env()
     stdlib()
-    print(parse("a[0][2] = 8"))
+    run("gfor(n, agen([1,2,3]), print(n))")
