@@ -202,7 +202,7 @@ class TestCore(TestToig):
         self.assertEqual(run("[[5, 6, 7], [15, 16, 17], [25, 26, 27]][1]"), [15, 16, 17])
         self.assertEqual(run("[[5, 6, 7], [15, 16, 17], [25, 26, 27]][1][2]"), 17)
         self.assertEqual(run("[add, sub][0](5, 6)"), 11)
-        self.assertEqual(run("func (a, b) [a, b] end (5, 6)[1]"), 6)
+        self.assertEqual(run("func (a, b) do [a, b] end (5, 6)[1]"), 6)
 
     def test_array_set(self):
         run("a := [5, 6, 7, 8, 9]")
@@ -226,26 +226,27 @@ class TestCore(TestToig):
         self.assertTrue(fails("5 + 6 = 7"))
 
     def test_func(self):
-        self.assertEqual(run("func (a, b) a + b end (5, 6)"), 11)
-        self.assertEqual(run("func (*args) args end ()"), [])
-        self.assertEqual(run("func (*args) args end (5)"), [5])
-        self.assertEqual(run("func (*args) args end (5, 6)"), [5, 6])
-        self.assertEqual(run("func (*(args)) args end (5, 6)"), [5, 6])
+        self.assertEqual(run("func (a, b) do a + b end (5, 6)"), 11)
+        self.assertEqual(run("func (*args) do args end ()"), [])
+        self.assertEqual(run("func (*args) do args end (5)"), [5])
+        self.assertEqual(run("func (*args) do args end (5, 6)"), [5, 6])
+        self.assertEqual(run("func (*(args)) do args end (5, 6)"), [5, 6])
 
         self.assertTrue(fails("*a"))
-        self.assertTrue(fails("func (a, b) a + b"))
-        self.assertTrue(fails("func a, b) a + b end (5, 6)"))
-        self.assertTrue(fails("func (a, b a + b end (5, 6)"))
-        self.assertTrue(fails("func (a b) a + b end (5, 6)"))
-        self.assertTrue(fails("func (a, b + c) a + b end (5, 6)"))
+        self.assertTrue(fails("func (a, b) a + b end"))
+        self.assertTrue(fails("func (a, b) do a + b"))
+        self.assertTrue(fails("func a, b) do a + b end (5, 6)"))
+        self.assertTrue(fails("func (a, b do a + b end (5, 6)"))
+        self.assertTrue(fails("func (a b) do a + b end (5, 6)"))
+        self.assertTrue(fails("func (a, b + c) do a + b end (5, 6)"))
 
     def test_closure_adder(self):
-        run("make_adder := func (n) func (m) n + m end end")
+        run("make_adder := func (n) do func (m) do n + m end end")
         self.assertEqual(run("make_adder(5)(6)"), 11)
 
     def test_closure_counter(self):
         run("""
-            make_counter := func () c := 0; func() c = c + 1 end end;
+            make_counter := func () do c := 0; func() do c = c + 1 end end;
             counter1 := make_counter();
             counter2 := make_counter()
         """)
@@ -283,17 +284,17 @@ class TestCore(TestToig):
                          ["if", ["equal", "a", 5], ["scope", ["do", 6, 7]], ["scope", 9]])
 
     def test_macro(self):
-        self.assertEqual(expanded("macro () q(abc) end ()"), "abc")
+        self.assertEqual(expanded("macro () do q(abc) end ()"), "abc")
 
-        self.assertEqual(expanded("macro (a) qq(!(a) * !(a)) end (5 + 6)"),
+        self.assertEqual(expanded("macro (a) do qq(!(a) * !(a)) end (5 + 6)"),
             ["mul", ["add", 5, 6], ["add", 5, 6]])
 
-        run("build_exp := macro (op, *r) qq(!(op)(!!(r))) end")
+        run("build_exp := macro (op, *r) do qq(!(op)(!!(r))) end")
         self.assertEqual(expanded("build_exp(add)"), ["add"])
         self.assertEqual(expanded("build_exp(add, 5)"), ["add", 5])
         self.assertEqual(expanded("build_exp(add, 5, 6)"), ["add", 5, 6])
 
-        self.assertTrue(fails("macro (*r, a) 5 end ()"))
+        self.assertTrue(fails("macro (*r, a) do 5 end ()"))
 
     def test_if(self):
         self.assertEqual(run("if 5; True then 6; 7 end"), 7)
@@ -317,8 +318,8 @@ class TestCore(TestToig):
         self.assertEqual(run("letcc cc1 do cc1(letcc cc2 do cc2(5) + 6 end) + 7 end"), 5)
 
         self.assertEqual(run("""
-            inner := func (raise) raise(5) end;
-            outer := func () letcc raise do inner(raise) + 6 end end;
+            inner := func (raise) do raise(5) end;
+            outer := func () do letcc raise do inner(raise) + 6 end end;
             outer()
         """), 5)
 
@@ -353,7 +354,7 @@ class TestStdlib(TestToig):
 
     def test_unfoldl(self):
         self.assertEqual(run(
-            "unfoldl(5, func (n) n == 0 end, func (n) n * 2 end, func (n) n - 1 end)"),
+            "unfoldl(5, func (n) do n == 0 end, func (n) do n * 2 end, func (n) do n - 1 end)"),
             [10, 8, 6, 4, 2])
 
     def test_map(self):
@@ -491,14 +492,14 @@ class TestStdlib(TestToig):
                 yield(n); n = inc(n);
                 yield(n); n = inc(n);
                 yield(n));
-            gsum := func (gen) aif(gen(), it + gsum(gen), 0) end
+            gsum := func (gen) do aif(gen(), it + gsum(gen), 0) end
         """)
         self.assertEqual(run("gsum(g3(2))"), 9)
         self.assertEqual(run("gsum(g3(5))"), 18)
 
         run("""
             walk := gfunc(tree,
-                _walk := func (t)
+                _walk := func (t) do
                     if is_arr(first(t)) then _walk(first(t)) else yield(first(t)) end;
                     if is_arr(last(t)) then _walk(last(t)) else yield(last(t)) end
                 end;
@@ -540,7 +541,7 @@ class TestStdlib(TestToig):
 class TestProblems(TestToig):
     def test_factorial(self):
         run("""
-            factorial := func (n)
+            factorial := func (n) do
                 if n == 1 then 1 else n * factorial(n - 1) end
             end
         """)
@@ -549,10 +550,10 @@ class TestProblems(TestToig):
 
     def test_fib(self):
         run("""
-            fib := func (n) if
-                n == 0 then 0 elif
-                n == 1 then 1 else
-                fib(n - 1) + fib(n - 2) end
+            fib := func (n) do
+                if n == 0 then 0
+                elif n == 1 then 1
+                else fib(n - 1) + fib(n - 2) end
             end
         """)
         self.assertEqual(run("fib(0)"), 0)
@@ -562,13 +563,13 @@ class TestProblems(TestToig):
         self.assertEqual(run("fib(10)"), 55)
 
     def test_macro_firstclass(self):
-        self.assertEqual(run("func(op, a, b) op(a, b) end (and, True, False)"), False)
-        self.assertEqual(run("func(op, a, b) op(a, b) end (or, True, False)"), True)
+        self.assertEqual(run("func(op, a, b) do op(a, b) end (and, True, False)"), False)
+        self.assertEqual(run("func(op, a, b) do op(a, b) end (or, True, False)"), True)
 
-        self.assertEqual(run("func() and end ()(True, False)"), False)
-        self.assertEqual(run("func() or end ()(True, False)"), True)
+        self.assertEqual(run("func() do and end ()(True, False)"), False)
+        self.assertEqual(run("func() do or end ()(True, False)"), True)
 
-        self.assertEqual(run("map([and, or], func(op) op(True, False) end)"), [False, True])
+        self.assertEqual(run("map([and, or], func(op) do op(True, False) end)"), [False, True])
 
     def test_sieve(self):
         self.assertEqual(run("""
@@ -588,9 +589,9 @@ class TestProblems(TestToig):
 
     def test_let(self):
         run("""
-            let := macro(bindings, body)
-                defines := func (bindings)
-                    map(bindings[1:], func (b)
+            let := macro(bindings, body) do
+                defines := func (bindings) do
+                    map(bindings[1:], func (b) do
                         qq(!(b[1]) := !(b[2]))
                     end)
                 end;
@@ -602,8 +603,8 @@ class TestProblems(TestToig):
 
     def test_cond(self):
         run("""
-            cond := macro(*clauses)
-                _cond := func (clauses)
+            cond := macro(*clauses) do
+                _cond := func (clauses) do
                     if clauses == [] then None else
                         clause := first(clauses);
                         cnd := clause[1];
@@ -615,11 +616,12 @@ class TestProblems(TestToig):
             end
         """)
         run("""
-            fib := func (n) cond(
-                [n == 0, 0],
-                [n == 1, 1],
-                [True, fib(n - 1) + fib(n - 2)]
-            ) end
+            fib := func (n) do
+                cond(
+                    [n == 0, 0],
+                    [n == 1, 1],
+                    [True, fib(n - 1) + fib(n - 2)])
+            end
         """)
         self.assertEqual(run("fib(0)"), 0)
         self.assertEqual(run("fib(1)"), 1)
@@ -629,7 +631,7 @@ class TestProblems(TestToig):
 
     def test_letcc_return(self):
         run("""
-        early_return := func (n) letcc return do
+        early_return := func (n) do letcc return do
             if n == 1 then return(5) else 6 end;
             7
         end end
@@ -638,8 +640,8 @@ class TestProblems(TestToig):
         self.assertEqual(run("early_return(2)"), 7)
 
         run("""
-            runc := macro (params, body) qq(
-                func (!!(rest(params))) letcc return do !(body) end end
+            runc := macro (params, body) do qq(
+                func (!!(rest(params))) do letcc return do !(body) end end
             ) end;
             early_return_runc := runc([n], if n == 1 then return(5) else 6 end; 7);
             early_return_runc2 := runc([n], if early_return_runc(n) == 5 then return(6) else 7 end; 8)
@@ -651,13 +653,13 @@ class TestProblems(TestToig):
 
     def test_letcc_escape(self):
         run("""
-            riskyfunc := func (n, escape)
+            riskyfunc := func (n, escape) do
                 if n == 1 then escape(5) else 6 end; 7
             end;
-            middlefunc := func (n, escape)
+            middlefunc := func (n, escape) do
                 riskyfunc(n, escape); 8
             end;
-            parentfunc := func (n)
+            parentfunc := func (n) do
                 letcc escape do middlefunc(n, escape) end
             end
         """)
@@ -667,15 +669,15 @@ class TestProblems(TestToig):
     def test_letcc_except(self):
         run("""
             raise := None;
-            riskyfunc := func (n)
+            riskyfunc := func (n) do
                 if n == 1 then raise(5) end; print(6)
             end;
-            middlefunc := func (n)
+            middlefunc := func (n) do
                 riskyfunc(n); print(7)
             end;
-            parentfunc := func (n)
+            parentfunc := func (n) do
                 letcc escape do
-                    raise = func (e) escape(print(e)) end;
+                    raise = func (e) do escape(print(e)) end;
                     middlefunc(n);
                     print(8)
                 end;
@@ -687,22 +689,22 @@ class TestProblems(TestToig):
 
     def test_letcc_try(self):
         run("""
-            raise := func (e) error(q(raised_outside_of_try), e) end;
-            try := macro (try_expr, exc_var, exc_expr) qq(scope(
+            raise := func (e) do error(q(raised_outside_of_try), e) end;
+            try := macro (try_expr, exc_var, exc_expr) do qq(scope(
                 prev_raise := raise;
                 letcc escape do
-                    raise = func (!(exc_var)) escape(!(exc_expr)) end;
+                    raise = func (!(exc_var)) do escape(!(exc_expr)) end;
                     !(try_expr)
                 end;
                 raise = prev_raise
             )) end;
-            riskyfunc := func (n)
+            riskyfunc := func (n) do
                 if n == 1 then raise(5) end; print(6)
             end;
-            middlefunc := func (n)
+            middlefunc := func (n) do
                 riskyfunc(n); print(7)
             end;
-            parentfunc := func (n)
+            parentfunc := func (n) do
                 try(
                     middlefunc(n); print(8),
                     e, print(e)
@@ -714,7 +716,7 @@ class TestProblems(TestToig):
         self.assertEqual(printed("parentfunc(2) "), (None, "6\n7\n8\n9\n"))
 
         run("""
-            nested := func (n)
+            nested := func (n) do
                 try(
                     if n == 1 then raise(5) end;
                     print(6);
@@ -740,8 +742,8 @@ class TestProblems(TestToig):
     def test_letcc_concurrent(self):
         run("""
             tasks := [];
-            add_task := func (t) tasks = append(tasks, t) end;
-            start := func ()
+            add_task := func (t) do tasks = append(tasks, t) end;
+            start := func () do
                 while(tasks != [],
                     next_task := first(tasks);
                     tasks = rest(tasks);
@@ -762,7 +764,7 @@ class TestProblems(TestToig):
 
     def test_replace_AST_element(self):
         run("""
-            force_minus := macro(expr)
+            force_minus := macro(expr) do
                 expr[0] = q(sub); expr
             end
         """)

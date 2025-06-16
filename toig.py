@@ -240,6 +240,7 @@ def parse(src):
     def func_():
         consume("(")
         params = comma_separated_exprs(")")
+        consume("do")
         body = expression()
         consume("end")
         return ["func", params, body]
@@ -247,6 +248,7 @@ def parse(src):
     def macro():
         consume("(")
         params = comma_separated_exprs(")")
+        consume("do")
         body = expression()
         consume("end")
         return ["macro", params, body]
@@ -498,54 +500,54 @@ def init_env():
     top_env = new_scope(top_env)
 
 def stdlib():
-    run("id := func (x) x end")
+    run("id := func (x) do x end")
 
-    run("inc := func (n) n + 1 end")
-    run("dec := func (n) n - 1 end")
+    run("inc := func (n) do n + 1 end")
+    run("dec := func (n) do n - 1 end")
 
-    run("first := func (l) l[0] end")
-    run("rest := func (l) l[1:] end")
-    run("last := func (l) l[-1] end")
-    run("append := func (l, a) l + [a] end")
-    run("prepend := func (a, l) [a] + l end")
+    run("first := func (l) do l[0] end")
+    run("rest := func (l) do l[1:] end")
+    run("last := func (l) do l[-1] end")
+    run("append := func (l, a) do l + [a] end")
+    run("prepend := func (a, l) do [a] + l end")
 
     run("""
-        foldl := func (l, f, init)
+        foldl := func (l, f, init) do
             if l == [] then init else
                 foldl(rest(l), f, f(init, first(l)))
             end
         end
     """)
     run("""
-        unfoldl := func (x, p, h, t)
-            _unfoldl := func (x, b)
+        unfoldl := func (x, p, h, t) do
+            _unfoldl := func (x, b) do
                 if p(x) then b else _unfoldl(t(x), b + [h(x)]) end
             end;
             _unfoldl(x, [])
         end
     """)
 
-    run("map := func (l, f) foldl(l, func(acc, e) append(acc, f(e)) end, []) end")
-    run("range := func (s, e) unfoldl(s, func (x) x >= e end, id, inc) end")
+    run("map := func (l, f) do foldl(l, func(acc, e) do append(acc, f(e)) end, []) end")
+    run("range := func (s, e) do unfoldl(s, func (x) do x >= e end, id, inc) end")
 
-    run("scope := macro (body) qq(func () !(body) end ()) end")
+    run("scope := macro (body) do qq(func () do !(body) end ()) end")
 
-    run("when := macro (cnd, thn) qq(if !(cnd) then !(thn) end) end")
+    run("when := macro (cnd, thn) do qq(if !(cnd) then !(thn) end) end")
 
     run("""
-        aif := macro (cnd, thn, els) qq(scope(
+        aif := macro (cnd, thn, els) do qq(scope(
             it := !(cnd);
             if it then !(thn) else !(els) end
         )) end
     """)
 
-    run("and := macro (a, b) qq(aif(!(a), !(b), it)) end")
-    run("or := macro (a, b) qq(aif(!(a), it, !(b))) end")
+    run("and := macro (a, b) do qq(aif(!(a), !(b), it)) end")
+    run("or := macro (a, b) do qq(aif(!(a), it, !(b))) end")
 
     run("""
-        while := macro (cnd, body) qq(scope(
+        while := macro (cnd, body) do qq(scope(
             break := continue := val := None;
-            loop := func()
+            loop := func() do
                 letcc cc do continue = cc end;
                 if !(cnd) then val = !(body); loop() else val end
             end;
@@ -554,9 +556,9 @@ def stdlib():
     """)
 
     run("""
-        awhile := macro (cnd, body) qq(scope(
+        awhile := macro (cnd, body) do qq(scope(
             break := continue := val := None;
-            loop := func()
+            loop := func() do
                 letcc cc do continue = cc end;
                 it := !(cnd);
                 if it then val = !(body); loop() else val end
@@ -567,16 +569,16 @@ def stdlib():
 
     run("""
         __stdlib_is_name_before := is_name;
-        is_name := macro (e) qq(__stdlib_is_name_before(q(!(e)))) end
+        is_name := macro (e) do qq(__stdlib_is_name_before(q(!(e)))) end
     """)
 
     run("""
-        for := macro (e, l, body) qq(scope(do(
+        for := macro (e, l, body) do qq(scope(do(
             __stdlib_for_index := -1;
             if not is_name(!(e)) then error(q(must_be_a_name), q(_), !(e), q(at_for)) end;
             __stdlib_for_l := !(l);
             break := continue := __stdlib_for_val := !(e) := None;
-            loop := func ()
+            loop := func () do
                 letcc __stdlib_for_cc do continue = __stdlib_for_cc end;
                 __stdlib_for_index = __stdlib_for_index + 1;
                 if __stdlib_for_index < len(__stdlib_for_l) then
@@ -590,12 +592,12 @@ def stdlib():
     """)
 
     run("""
-        gfunc := macro (params, body) qq(
-            func (!(params))
+        gfunc := macro (params, body) do qq(
+            func (!(params)) do
                 yd := nx := None;
-                yield := func (x) letcc cc do nx = cc; yd(x) end end;
-                next := func () letcc cc do yd = cc; nx(None) end end;
-                nx := func (_) !(body); yield(None) end;
+                yield := func (x) do letcc cc do nx = cc; yd(x) end end;
+                next := func () do letcc cc do yd = cc; nx(None) end end;
+                nx := func (_) do !(body); yield(None) end;
                 next
             end
         ) end
@@ -604,7 +606,7 @@ def stdlib():
     run("agen := gfunc(a, for(e, a, yield(e)))")
 
     run("""
-        gfor := macro(e, gen, body) qq(scope(
+        gfor := macro(e, gen, body) do qq(scope(
             __stdlib_gfor_gen := !(gen);
             !(e) := None;
             while((!(e) = __stdlib_gfor_gen()) != None, !(body))
