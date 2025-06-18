@@ -153,6 +153,10 @@ def parse(src):
                 case "(":
                     advance()
                     target = [target] + comma_separated_exprs(")")
+                    if current_token == "do":
+                        advance()
+                        target += [expression()]
+                        consume("end")
                 case "[":
                     advance()
                     target = index_slice(target)
@@ -423,9 +427,11 @@ def extend(env, params, args):
             define(env, param, args[0])
             extend(env, params[1:], args[1:])
         case ["*", rest]:
-            assert len(params) == 1, \
-                f"Rest param must be last: `{params}` @ extend"
-            define(env, rest, args)
+            rest_len = len(args) - len(params) + 1
+            assert rest_len >= 0, \
+                f"Argument count doesn't match: `{params}, {args}` @ extend"
+            define(env, rest, args[:rest_len])
+            extend(env, params[1:], args[rest_len:])
         case unexpected:
             assert False, f"Unexpected param at extend: {unexpected}"
 
@@ -593,7 +599,7 @@ def stdlib():
 
     run("""
         gfunc := macro (params, body) do qq(
-            func (!(params)) do
+            func (!!(params[1:])) do
                 yd := nx := None;
                 yield := func (x) do letcc cc do nx = cc; yd(x) end end;
                 next := func () do letcc cc do yd = cc; nx(None) end end;
@@ -603,7 +609,7 @@ def stdlib():
         ) end
     """)
 
-    run("agen := gfunc(a, for(e, a, yield(e)))")
+    run("agen := gfunc([a], for(e, a, yield(e)))")
 
     run("""
         gfor := macro(e, gen, body) do qq(scope(
@@ -633,4 +639,4 @@ def run(src):
 if __name__ == "__main__":
     init_env()
     stdlib()
-    run("gfor(n, agen([1,2,3]), print(n))")
+    print(run("macro (*a, b, *c, d) do qq([q(!(a)), q(!(b)), q(!(c)), q(!(d))]) end (5, 6, 7, 8, 9)"))

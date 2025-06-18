@@ -227,10 +227,18 @@ class TestCore(TestToig):
 
     def test_func(self):
         self.assertEqual(run("func (a, b) do a + b end (5, 6)"), 11)
+        self.assertEqual(run("func (a, b) do a + b end (5) do 6 end"), 11)
         self.assertEqual(run("func (*args) do args end ()"), [])
         self.assertEqual(run("func (*args) do args end (5)"), [5])
         self.assertEqual(run("func (*args) do args end (5, 6)"), [5, 6])
         self.assertEqual(run("func (*(args)) do args end (5, 6)"), [5, 6])
+
+        self.assertEqual(run("func (*args, a) do [args, a] end (5)"), [[], 5])
+        self.assertEqual(run("func (*args, a) do [args, a] end (5, 6)"), [[5], 6])
+        self.assertEqual(run("func (*args, a) do [args, a] end (5, 6, 7)"), [[5, 6], 7])
+        self.assertEqual(run("func (*args, a, b) do [args, a, b] end (5, 6, 7)"), [[5], 6, 7])
+        self.assertEqual(run("func (a, *args, b) do [a, args, b] end (5, 6, 7)"), [5, [6], 7])
+        self.assertEqual(run("func (a, b, *args) do [a, b, args] end (5, 6, 7)"), [5, 6, [7]])
 
         self.assertTrue(fails("*a"))
         self.assertTrue(fails("func (a, b) a + b end"))
@@ -239,6 +247,10 @@ class TestCore(TestToig):
         self.assertTrue(fails("func (a, b do a + b end (5, 6)"))
         self.assertTrue(fails("func (a b) do a + b end (5, 6)"))
         self.assertTrue(fails("func (a, b + c) do a + b end (5, 6)"))
+        self.assertTrue(fails("func (a, b) do a + b end (5) do 6"))
+        self.assertTrue(fails("func (a, b) do a + b end (5) 6 end"))
+
+        self.assertTrue(fails("func (*args, a) do [args, a] end ()"))
 
     def test_closure_adder(self):
         run("make_adder := func (n) do func (m) do n + m end end")
@@ -286,15 +298,23 @@ class TestCore(TestToig):
     def test_macro(self):
         self.assertEqual(expanded("macro () do q(abc) end ()"), "abc")
 
-        self.assertEqual(expanded("macro (a) do qq(!(a) * !(a)) end (5 + 6)"),
+        self.assertEqual(
+            expanded("macro (a) do qq(!(a) * !(a)) end (5 + 6)"),
             ["mul", ["add", 5, 6], ["add", 5, 6]])
+
+        self.assertEqual(
+            expanded("macro (a, b) do qq(!(b)(!(a))) end (5) do mul end"),
+            ["mul", 5])
 
         run("build_exp := macro (op, *r) do qq(!(op)(!!(r))) end")
         self.assertEqual(expanded("build_exp(add)"), ["add"])
         self.assertEqual(expanded("build_exp(add, 5)"), ["add", 5])
         self.assertEqual(expanded("build_exp(add, 5, 6)"), ["add", 5, 6])
 
-        self.assertTrue(fails("macro (*r, a) do 5 end ()"))
+        self.assertEqual(run("macro (*a, b) do qq([q(!(a)), q(!(b))]) end (5)"), [[], 5])
+        self.assertEqual(run("macro (*a, b) do qq([q(!(a)), q(!(b))]) end (5, 6)"), [[5], 6])
+        self.assertEqual(run("macro (*a, b) do qq([q(!(a)), q(!(b))]) end (5, 6, 7)"), [[5, 6], 7])
+        self.assertEqual(run("macro (a, *b, c) do qq([q(!(a)), q(!(b)), q(!(c))]) end (5, 6, 7)"), [5, [6], 7])
 
     def test_if(self):
         self.assertEqual(run("if 5; True then 6; 7 end"), 7)
@@ -380,14 +400,14 @@ class TestStdlib(TestToig):
         self.assertEqual(run("aif(dec(1), 5, inc(it))"), 1)
 
     def test_while(self):
-        # self.assertEqual(run("""
-        #     i := sum := 0;
-        #     while i < 10 do
-        #         sum = sum + i;
-        #         i = i + 1;
-        #         sum
-        #     end
-        # """), 45)
+        self.assertEqual(run("""
+            i := sum := 0;
+            while (i < 10) do
+                sum = sum + i;
+                i = i + 1;
+                sum
+            end
+        """), 45)
 
         self.assertEqual(run("""
             i := sum := 0;
@@ -399,21 +419,22 @@ class TestStdlib(TestToig):
 
         self.assertEqual(run("""
             r := c := [];
-            while (len(r) < 3,
+            while (len(r) < 3) do
                 c = [];
                 while (len(c) < 3,
                     c = c + [0]);
-                r = r + [c])
+                r = r + [c]
+            end
         """), [[0, 0, 0], [0, 0, 0], [0, 0, 0]])
 
     def test_while_break(self):
         self.assertEqual(run("""
             i := sum := 0;
-            while(True,
+            while (True) do
                 if i >= 10 then break(sum) end;
                 sum = sum + i;
                 i = i + 1
-            )
+            end
         """), 45)
 
         self.assertTrue(fails("break(5)"))
@@ -421,12 +442,12 @@ class TestStdlib(TestToig):
     def test_while_continue(self):
         self.assertEqual(run("""
             i := sum := 0;
-            while(i < 10,
+            while (i < 10) do
                 if i == 5 then i = i + 1; continue() end;
                 sum = sum + i;
                 i = i + 1;
                 sum
-            )
+            end
         """), 40)
 
         self.assertTrue(fails("continue(None)"))
@@ -435,27 +456,30 @@ class TestStdlib(TestToig):
         self.assertEqual(run("""
             a := [5, 6, 7, 8, 9, False];
             i := sum := 0;
-            awhile(a[i],
+            awhile (a[i]) do
                 i = i + 1;
-                sum = sum + it)
+                sum = sum + it
+            end
         """), 35)
 
         self.assertEqual(run("""
             a := [5, 6, 7, 8, 9, False];
             i := sum := 0;
-            awhile(a[i],
+            awhile (a[i]) do
                 i = i + 1;
                 if it == 8 then break(sum) end;
-                sum = sum + it)
+                sum = sum + it
+            end
         """), 18)
 
         self.assertEqual(run("""
             a := [5, 6, 7, 8, 9, False];
             i := sum := 0;
-            awhile(a[i],
+            awhile (a[i]) do
                 i = i + 1;
                 if it == 8 then continue() end;
-                sum = sum + it)
+                sum = sum + it
+            end
         """), 27)
 
     def test_is_name(self):
@@ -466,44 +490,49 @@ class TestStdlib(TestToig):
     def test_for(self):
         self.assertEqual(run("""
             sum := 0;
-            for (i, [5, 6, 7, 8, 9],
-                sum = sum + i)"""),
-            35)
+            for (i, [5, 6, 7, 8, 9]) do
+                sum = sum + i
+            end
+        """), 35)
 
         self.assertEqual(run("""
             sum := 0;
-            for (i, [5, 6, 7, 8, 9],
+            for (i, [5, 6, 7, 8, 9]) do
                 if i == 8 then break(sum) end;
-                sum = sum + i)"""),
-            18)
+                sum = sum + i
+            end
+        """), 18)
 
         self.assertEqual(run("""
             sum := 0;
-            for (i, [5, 6, 7, 8, 9],
+            for (i, [5, 6, 7, 8, 9]) do
                 if i == 8 then continue() end;
-                sum = sum + i)"""),
-            27)
+                sum = sum + i
+            end
+        """), 27)
 
         self.assertTrue(fails("for(3 + 7, [1,2,3], print(i))"))
 
     def test_letcc_generator(self):
         run("""
-            g3 := gfunc(n,
+            g3 := gfunc ([n]) do
                 yield(n); n = inc(n);
                 yield(n); n = inc(n);
-                yield(n));
+                yield(n)
+            end;
             gsum := func (gen) do aif(gen(), it + gsum(gen), 0) end
         """)
         self.assertEqual(run("gsum(g3(2))"), 9)
         self.assertEqual(run("gsum(g3(5))"), 18)
 
         run("""
-            walk := gfunc(tree,
+            walk := gfunc ([tree]) do
                 _walk := func (t) do
                     if is_arr(first(t)) then _walk(first(t)) else yield(first(t)) end;
                     if is_arr(last(t)) then _walk(last(t)) else yield(last(t)) end
                 end;
-                _walk(tree));
+                _walk(tree)
+            end;
             gen := walk([[[5, 6], 7], [8, [9, 10]]])
         """)
         self.assertEqual(
@@ -522,20 +551,22 @@ class TestStdlib(TestToig):
 
     def test_gfor(self):
         self.assertEqual(printed("""
-            gfor(n, agen([]), print(n))
+            gfor (n, agen([])) do print(n) end
         """), (None, ""))
         self.assertEqual(printed("""
-            gfor(n, agen([5, 6, 7, 8, 9]), print(n))
+            gfor (n, agen([5, 6, 7, 8, 9])) do print(n) end
         """), (None, "5\n6\n7\n8\n9\n"))
         self.assertEqual(printed("""
-            gfor(n, agen([5, 6, 7, 8, 9]),
+            gfor (n, agen([5, 6, 7, 8, 9])) do
                 if n == 8 then break(None) end;
-                print(n))
+                print(n)
+            end
         """), (None, "5\n6\n7\n"))
         self.assertEqual(printed("""
-            gfor(n, agen([5, 6, 7, 8, 9]),
+            gfor (n, agen([5, 6, 7, 8, 9])) do
                 if n == 8 then continue() end;
-                print(n))
+                print(n)
+            end
         """), (None, "5\n6\n7\n9\n"))
 
 class TestProblems(TestToig):
@@ -576,15 +607,21 @@ class TestProblems(TestToig):
             n := 30;
             sieve := [False] * 2 + [True] * (n - 2);
             j := None;
-            for(i, range(2, n),
-                when(sieve[i],
+            for (i, range(2, n)) do
+                when (sieve[i]) do
                     j = i * i;
-                    while(j < n,
+                    while (j < n) do
                         sieve[j] = False;
-                        j = j + i)));
+                        j = j + i
+                    end
+                end
+            end;
             primes := [];
-            for(i, range(0, n),
-                when(sieve[i], primes = append(primes, i)))
+            for (i, range(0, n)) do
+                when (sieve[i]) do
+                     primes = append(primes, i)
+                end
+            end
         """), [2, 3, 5, 7, 11, 13, 17, 19, 23, 29])
 
     def test_let(self):
@@ -599,7 +636,12 @@ class TestProblems(TestToig):
             end
         """)
 
-        self.assertEqual(run("let([[a, 5], [b, 6]], a + b)"), 11)
+        self.assertEqual(run("""
+            let ([
+                [a, 5],
+                [b, 6]]
+            ) do a + b end
+        """), 11)
 
     def test_cond(self):
         run("""
@@ -751,10 +793,11 @@ class TestProblems(TestToig):
                 )
             end;
 
-            three_times := gfunc(n,
+            three_times := gfunc ([n]) do
                 print(n); yield(True);
                 print(n); yield(True);
-                print(n));
+                print(n)
+            end;
 
             add_task(three_times(5));
             add_task(three_times(6));
