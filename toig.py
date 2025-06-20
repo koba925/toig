@@ -1,3 +1,14 @@
+
+# custom rules
+
+def init_rule():
+    global custom_rule
+    custom_rule = {}
+
+def add_rule(name, rule):
+    global custom_rule
+    custom_rule[name] = rule
+
 # scanner
 
 def is_name_first(c): return c.isalpha() or c == "_"
@@ -33,6 +44,7 @@ def scanner(src):
 
         match current_char():
             case "$EOF": return "$EOF"
+            case "#": return comment()
             case c if is_name_first(c):
                 return name()
             case c if c.isnumeric():
@@ -49,6 +61,18 @@ def scanner(src):
                 append_char()
 
         return token
+
+    def comment():
+        advance()
+        line = []
+        while current_char() not in("\n", "$EOF"):
+            line += current_char()
+            advance()
+        line = "".join(line)
+        if line.startswith("rule"):
+            keywords = line.split()
+            add_rule(keywords[1], keywords[1:])
+        return next_token()
 
     pos = 0; token = ""
     return next_token
@@ -153,10 +177,6 @@ def parse(src):
                 case "(":
                     advance()
                     target = [target] + comma_separated_exprs(")")
-                    if current_token == "do":
-                        advance()
-                        target += [expression()]
-                        consume("end")
                 case "[":
                     advance()
                     target = index_slice(target)
@@ -216,6 +236,8 @@ def parse(src):
                 advance(); return if_()
             case "letcc":
                 advance(); return letcc()
+            case op if op in custom_rule:
+                advance(); return custom(custom_rule[op])
         return advance()
 
     def if_():
@@ -256,6 +278,13 @@ def parse(src):
         body = expression()
         consume("end")
         return ["macro", params, body]
+
+    def custom(rule):
+        ast = [rule[0]]
+        for keyword in rule[1:]:
+            ast += [expression()]
+            consume(keyword)
+        return ast
 
     next_token = scanner(src)
     current_token = next_token()
@@ -308,6 +337,7 @@ class Skip(Exception):
     def __init__(self, skip): self.skip = skip
 
 def eval_expr(expr, env, cont):
+    # print("eval_expr:", expr)
     match expr:
         case None | bool(_) | int(_): return lambda: cont(expr)
         case str(name): return lambda: cont(get(env, name))
@@ -506,6 +536,8 @@ def init_env():
     top_env = new_scope(top_env)
 
 def stdlib():
+    run("None #rule qq end")
+
     run("id := func (x) do x end")
 
     run("inc := func (n) do n + 1 end")
@@ -536,33 +568,44 @@ def stdlib():
     run("map := func (l, f) do foldl(l, func(acc, e) do append(acc, f(e)) end, []) end")
     run("range := func (s, e) do unfoldl(s, func (x) do x >= e end, id, inc) end")
 
-    run("scope := macro (body) do qq(func () do !(body) end ()) end")
-
-    run("when := macro (cnd, thn) do qq(if !(cnd) then !(thn) end) end")
-
     run("""
-        aif := macro (cnd, thn, els) do qq(scope(
-            it := !(cnd);
-            if it then !(thn) else !(els) end
-        )) end
+        scope := macro (body) do qq
+            func () do !(body) end ()
+        end end
+        #rule scope end"
     """)
 
-    run("and := macro (a, b) do qq(aif(!(a), !(b), it)) end")
-    run("or := macro (a, b) do qq(aif(!(a), it, !(b))) end")
+    run("""
+        when := macro (cnd, thn) do qq
+            if !(cnd) then !(thn) end
+        end end
+        #rule when do end
+    """)
 
     run("""
-        while := macro (cnd, body) do qq(scope(
+        aif := macro (cnd, thn, els) do qq scope
+            it := !(cnd);
+            if it then !(thn) else !(els) end
+        end end end
+    """)
+
+    run("and := macro (a, b) do qq aif(!(a), !(b), it) end end")
+    run("or := macro (a, b) do qq aif(!(a), it, !(b)) end end")
+
+    run("""
+        while := macro (cnd, body) do qq scope
             break := continue := val := None;
             loop := func() do
                 letcc cc do continue = cc end;
                 if !(cnd) then val = !(body); loop() else val end
             end;
-            letcc cc do break = cc; loop() end))
-        end
+            letcc cc do break = cc; loop() end
+        end end end
+        #rule while do end
     """)
 
     run("""
-        awhile := macro (cnd, body) do qq(scope(
+        awhile := macro (cnd, body) do qq scope
             break := continue := val := None;
             loop := func() do
                 letcc cc do continue = cc end;
@@ -570,16 +613,17 @@ def stdlib():
                 if it then val = !(body); loop() else val end
             end;
             letcc cc do break = cc; loop() end
-        )) end
+        end end end
+        #rule awhile do end
     """)
 
     run("""
         __stdlib_is_name_before := is_name;
-        is_name := macro (e) do qq(__stdlib_is_name_before(q(!(e)))) end
+        is_name := macro (e) do qq __stdlib_is_name_before(q(!(e))) end end
     """)
 
     run("""
-        for := macro (e, l, body) do qq(scope(do(
+        for := macro (e, l, body) do qq scope
             __stdlib_for_index := -1;
             if not is_name(!(e)) then error(q(must_be_a_name), q(_), !(e), q(at_for)) end;
             __stdlib_for_l := !(l);
@@ -594,11 +638,12 @@ def stdlib():
                 else __stdlib_for_val end
             end;
             letcc __stdlib_for_cc do break = __stdlib_for_cc; loop() end
-        ))) end
+        end end end
+        #rule for in do end
     """)
 
     run("""
-        gfunc := macro (params, body) do qq(
+        gfunc := macro (params, body) do qq
             func (!!(params[1:])) do
                 yd := nx := None;
                 yield := func (x) do letcc cc do nx = cc; yd(x) end end;
@@ -606,17 +651,19 @@ def stdlib():
                 nx := func (_) do !(body); yield(None) end;
                 next
             end
-        ) end
+        end end
+        #rule gfunc do end
     """)
 
-    run("agen := gfunc([a], for(e, a, yield(e)))")
+    run("agen := gfunc [a] do for e in a do yield(e) end end")
 
     run("""
-        gfor := macro(e, gen, body) do qq(scope(
+        gfor := macro(e, gen, body) do qq scope
             __stdlib_gfor_gen := !(gen);
             !(e) := None;
-            while((!(e) = __stdlib_gfor_gen()) != None, !(body))
-        )) end
+            while (!(e) = __stdlib_gfor_gen()) != None do !(body) end
+        end end end
+        #rule gfor in do end
     """)
 
     global top_env
@@ -625,6 +672,7 @@ def stdlib():
 result = None
 
 def eval(expr):
+    # print("eval: ", expr)
     computation = lambda: eval_expr(expr, top_env, lambda result: result)
     while callable(computation):
         try:
@@ -638,5 +686,8 @@ def run(src):
 
 if __name__ == "__main__":
     init_env()
+    init_rule()
     stdlib()
-    print(run("macro (*a, b, *c, d) do qq([q(!(a)), q(!(b)), q(!(c)), q(!(d))]) end (5, 6, 7, 8, 9)"))
+    print(parse("letcc cc do 5 end"))
+    run("print(expand(while i < 3 do print(i); i = i + 1 end))")
+    run("i := 0; while i < 3 do print(i); i = i + 1 end")
