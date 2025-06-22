@@ -303,7 +303,7 @@ class TestCore(TestToig):
         self.assertEqual(run("qq add(5, !!([6])) end"), ["add", 5, 6])
 
         self.assertEqual(run("qq if a == 5 then 6; 7 else !(8; 9) end end"),
-                         ["if", ["equal", "a", 5], ["scope", ["do", 6, 7]], ["scope", 9]])
+                         ["if", ["equal", "a", 5], ["scope", ["seq", 6, 7]], ["scope", 9]])
 
     def test_macro(self):
         self.assertEqual(expanded("macro () do q(abc) end ()"), "abc")

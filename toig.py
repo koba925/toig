@@ -134,7 +134,7 @@ def parse(src):
         while current_token == ";":
             advance()
             exprs.append(define_assign())
-        return exprs[0] if len(exprs) == 1 else ["do"] + exprs
+        return exprs[0] if len(exprs) == 1 else ["seq"] + exprs
 
     def define_assign():
         return binary_right({
@@ -370,7 +370,7 @@ def eval_expr(expr, env, cont):
             return lambda: eval_assign(left, expr, env, cont)
         case ["scope", expr]:
             return lambda: eval_expr(expr, new_scope(env), cont)
-        case ["do", *exprs]:
+        case ["seq", *exprs]:
             return lambda: foldl_cps(exprs,
                 lambda _, expr, c: eval_expr(expr, env, c),
                 None, cont)
