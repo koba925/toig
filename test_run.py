@@ -514,7 +514,7 @@ class TestStdlib(TestToig):
 
     def test_letcc_generator(self):
         run("""
-            g3 := gfunc [n] do
+            g3 := gfunc (n) do
                 yield(n); n = inc(n);
                 yield(n); n = inc(n);
                 yield(n)
@@ -525,7 +525,7 @@ class TestStdlib(TestToig):
         self.assertEqual(run("gsum(g3(5))"), 18)
 
         run("""
-            walk := gfunc [tree] do
+            walk := gfunc (tree) do
                 _walk := func (t) do
                     if is_arr(first(t)) then _walk(first(t)) else yield(first(t)) end;
                     if is_arr(last(t)) then _walk(last(t)) else yield(last(t)) end
@@ -827,7 +827,7 @@ class TestProblems(TestToig):
                 end
             end;
 
-            three_times := gfunc [n] do
+            three_times := gfunc (n) do
                 print(n); yield(True);
                 print(n); yield(True);
                 print(n)

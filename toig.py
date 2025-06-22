@@ -280,18 +280,26 @@ def parse(src):
         return ["macro", params, body]
 
     def custom(rule):
-        def _custom(rule):
-            match rule[0]:
+        def _custom(i):
+            match rule[i]:
                 case "end":
                     advance()
                     return []
                 case "EXPR":
-                    return  [expression()] + _custom(rule[1:])
+                    return  [expression()] + _custom(i + 1)
+                case "NAME":
+                    name = expression()
+                    assert is_name(name), f"Invalid name: `{name}` @ custom({rule[0]})"
+                    return [name] + _custom(i + 1)
+                case "PARAMS":
+                    consume("(")
+                    return  [["arr"] + comma_separated_exprs(")")] + _custom(i + 1)
                 case keyword:
                     consume(keyword)
-                    return  _custom(rule[1:])
+                    return  _custom(i + 1)
 
-        return [rule[0]] + _custom(rule[1:])
+        ast = [rule[0]] + _custom(1)
+        return ast
 
     next_token = scanner(src)
     current_token = next_token()
@@ -543,9 +551,6 @@ def init_env():
     top_env = new_scope(top_env)
 
 def stdlib():
-    # run("None #rule [foo, *bar, *[baz, quz], end]")
-    # run("foo 5 bar 6 bar 7 baz 8 quz 9 baz 10 quz 11 end")
-
     run("None #rule [qq, EXPR, end]")
 
     run("id := func (x) do x end")
@@ -639,7 +644,6 @@ def stdlib():
     run("""
         for := macro (e, l, body) do qq scope
             __stdlib_for_index := -1;
-            if not is_name(!(e)) then error(q(must_be_a_name), q(_), !(e), q(at_for)) end;
             __stdlib_for_l := !(l);
             break := continue := __stdlib_for_val := !(e) := None;
             loop := func () do
@@ -654,7 +658,7 @@ def stdlib():
             letcc __stdlib_for_cc do break = __stdlib_for_cc; loop() end
         end end end
 
-        #rule [for, EXPR, in, EXPR, do, EXPR, end]
+        #rule [for, NAME, in, EXPR, do, EXPR, end]
     """)
 
     run("""
@@ -668,10 +672,10 @@ def stdlib():
             end
         end end
 
-        #rule [gfunc, EXPR, do, EXPR, end]
+        #rule [gfunc, PARAMS, do, EXPR, end]
     """)
 
-    run("agen := gfunc [a] do for e in a do yield(e) end end")
+    run("agen := gfunc (a) do for e in a do yield(e) end end")
 
     run("""
         gfor := macro(e, gen, body) do qq scope
@@ -680,7 +684,7 @@ def stdlib():
             while (!(e) = __stdlib_gfor_gen()) != None do !(body) end
         end end end
 
-        #rule [gfor, EXPR, in, EXPR, do, EXPR, end]
+        #rule [gfor, NAME, in, EXPR, do, EXPR, end]
     """)
 
     global top_env
