@@ -280,11 +280,18 @@ def parse(src):
         return ["macro", params, body]
 
     def custom(rule):
-        ast = [rule[0]]
-        for keyword in rule[1:]:
-            ast += [expression()]
-            consume(keyword)
-        return ast
+        def _custom(rule):
+            match rule[0]:
+                case "end":
+                    advance()
+                    return []
+                case "EXPR":
+                    return  [expression()] + _custom(rule[1:])
+                case keyword:
+                    consume(keyword)
+                    return  _custom(rule[1:])
+
+        return [rule[0]] + _custom(rule[1:])
 
     next_token = scanner(src)
     current_token = next_token()
@@ -539,7 +546,7 @@ def stdlib():
     # run("None #rule [foo, *bar, *[baz, quz], end]")
     # run("foo 5 bar 6 bar 7 baz 8 quz 9 baz 10 quz 11 end")
 
-    run("None #rule [qq, end]")
+    run("None #rule [qq, EXPR, end]")
 
     run("id := func (x) do x end")
 
@@ -576,7 +583,7 @@ def stdlib():
             func () do !(body) end ()
         end end
 
-        #rule [scope, end]
+        #rule [scope, EXPR, end]
     """)
 
     run("""
@@ -584,7 +591,7 @@ def stdlib():
             if !(cnd) then !(thn) end
         end end
 
-        #rule [when, do, end]
+        #rule [when, EXPR, do, EXPR, end]
     """)
 
     run("""
@@ -607,7 +614,7 @@ def stdlib():
             letcc cc do break = cc; loop() end
         end end end
 
-        #rule [while, do, end]
+        #rule [while, EXPR, do, EXPR, end]
     """)
 
     run("""
@@ -621,7 +628,7 @@ def stdlib():
             letcc cc do break = cc; loop() end
         end end end
 
-        #rule [awhile, do, end]
+        #rule [awhile, EXPR, do, EXPR, end]
     """)
 
     run("""
@@ -647,7 +654,7 @@ def stdlib():
             letcc __stdlib_for_cc do break = __stdlib_for_cc; loop() end
         end end end
 
-        #rule [for, in, do, end]
+        #rule [for, EXPR, in, EXPR, do, EXPR, end]
     """)
 
     run("""
@@ -661,7 +668,7 @@ def stdlib():
             end
         end end
 
-        #rule [gfunc, do, end]
+        #rule [gfunc, EXPR, do, EXPR, end]
     """)
 
     run("agen := gfunc [a] do for e in a do yield(e) end end")
@@ -673,7 +680,7 @@ def stdlib():
             while (!(e) = __stdlib_gfor_gen()) != None do !(body) end
         end end end
 
-        #rule [gfor, in, do, end]
+        #rule [gfor, EXPR, in, EXPR, do, EXPR, end]
     """)
 
     global top_env
@@ -698,6 +705,8 @@ if __name__ == "__main__":
     init_env()
     init_rule()
     stdlib()
-    print(parse("letcc cc do 5 end"))
-    run("print(expand(while i < 3 do print(i); i = i + 1 end))")
-    run("i := 0; while i < 3 do print(i); i = i + 1 end")
+
+    code = "for i in [5, 6, 7] do print(i) end"
+    print(parse(code))
+    run(f"print(expand({code}))")
+    run(code)
