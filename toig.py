@@ -69,9 +69,9 @@ def scanner(src):
             line += current_char()
             advance()
         line = "".join(line)
-        if line.startswith("rule"):
-            keywords = line.split()
-            add_rule(keywords[1], keywords[1:])
+        if line.startswith("rule "):
+            rule = parse(line[5:])
+            add_rule(rule[1], rule[1:])
         return next_token()
 
     pos = 0; token = ""
@@ -536,7 +536,10 @@ def init_env():
     top_env = new_scope(top_env)
 
 def stdlib():
-    run("None #rule qq end")
+    # run("None #rule [foo, *bar, *[baz, quz], end]")
+    # run("foo 5 bar 6 bar 7 baz 8 quz 9 baz 10 quz 11 end")
+
+    run("None #rule [qq, end]")
 
     run("id := func (x) do x end")
 
@@ -572,14 +575,16 @@ def stdlib():
         scope := macro (body) do qq
             func () do !(body) end ()
         end end
-        #rule scope end"
+
+        #rule [scope, end]
     """)
 
     run("""
         when := macro (cnd, thn) do qq
             if !(cnd) then !(thn) end
         end end
-        #rule when do end
+
+        #rule [when, do, end]
     """)
 
     run("""
@@ -601,7 +606,8 @@ def stdlib():
             end;
             letcc cc do break = cc; loop() end
         end end end
-        #rule while do end
+
+        #rule [while, do, end]
     """)
 
     run("""
@@ -614,7 +620,8 @@ def stdlib():
             end;
             letcc cc do break = cc; loop() end
         end end end
-        #rule awhile do end
+
+        #rule [awhile, do, end]
     """)
 
     run("""
@@ -639,7 +646,8 @@ def stdlib():
             end;
             letcc __stdlib_for_cc do break = __stdlib_for_cc; loop() end
         end end end
-        #rule for in do end
+
+        #rule [for, in, do, end]
     """)
 
     run("""
@@ -652,7 +660,8 @@ def stdlib():
                 next
             end
         end end
-        #rule gfunc do end
+
+        #rule [gfunc, do, end]
     """)
 
     run("agen := gfunc [a] do for e in a do yield(e) end end")
@@ -663,7 +672,8 @@ def stdlib():
             !(e) := None;
             while (!(e) = __stdlib_gfor_gen()) != None do !(body) end
         end end end
-        #rule gfor in do end
+
+        #rule [gfor, in, do, end]
     """)
 
     global top_env

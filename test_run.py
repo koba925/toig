@@ -636,7 +636,7 @@ class TestProblems(TestToig):
                 end end
             end
 
-            #rule let do end
+            #rule [let, do, end]
         """)
 
         self.assertEqual(run("""
@@ -691,7 +691,7 @@ class TestProblems(TestToig):
                 func (!!(rest(params))) do letcc return do !(body) end end
             end end;
 
-            #rule runc do end
+            #rule [runc, do, end]
 
             early_return_runc := runc [n] do if n == 1 then return(5) else 6 end; 7 end;
             early_return_runc2 := runc [n] do if early_return_runc(n) == 5 then return(6) else 7 end; 8 end
@@ -749,7 +749,7 @@ class TestProblems(TestToig):
                 raise = prev_raise
             end end end;
 
-            #rule try catch do end
+            #rule [try, catch, do, end]
 
             riskyfunc := func (n) do
                 if n == 1 then raise(5) end; print(6)
