@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 from io import StringIO
 
-from toig import init_env, init_rule, stdlib, run
+from toig import init_env, print_env, init_rule, stdlib, run
 
 def fails(expr):
     try: run(expr)
@@ -57,6 +57,15 @@ class TestCore(TestToig):
         self.assertEqual(run("y"), 7)
         self.assertTrue(fails("z = 5"))
         self.assertTrue(fails("6 = 5"))
+
+    def test_scope(self):
+        self.assertEqual(
+            printed("x := 5; scope x := 6; print(x) end; print(x)"),
+            (None, "6\n5\n"))
+        self.assertEqual(
+            printed("x := 5; scope x = 6; print(x) end; print(x)"),
+            (None, "6\n6\n"))
+        self.assertTrue(fails("scope y := 5 end; print(y)"))
 
     def test_sequence(self):
         self.assertEqual(run("x := 5; y := 6; x + y"), 11)
@@ -321,6 +330,13 @@ class TestCore(TestToig):
         self.assertEqual(run("macro (*a, b) do qq [q(!(a)), q(!(b))] end end (5, 6)"), [[5], 6])
         self.assertEqual(run("macro (*a, b) do qq [q(!(a)), q(!(b))] end end (5, 6, 7)"), [[5, 6], 7])
         self.assertEqual(run("macro (a, *b, c) do qq [q(!(a)), q(!(b)), q(!(c))] end end (5, 6, 7)"), [5, [6], 7])
+
+    def test_custom(self):
+        self.assertTrue(fails("""
+            foo := macro (a) do qq print(!(a)) end end;
+            #rule [foo, foo, 5, EXPR, end]
+            foo 6 end
+        """))
 
     def test_if(self):
         self.assertEqual(run("if 5; True then 6; 7 end"), 7)

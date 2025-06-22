@@ -283,8 +283,7 @@ def parse(src):
         def _custom(i):
             match rule[i]:
                 case "end":
-                    advance()
-                    return []
+                    advance(); return []
                 case "EXPR":
                     return  [expression()] + _custom(i + 1)
                 case "NAME":
@@ -294,9 +293,11 @@ def parse(src):
                 case "PARAMS":
                     consume("(")
                     return  [["arr"] + comma_separated_exprs(")")] + _custom(i + 1)
-                case keyword:
+                case keyword if is_name(keyword):
                     consume(keyword)
                     return  _custom(i + 1)
+                case unexpected:
+                    assert False, f"Illegal rule: `{unexpected}` @ custom({rule[0]})"
 
         ast = [rule[0]] + _custom(1)
         return ast
@@ -312,6 +313,8 @@ def parse(src):
 
 def new_env(): return {"parent": None, "vals": {}}
 def new_scope(env): return {"parent": env, "vals": {}}
+
+top_env = new_env()
 
 def define(env, name, val):
     # assert name not in env["vals"], \
@@ -333,6 +336,12 @@ def get(env, name):
         return env["vals"][name]
     else:
         return get(env["parent"], name)
+
+def print_env(env={}):
+    if env == {}: env = top_env
+    if env is None: return
+    print(env["vals"])
+    print_env(env["parent"])
 
 # CPS operations
 
@@ -545,10 +554,9 @@ builtins = {
     "error": lambda args: error(args)
 }
 
-top_env = new_env()
-
 def init_env():
     global top_env
+    top_env = new_env()
     for name, func in builtins.items(): define(top_env, name, func)
     top_env = new_scope(top_env)
 
