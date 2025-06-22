@@ -625,7 +625,7 @@ class TestProblems(TestToig):
 
     def test_let(self):
         run("""
-            let := macro(bindings, body) do
+            _let := macro(bindings, body) do
                 defines := func (bindings) do
                     map(bindings[1:], func (b) do
                         qq !(b[1]) := !(b[2]) end
@@ -635,35 +635,24 @@ class TestProblems(TestToig):
                     !!(defines(bindings)); !(body)
                 end end
             end
-
-            #rule [let, EXPR, do, EXPR, end]
         """)
 
         self.assertEqual(run("""
+            #rule [let, _let, EXPR, do, EXPR, end]
+
             let [
                 [a, 5],
                 [b, 6]
             ] do a + b end
         """), 11)
 
-    def test_let2(self):
-        run("""
-            let := macro(bindings, body) do
-                defines := func (bindings) do
-                    map(bindings[1:], func (b) do
-                        qq !(b[1]) := !(b[2]) end
-                    end)
-                end;
-                qq scope
-                    !!(defines(bindings)); !(body)
-                end end
-            end
-
-            #rule [let, vars, EXPR, do, EXPR, end]
-        """)
-
         self.assertEqual(run("""
-            let vars [[a, 5], [b, 6]] do a + b end
+            #rule [let2, _let, vars, EXPR, do, EXPR, end]
+
+            let2 vars [
+                [a, 5],
+                [b, 6]
+            ] do a + b end
         """), 11)
 
     def test_cond(self):
@@ -707,14 +696,14 @@ class TestProblems(TestToig):
         self.assertEqual(run("early_return(2)"), 7)
 
         run("""
-            runc := macro (params, body) do qq
+            _runc := macro (params, body) do qq
                 func (!!(rest(params))) do letcc return do !(body) end end
             end end;
 
-            #rule [runc, EXPR, do, EXPR, end]
+            #rule [runc, _runc, PARAMS, do, EXPR, end]
 
-            early_return_runc := runc [n] do if n == 1 then return(5) else 6 end; 7 end;
-            early_return_runc2 := runc [n] do if early_return_runc(n) == 5 then return(6) else 7 end; 8 end
+            early_return_runc := runc (n) do if n == 1 then return(5) else 6 end; 7 end;
+            early_return_runc2 := runc (n) do if early_return_runc(n) == 5 then return(6) else 7 end; 8 end
         """)
         self.assertEqual(run("early_return_runc(1)"), 5)
         self.assertEqual(run("early_return_runc(2)"), 7)
@@ -760,7 +749,7 @@ class TestProblems(TestToig):
     def test_letcc_try(self):
         run("""
             raise := func (e) do error(q(raised_outside_of_try), e) end;
-            try := macro (try_expr, exc_var, exc_expr) do qq scope
+            _try := macro (try_expr, exc_var, exc_expr) do qq scope
                 prev_raise := raise;
                 letcc escape do
                     raise = func (!(exc_var)) do escape(!(exc_expr)) end;
@@ -769,7 +758,7 @@ class TestProblems(TestToig):
                 raise = prev_raise
             end end end;
 
-            #rule [try, EXPR, catch, EXPR, do, EXPR, end]
+            #rule [try, _try, EXPR, catch, EXPR, do, EXPR, end]
 
             riskyfunc := func (n) do
                 if n == 1 then raise(5) end; print(6)

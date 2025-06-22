@@ -71,7 +71,7 @@ def scanner(src):
         line = "".join(line)
         if line.startswith("rule "):
             rule = parse(line[5:])
-            add_rule(rule[1], rule[1:])
+            add_rule(rule[1], rule[2:])
         return next_token()
 
     pos = 0; token = ""
@@ -368,6 +368,8 @@ def eval_expr(expr, env, cont):
                 lambda val: cont(define(env, name, val)))
         case ["assign", left, expr]:
             return lambda: eval_assign(left, expr, env, cont)
+        case ["scope", expr]:
+            return lambda: eval_expr(expr, new_scope(env), cont)
         case ["do", *exprs]:
             return lambda: foldl_cps(exprs,
                 lambda _, expr, c: eval_expr(expr, env, c),
@@ -551,7 +553,8 @@ def init_env():
     top_env = new_scope(top_env)
 
 def stdlib():
-    run("None #rule [qq, EXPR, end]")
+    run("None #rule [scope, scope, EXPR, end]")
+    run("None #rule [qq, qq, EXPR, end]")
 
     run("id := func (x) do x end")
 
@@ -584,19 +587,11 @@ def stdlib():
     run("range := func (s, e) do unfoldl(s, func (x) do x >= e end, id, inc) end")
 
     run("""
-        scope := macro (body) do qq
-            func () do !(body) end ()
-        end end
-
-        #rule [scope, EXPR, end]
-    """)
-
-    run("""
-        when := macro (cnd, thn) do qq
+        __stdlib_when := macro (cnd, thn) do qq
             if !(cnd) then !(thn) end
         end end
 
-        #rule [when, EXPR, do, EXPR, end]
+        #rule [when, __stdlib_when, EXPR, do, EXPR, end]
     """)
 
     run("""
@@ -610,7 +605,7 @@ def stdlib():
     run("or := macro (a, b) do qq aif(!(a), it, !(b)) end end")
 
     run("""
-        while := macro (cnd, body) do qq scope
+        __stdlib_while := macro (cnd, body) do qq scope
             break := continue := val := None;
             loop := func() do
                 letcc cc do continue = cc end;
@@ -619,11 +614,11 @@ def stdlib():
             letcc cc do break = cc; loop() end
         end end end
 
-        #rule [while, EXPR, do, EXPR, end]
+        #rule [while, __stdlib_while, EXPR, do, EXPR, end]
     """)
 
     run("""
-        awhile := macro (cnd, body) do qq scope
+        __stdlib_awhile := macro (cnd, body) do qq scope
             break := continue := val := None;
             loop := func() do
                 letcc cc do continue = cc end;
@@ -633,7 +628,7 @@ def stdlib():
             letcc cc do break = cc; loop() end
         end end end
 
-        #rule [awhile, EXPR, do, EXPR, end]
+        #rule [awhile, __stdlib_awhile, EXPR, do, EXPR, end]
     """)
 
     run("""
@@ -642,7 +637,7 @@ def stdlib():
     """)
 
     run("""
-        for := macro (e, l, body) do qq scope
+        __stdlib_for := macro (e, l, body) do qq scope
             __stdlib_for_index := -1;
             __stdlib_for_l := !(l);
             break := continue := __stdlib_for_val := !(e) := None;
@@ -658,11 +653,11 @@ def stdlib():
             letcc __stdlib_for_cc do break = __stdlib_for_cc; loop() end
         end end end
 
-        #rule [for, NAME, in, EXPR, do, EXPR, end]
+        #rule [for, __stdlib_for, NAME, in, EXPR, do, EXPR, end]
     """)
 
     run("""
-        gfunc := macro (params, body) do qq
+        __stdlib_gfunc := macro (params, body) do qq
             func (!!(params[1:])) do
                 yd := nx := None;
                 yield := func (x) do letcc cc do nx = cc; yd(x) end end;
@@ -672,19 +667,19 @@ def stdlib():
             end
         end end
 
-        #rule [gfunc, PARAMS, do, EXPR, end]
+        #rule [gfunc, __stdlib_gfunc, PARAMS, do, EXPR, end]
     """)
 
     run("agen := gfunc (a) do for e in a do yield(e) end end")
 
     run("""
-        gfor := macro(e, gen, body) do qq scope
+        __stdlib_gfor := macro(e, gen, body) do qq scope
             __stdlib_gfor_gen := !(gen);
             !(e) := None;
             while (!(e) = __stdlib_gfor_gen()) != None do !(body) end
         end end end
 
-        #rule [gfor, NAME, in, EXPR, do, EXPR, end]
+        #rule [gfor, __stdlib_gfor, NAME, in, EXPR, do, EXPR, end]
     """)
 
     global top_env
@@ -710,7 +705,7 @@ if __name__ == "__main__":
     init_rule()
     stdlib()
 
-    code = "for i in [5, 6, 7] do print(i) end"
+    code = "if 5 then 6 end"
     print(parse(code))
-    run(f"print(expand({code}))")
-    run(code)
+    # run(f"print(expand({code}))")
+    print(run(code))
