@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 from io import StringIO
 
-from toig import init_env, print_env, init_rule, stdlib, run
+from toig import init_env, print_env, init_rule, print_rule, stdlib, parse, run
 
 def fails(expr):
     try: run(expr)
@@ -655,20 +655,37 @@ class TestProblems(TestToig):
 
         self.assertEqual(run("""
             #rule [let, _let, EXPR, do, EXPR, end]
-
-            let [
-                [a, 5],
-                [b, 6]
-            ] do a + b end
+            let [[a, 5], [b, 6]] do a + b end
         """), 11)
 
         self.assertEqual(run("""
             #rule [let2, _let, vars, EXPR, do, EXPR, end]
+            let2 vars [[a, 5], [b, 6]] do a + b end
+        """), 11)
 
-            let2 vars [
-                [a, 5],
-                [b, 6]
-            ] do a + b end
+        run("""
+            _let3 := macro(*bindings, body) do
+                defines := func (bindings) do
+                    map(bindings, func (b) do
+                        qq !(b[1]) := !(b[2]) end
+                    end)
+                end;
+                qq scope
+                    !!(defines(bindings)); !(body)
+                end end
+            end
+
+            #rule [let3, _let3, *[var, EXPR], do, EXPR, end]
+        """)
+
+        self.assertEqual(run("let3 do 5 end"), 5)
+        self.assertEqual(run("""
+            let3
+                var [a, 5]
+                var [b, 6]
+            do
+                a + b
+            end
         """), 11)
 
     def test_cond(self):
@@ -700,6 +717,60 @@ class TestProblems(TestToig):
         self.assertEqual(run("fib(2)"), 1)
         self.assertEqual(run("fib(3)"), 2)
         self.assertEqual(run("fib(10)"), 55)
+
+    def test_my_if(self):
+        run("""
+            _my_if := macro(cnd, thn, *rest) do
+                if len(rest) == 0 then
+                    qq if !(cnd) then !(thn) else None end end
+                elif len(rest) == 1 then
+                    qq if !(cnd) then !(thn) else !(rest[0]) end end
+                else qq
+                    if !(cnd) then !(thn) else _my_if(!!(rest)) end
+                end end
+            end
+
+            #rule [my_if, _my_if, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], else, EXPR, end]
+        """)
+
+        run("print(expand(_my_if(True, 5 + 6)))")
+
+        run("print(expand(_my_if(True, 5 + 6, 7 + 8)))")
+        run("print(expand(my_if True then 5 + 6 else 7 + 8 end))")
+
+        run("print(expand(_my_if(False, 5 + 6, True, 7 + 8)))")
+
+        run("print(expand(_my_if(False, 5 + 6, True, 7 + 8, 9 + 10)))")
+        run("print(expand(my_if False then 5 + 6 elif True then 7 + 8 else 9 + 10 end))")
+
+        run("print(expand(_my_if(False, 5 + 6, False, 7 + 8, True, 9 + 10)))")
+
+        run("print(expand(_my_if(False, 5 + 6, False, 7 + 8, True, 9 + 10, 11 + 12)))")
+        run("print(expand(my_if False then 5 + 6 elif False then 7 + 8 elif True then 9 + 10 else 11 + 12 end))")
+
+        self.assertEqual(run("_my_if(True, 5)"), 5)
+        self.assertEqual(run("_my_if(False, 5)"), None)
+
+        self.assertEqual(run("_my_if(True, 5, 6)"), 5)
+        self.assertEqual(run("_my_if(False, 5, 6)"), 6)
+        self.assertEqual(run("my_if True then 5 else 6 end"), 5)
+        self.assertEqual(run("my_if False then 5 else 6 end"), 6)
+
+        self.assertEqual(run("_my_if(False, 5, True, 6)"), 6)
+        self.assertEqual(run("_my_if(False, 5, False, 6)"), None)
+
+        self.assertEqual(run("_my_if(False, 5, True, 6, 7)"), 6)
+        self.assertEqual(run("_my_if(False, 5, False, 6, 7)"), 7)
+        self.assertEqual(run("my_if False then 5 elif True then 6 else 7 end"), 6)
+        self.assertEqual(run("my_if False then 5 elif False then 6 else 7 end"), 7)
+
+        self.assertEqual(run("_my_if(False, 5, False, 6, True, 7)"), 7)
+        self.assertEqual(run("_my_if(False, 5, False, 6, False, 7)"), None)
+
+        self.assertEqual(run("_my_if(False, 5, False, 6, True, 7, 8)"), 7)
+        self.assertEqual(run("_my_if(False, 5, False, 6, False, 7, 8)"), 8)
+        self.assertEqual(run("my_if False then 5 elif False then 6 elif True then 7 else 8end"), 7)
+        self.assertEqual(run("my_if False then 5 elif False then 6 elif False then 7 else 8end"), 8)
 
     def test_letcc_return(self):
         run("""

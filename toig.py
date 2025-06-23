@@ -9,6 +9,9 @@ def add_rule(name, rule):
     global custom_rule
     custom_rule[name] = rule
 
+def print_rule():
+    print(custom_rule)
+
 # scanner
 
 def is_name_first(c): return c.isalpha() or c == "_"
@@ -280,26 +283,30 @@ def parse(src):
         return ["macro", params, body]
 
     def custom(rule):
-        def _custom(i):
-            match rule[i]:
-                case "end":
-                    advance(); return []
+        def _custom(r):
+            if r == []: return []
+            match r[0]:
                 case "EXPR":
-                    return  [expression()] + _custom(i + 1)
+                    return  [expression()] + _custom(r[1:])
                 case "NAME":
                     name = expression()
                     assert is_name(name), f"Invalid name: `{name}` @ custom({rule[0]})"
-                    return [name] + _custom(i + 1)
+                    return [name] + _custom(r[1:])
                 case "PARAMS":
                     consume("(")
-                    return  [["arr"] + comma_separated_exprs(")")] + _custom(i + 1)
+                    return  [["arr"] + comma_separated_exprs(")")] + _custom(r[1:])
                 case keyword if is_name(keyword):
-                    consume(keyword)
-                    return  _custom(i + 1)
+                    consume(keyword); return  _custom(r[1:])
+                case ["*", subrule]:
+                    ast = []
+                    while current_token == subrule[1]:
+                        advance()
+                        ast += _custom(subrule[2:])
+                    return ast + _custom(r[1:])
                 case unexpected:
                     assert False, f"Illegal rule: `{unexpected}` @ custom({rule[0]})"
 
-        ast = [rule[0]] + _custom(1)
+        ast = [rule[0]] + _custom(rule[1:])
         return ast
 
     next_token = scanner(src)
