@@ -60,7 +60,7 @@ def scanner(src):
             case c if c in "=<>:":
                 append_char()
                 if current_char() == "=": append_char()
-            case c if c in "+-*/%()[],;":
+            case c if c in "+-*/%?()[],;":
                 append_char()
 
         return token
@@ -171,7 +171,7 @@ def parse(src):
         }, unary_ops)
 
     def unary_ops():
-        return unary({"-": "neg", "*": "*"}, call_index)
+        return unary({"-": "neg", "*": "*", "?": "?"}, call_index)
 
     def call_index():
         target = primary()
@@ -300,6 +300,12 @@ def parse(src):
                 case ["*", subrule]:
                     ast = []
                     while current_token == subrule[1]:
+                        advance()
+                        ast += _custom(subrule[2:])
+                    return ast + _custom(r[1:])
+                case ["?", subrule]:
+                    ast = []
+                    if current_token == subrule[1]:
                         advance()
                         ast += _custom(subrule[2:])
                     return ast + _custom(r[1:])
@@ -610,14 +616,21 @@ def stdlib():
     """)
 
     run("""
-        aif := macro (cnd, thn, els) do qq scope
-            it := !(cnd);
-            if it then !(thn) else !(els) end
-        end end end
-    """)
+        _aif := macro (cnd, thn, *rest) do
+            if len(rest) == 0 then qq scope
+                it := !(cnd); if it then !(thn) else None end
+            end end elif len(rest) == 1 then qq scope
+                it := !(cnd); if it then !(thn) else !(rest[0]) end
+            end end else qq scope
+                it := !(cnd); if it then !(thn) else _aif(!!(rest)) end
+            end end end
+        end
 
-    run("and := macro (a, b) do qq aif(!(a), !(b), it) end end")
-    run("or := macro (a, b) do qq aif(!(a), it, !(b)) end end")
+        #rule [aif, _aif, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], ?[else, EXPR], end]
+        """)
+
+    run("and := macro (a, b) do qq aif !(a) then !(b) else it end end end")
+    run("or := macro (a, b) do qq aif !(a) then it else !(b) end end end")
 
     run("""
         __stdlib_while := macro (cnd, body) do qq scope

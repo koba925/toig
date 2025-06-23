@@ -418,8 +418,20 @@ class TestStdlib(TestToig):
         self.assertEqual(run("when 5 == 0 do 5 / 0 end"), None)
 
     def test_aif(self):
-        self.assertEqual(run("aif(inc(5), inc(it), 8)"), 7)
-        self.assertEqual(run("aif(dec(1), 5, inc(it))"), 1)
+        self.assertEqual(run("aif 5 then it + 1 end"), 6)
+        self.assertEqual(run("aif 0 then it + 1 end"), None)
+
+        self.assertEqual(run("aif 5 then it + 1 else it + 1 end"), 6)
+        self.assertEqual(run("aif 0 then it + 1 else it + 1 end"), 1)
+
+        self.assertEqual(run("aif 0 then 5 elif 6 then it + 1 end"), 7)
+        self.assertEqual(run("aif 0 then 5 elif 0 then it + 1 end"), None)
+
+        self.assertEqual(run("aif 0 then 5 elif 6 then it + 1 else it + 1 end"), 7)
+        self.assertEqual(run("aif 0 then 5 elif 0 then it + 1 else it + 1 end"), 1)
+
+        self.assertEqual(run("aif 0 then 5 elif 0 then 6 elif 7 then it + 1 end"), 8)
+        self.assertEqual(run("aif 0 then 5 elif 0 then 6 elif 0 then it + 1 end"), None)
 
     def test_while(self):
         self.assertEqual(run("""
@@ -730,26 +742,31 @@ class TestProblems(TestToig):
                 end end
             end
 
-            #rule [my_if, _my_if, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], else, EXPR, end]
+            #rule [my_if, _my_if, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], ?[else, EXPR], end]
         """)
 
         run("print(expand(_my_if(True, 5 + 6)))")
+        run("print(expand(my_if True then 5 + 6 end))")
 
         run("print(expand(_my_if(True, 5 + 6, 7 + 8)))")
         run("print(expand(my_if True then 5 + 6 else 7 + 8 end))")
 
         run("print(expand(_my_if(False, 5 + 6, True, 7 + 8)))")
+        run("print(expand(my_if False then 5 + 6 elif True then 7 + 8 end))")
 
         run("print(expand(_my_if(False, 5 + 6, True, 7 + 8, 9 + 10)))")
         run("print(expand(my_if False then 5 + 6 elif True then 7 + 8 else 9 + 10 end))")
 
         run("print(expand(_my_if(False, 5 + 6, False, 7 + 8, True, 9 + 10)))")
+        run("print(expand(my_if False then 5 + 6 elif False then 7 + 8 elif True then 9 + 10 end))")
 
         run("print(expand(_my_if(False, 5 + 6, False, 7 + 8, True, 9 + 10, 11 + 12)))")
         run("print(expand(my_if False then 5 + 6 elif False then 7 + 8 elif True then 9 + 10 else 11 + 12 end))")
 
         self.assertEqual(run("_my_if(True, 5)"), 5)
         self.assertEqual(run("_my_if(False, 5)"), None)
+        self.assertEqual(run("my_if True then 5 end"), 5)
+        self.assertEqual(run("my_if False then 5 end"), None)
 
         self.assertEqual(run("_my_if(True, 5, 6)"), 5)
         self.assertEqual(run("_my_if(False, 5, 6)"), 6)
@@ -758,6 +775,8 @@ class TestProblems(TestToig):
 
         self.assertEqual(run("_my_if(False, 5, True, 6)"), 6)
         self.assertEqual(run("_my_if(False, 5, False, 6)"), None)
+        self.assertEqual(run("my_if False then 5 elif True then 6 end"), 6)
+        self.assertEqual(run("my_if False then 5 elif False then 6 end"), None)
 
         self.assertEqual(run("_my_if(False, 5, True, 6, 7)"), 6)
         self.assertEqual(run("_my_if(False, 5, False, 6, 7)"), 7)
@@ -766,11 +785,13 @@ class TestProblems(TestToig):
 
         self.assertEqual(run("_my_if(False, 5, False, 6, True, 7)"), 7)
         self.assertEqual(run("_my_if(False, 5, False, 6, False, 7)"), None)
+        self.assertEqual(run("my_if False then 5 elif False then 6 elif True then 7 end"), 7)
+        self.assertEqual(run("my_if False then 5 elif False then 6 elif False then 7 end"), None)
 
         self.assertEqual(run("_my_if(False, 5, False, 6, True, 7, 8)"), 7)
         self.assertEqual(run("_my_if(False, 5, False, 6, False, 7, 8)"), 8)
-        self.assertEqual(run("my_if False then 5 elif False then 6 elif True then 7 else 8end"), 7)
-        self.assertEqual(run("my_if False then 5 elif False then 6 elif False then 7 else 8end"), 8)
+        self.assertEqual(run("my_if False then 5 elif False then 6 elif True then 7 else 8 end"), 7)
+        self.assertEqual(run("my_if False then 5 elif False then 6 elif False then 7 else 8 end"), 8)
 
     def test_letcc_return(self):
         run("""
