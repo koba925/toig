@@ -1,10 +1,16 @@
 # environment
+def new_env(): return {"parent": None, "vals": {}}
+def new_scope(env): return {"parent": env, "vals": {}}
 
 def define(env, name, val):
     env["vals"][name] = val
 
 def get(env, name):
-    return env["vals"][name] if name in env["vals"] else get(env["parent"], name)
+    assert env is not None, f"name '{name}' is not defined"
+    if name in env["vals"]:
+        return env["vals"][name]
+    else:
+        return get(env["parent"], name)
 
 # evaluator
 
@@ -39,7 +45,9 @@ def apply(func_val, args_val, cont):
     match func_val:
         case f if callable(f): cont(func_val(args_val))
         case ["func", params, body_expr, env]:
-            env = {"parent": env, "vals": dict(zip(params, args_val))}
+            env = new_scope(env)
+            for param, arg in zip(params, args_val):
+                define(env, param, arg)
             eval(body_expr, env, cont)
 
 # runtime
@@ -49,7 +57,9 @@ builtins = {
     "-": lambda args_val: args_val[0] - args_val[1],
     "=": lambda args_val: args_val[0] == args_val[1],
 }
-top_env = {"parent": None, "vals": builtins}
+top_env = new_env()
+for name in builtins: define(top_env, name, builtins[name])
+top_env = new_scope(top_env)
 
 def run(src):
     def save(val): nonlocal result; result = val
