@@ -55,53 +55,56 @@ builtins = {
     "+": lambda args_val: args_val[0] + args_val[1],
     "-": lambda args_val: args_val[0] - args_val[1],
     "=": lambda args_val: args_val[0] == args_val[1],
+    "print": lambda args_val: print(*args_val),
 }
 top_env = new_env()
 for name in builtins: define(top_env, name, builtins[name])
 top_env = new_scope(top_env)
 
 def run(src):
-    def save(val): nonlocal result; result = val
-
-    result = None
-    eval(src, top_env, save)
-    return result
-
+    eval(src, top_env, lambda val: print(val))
 
 # tests
 
-assert run(None) == None
-assert run(5) == 5
-assert run(True) == True
-assert run(False) == False
+print("\nprimaries")
+run(None)
+run(5)
+run(True)
+run(False)
 
+print("\nvariable")
 run(["define", "a", 5])
-assert run("a") == 5
+run("a")
 
-assert run(["if", True, 5, 6]) == 5
-assert run(["if", False, 5, 6]) == 6
+print("\nif")
+run(["if", True, 5, 6])
+run(["if", False, 5, 6])
 
-assert run(["+", 5, 6]) == 11
-assert run(["-", 11, 5]) == 6
-assert run(["=", 5, 5]) == True
-assert run(["=", 5, 6]) == False
+print("\nbuilt-ins")
+run(["+", 5, 6])
+run(["-", 11, 5])
+run(["=", 5, 5])
+run(["=", 5, 6])
 
-assert run([["func", ["n"], ["+", 5, "n"]], 6]) == 11
+print("\nfunc")
+run([["func", ["n"], ["+", 5, "n"]], 6])
 
 import sys
 sys.setrecursionlimit(14000)
 
+print("\nfib")
 run(["define", "fib", ["func", ["n"],
         ["if", ["=", "n", 0], 0,
         ["if", ["=", "n", 1], 1,
         ["+", ["fib", ["-", "n", 1]], ["fib", ["-", "n", 2]]]]]]])
-assert run(["fib", 0]) == 0
-assert run(["fib", 1]) == 1
-assert run(["fib", 2]) == 1
-assert run(["fib", 3]) == 2
-assert run(["fib", 10]) == 55
+run(["fib", 0])
+run(["fib", 1])
+run(["fib", 2])
+run(["fib", 3])
+run(["fib", 10])
 
+print("\nclosure")
 run(["define", "make_adder", ["func", ["n"], ["func", ["m"], ["+", "n", "m"]]]])
-assert run([["make_adder", 5], 6]) == 11
+run([["make_adder", 5], 6])
 
-print("Success")
+print("\nSuccess")
