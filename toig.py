@@ -28,18 +28,17 @@ def eval(expr, env, cont):
                  eval(els_expr, env, cont))
         case [func_expr, *args_expr]:
             eval(func_expr, env, lambda func_val:
-                map_cps(args_expr,
-                    lambda arg_expr, c: eval(arg_expr, env, c),
+                eval_args(args_expr, env,
                     lambda args_val: apply(func_val, args_val, cont)))
 
-def foldl_cps(l, f, init, cont):
-    cont(init) if l == [] else \
-    f(init, l[0], lambda r: foldl_cps(l[1:], f, r, cont))
-
-def map_cps(l, f, cont):
-    foldl_cps(l,
-        lambda acc, e, cont: f(e, lambda r: cont(acc + [r])),
-        [], cont)
+def eval_args(args_expr, env, cont):
+    def _eval_args(exprs, acc):
+        if exprs == []:
+            cont(acc)
+        else:
+            eval(exprs[0], env, lambda val:
+                _eval_args(exprs[1:], acc + [val]))
+    _eval_args(args_expr, [])
 
 def apply(func_val, args_val, cont):
     match func_val:
