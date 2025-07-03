@@ -14,40 +14,69 @@ def get(env, name):
 
 # evaluator
 
-def eval(expr, env, cont):
+def is_value(expr):
     match expr:
-        case None | bool(_) | int(_): cont(expr)
-        case ["func", params, body]: cont(["func", params, body, env])
-        case str(name): cont(get(env, name))
-        case ["define", name, expr]:
-            eval(expr, env, lambda val: define(env, name, val))
-            cont(None)
-        case ["if", cnd_expr, thn_expr, els_expr]:
-            eval(cnd_expr, env, lambda cnd:
-                 eval(thn_expr, env, cont) if cnd else
-                 eval(els_expr, env, cont))
-        case [func_expr, *args_expr]:
-            eval(func_expr, env, lambda func_val:
-                eval_args(args_expr, env,
-                    lambda args_val: apply(func_val, args_val, cont)))
+        case None | bool(_) | int(_): return True
+        case ["func", _params, _body, _env]: return True
+        case f if callable(f): return True
+        case _: return False
 
-def eval_args(args_expr, env, cont):
-    def _eval_args(exprs, acc):
-        if exprs == []:
-            cont(acc)
-        else:
-            eval(exprs[0], env, lambda val:
-                _eval_args(exprs[1:], acc + [val]))
-    _eval_args(args_expr, [])
+def eval(expr, env, cont):
+    if is_value(expr):
+        if cont == ["$halt"]: return expr
 
-def apply(func_val, args_val, cont):
-    match func_val:
-        case f if callable(f): cont(func_val(args_val))
-        case ["func", params, body_expr, env]:
-            env = new_scope(env)
-            for param, arg in zip(params, args_val):
-                define(env, param, arg)
-            eval(body_expr, env, cont)
+        match cont:
+            case ["$if", thn_expr, els_expr, next_cont]:
+                if expr:
+                    return eval(thn_expr, env, next_cont)
+                else:
+                    return eval(els_expr, env, next_cont)
+            case ["$define", name, next_cont]:
+                define(env, name, expr)
+                return eval(expr, env, next_cont)
+            case ["$call", args_expr, call_env, next_cont]:
+                return eval(
+                    args_expr[0],
+                    call_env,
+                    ["$args", expr, args_expr[1:], [], call_env, next_cont])
+            case ["$args", func_val, args_expr, args_val, call_env, next_cont]:
+                if args_expr == []:
+                    return eval(
+                        ["$apply", func_val, args_val + [expr]],
+                        call_env,
+                        next_cont)
+                else:
+                    return eval(
+                        args_expr[0],
+                        call_env,
+                        ["$args", func_val, args_expr[1:], args_val + [expr], call_env, next_cont])
+            case _:
+                assert False, f"Invalid continuation: {cont}"
+    else:
+        match expr:
+            case ["func", params, body]:
+                return eval(["func", params, body, env], env, cont)
+            case str(name):
+                return eval(get(env, name), env, cont)
+            case ["define", name, expr]:
+                return eval(expr, env, ["$define", name, cont])
+            case ["if", cnd_expr, thn_expr, els_expr]:
+                return eval(cnd_expr, env, ["$if", thn_expr, els_expr, cont])
+            case ["$apply", func_val, args_val]:
+                match func_val:
+                    case f if callable(f):
+                        return eval(func_val(args_val), env, cont)
+                    case ["func", params, body_expr, closure_env]:
+                        closure_env = new_scope(closure_env)
+                        for param, arg in zip(params, args_val):
+                            define(closure_env, param, arg)
+                        return eval(body_expr, closure_env, cont)
+                    case _:
+                        assert False, f"Invalid function: {expr}"
+            case [func_expr, *args_expr]:
+                return eval(func_expr, env, ["$call", args_expr, env, cont])
+            case _:
+                assert False, f"Invalid expression: {expr}"
 
 # runtime
 
@@ -62,49 +91,42 @@ for name in builtins: define(top_env, name, builtins[name])
 top_env = new_scope(top_env)
 
 def run(src):
-    eval(src, top_env, lambda val: print(val))
+    return eval(src, top_env, ["$halt"])
 
 # tests
 
-print("\nprimaries")
-run(None)
-run(5)
-run(True)
-run(False)
-
-print("\nvariable")
-run(["define", "a", 5])
-run("a")
-
-print("\nif")
-run(["if", True, 5, 6])
-run(["if", False, 5, 6])
-
-print("\nbuilt-ins")
-run(["+", 5, 6])
-run(["-", 11, 5])
-run(["=", 5, 5])
-run(["=", 5, 6])
-
-print("\nfunc")
-run([["func", ["n"], ["+", 5, "n"]], 6])
-
 import sys
-sys.setrecursionlimit(14000)
+sys.setrecursionlimit(10000)
 
-print("\nfib")
+assert run(None) == None
+assert run(5) == 5
+assert run(True) == True
+assert run(False) == False
+
+assert run(["define", "a", 5]) == 5
+assert run("a") == 5
+
+assert run(["if", True, 5, 6]) == 5
+assert run(["if", False, 5, 6]) == 6
+
+assert run(["+", 5, 6]) == 11
+assert run(["-", 11, 5]) == 6
+assert run(["=", 5, 5]) == True
+assert run(["=", 5, 6]) == False
+
+assert run([["func", ["n"], ["+", 5, "n"]], 6]) == 11
+
 run(["define", "fib", ["func", ["n"],
         ["if", ["=", "n", 0], 0,
         ["if", ["=", "n", 1], 1,
         ["+", ["fib", ["-", "n", 1]], ["fib", ["-", "n", 2]]]]]]])
-run(["fib", 0])
-run(["fib", 1])
-run(["fib", 2])
-run(["fib", 3])
-run(["fib", 10])
+assert run(["fib", 0]) == 0
+assert run(["fib", 1]) == 1
+assert run(["fib", 2]) == 1
+assert run(["fib", 3]) == 2
+assert run(["fib", 10]) == 55
 
-print("\nclosure")
 run(["define", "make_adder", ["func", ["n"], ["func", ["m"], ["+", "n", "m"]]]])
-run([["make_adder", 5], 6])
+assert run([["make_adder", 5], 6]) == 11
 
-print("\nSuccess")
+print("Success")
