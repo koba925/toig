@@ -22,61 +22,91 @@ def is_value(expr):
         case _: return False
 
 def eval(expr, env, cont):
-    if is_value(expr):
-        if cont == ["$halt"]: return expr
+    def apply_cont():
+        nonlocal expr, env, cont
+
+        def apply_if(thn_expr, els_expr, next_cont):
+            nonlocal expr, cont
+            if expr:
+                expr, cont = thn_expr, next_cont
+            else:
+                expr, cont = els_expr, next_cont
+
+        def apply_define(name, next_cont):
+            nonlocal cont
+            define(env, name, expr)
+            cont = next_cont
+
+        def apply_call(args_expr, call_env, next_cont):
+            nonlocal expr, env, cont
+            expr, env, cont = args_expr[0], call_env, [
+                "$args", expr, args_expr[1:], [], call_env, next_cont
+            ]
+
+        def apply_args(func_val, args_expr, args_val, call_env, next_cont):
+            nonlocal expr, env, cont
+            args_val += [expr]
+            if args_expr == []:
+                expr, env, cont  = [
+                    "$apply", func_val, args_val
+                ], call_env, next_cont
+            else:
+                expr, env, cont = args_expr[0], call_env, [
+                    "$args", func_val, args_expr[1:], args_val, call_env, next_cont
+                ]
 
         match cont:
             case ["$if", thn_expr, els_expr, next_cont]:
-                if expr:
-                    return eval(thn_expr, env, next_cont)
-                else:
-                    return eval(els_expr, env, next_cont)
+                apply_if(thn_expr, els_expr, next_cont)
             case ["$define", name, next_cont]:
-                define(env, name, expr)
-                return eval(expr, env, next_cont)
+                apply_define(name, next_cont)
             case ["$call", args_expr, call_env, next_cont]:
-                return eval(
-                    args_expr[0],
-                    call_env,
-                    ["$args", expr, args_expr[1:], [], call_env, next_cont])
+                apply_call(args_expr, call_env, next_cont)
             case ["$args", func_val, args_expr, args_val, call_env, next_cont]:
-                if args_expr == []:
-                    return eval(
-                        ["$apply", func_val, args_val + [expr]],
-                        call_env,
-                        next_cont)
-                else:
-                    return eval(
-                        args_expr[0],
-                        call_env,
-                        ["$args", func_val, args_expr[1:], args_val + [expr], call_env, next_cont])
+                apply_args(func_val, args_expr, args_val, call_env, next_cont)
             case _:
                 assert False, f"Invalid continuation: {cont}"
-    else:
+
+    def eval_expr():
+        nonlocal expr, env, cont
+
+        def apply(func_val, args_val):
+            nonlocal expr, env, cont
+            match func_val:
+                case None | bool(_) | int(_):
+                    expr = func_val
+                case f if callable(f):
+                    expr = func_val(args_val)
+                case ["func", params, body_expr, closure_env]:
+                    closure_env = new_scope(closure_env)
+                    for param, arg in zip(params, args_val):
+                        define(closure_env, param, arg)
+                    expr, env = body_expr, closure_env
+                case _:
+                    assert False, f"Invalid function: {expr}"
+
         match expr:
             case ["func", params, body]:
-                return eval(["func", params, body, env], env, cont)
+                expr = ["func", params, body, env]
             case str(name):
-                return eval(get(env, name), env, cont)
+                expr = get(env, name)
             case ["define", name, expr]:
-                return eval(expr, env, ["$define", name, cont])
+                cont = ["$define", name, cont]
             case ["if", cnd_expr, thn_expr, els_expr]:
-                return eval(cnd_expr, env, ["$if", thn_expr, els_expr, cont])
+                expr, cont = cnd_expr, ["$if", thn_expr, els_expr, cont]
             case ["$apply", func_val, args_val]:
-                match func_val:
-                    case f if callable(f):
-                        return eval(func_val(args_val), env, cont)
-                    case ["func", params, body_expr, closure_env]:
-                        closure_env = new_scope(closure_env)
-                        for param, arg in zip(params, args_val):
-                            define(closure_env, param, arg)
-                        return eval(body_expr, closure_env, cont)
-                    case _:
-                        assert False, f"Invalid function: {expr}"
+                apply(func_val, args_val)
             case [func_expr, *args_expr]:
-                return eval(func_expr, env, ["$call", args_expr, env, cont])
+                expr, cont = func_expr, ["$call", args_expr, env, cont]
             case _:
                 assert False, f"Invalid expression: {expr}"
+
+    while True:
+        if is_value(expr):
+            if cont == ["$halt"]: return expr
+            apply_cont()
+        else:
+            eval_expr()
 
 # runtime
 
@@ -94,9 +124,6 @@ def run(src):
     return eval(src, top_env, ["$halt"])
 
 # tests
-
-import sys
-sys.setrecursionlimit(10000)
 
 assert run(None) == None
 assert run(5) == 5
