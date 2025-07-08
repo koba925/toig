@@ -25,7 +25,7 @@ class Environment:
 def is_value(expr):
     match expr:
         case None | bool(_) | int(_): return True
-        case ["func", _params, _body, _env]: return True
+        case ["closure", _params, _body, _env]: return True
         case f if callable(f): return True
         case _: return False
 
@@ -96,7 +96,7 @@ class Evaluator:
     def _eval_expr(self):
         match self._expr:
             case ["func", params, body]:
-                self._expr = ["func", params, body, self._env]
+                self._expr = ["closure", params, body, self._env]
             case str(name):
                 self._expr = self._env.get(name)
             case ["define", name, val_expr]:
@@ -124,7 +124,7 @@ class Evaluator:
         match func_val:
             case f if callable(f):
                 self._expr = func_val(args_val)
-            case ["func", params, body_expr, closure_env]:
+            case ["closure", params, body_expr, closure_env]:
                 closure_env = Environment(closure_env)
                 for param, arg in zip(params, args_val):
                     closure_env.define(param, arg)
