@@ -22,14 +22,14 @@ class TestToig(unittest.TestCase):
             val = self.i.run(src)
             return (val, mock_stdout.getvalue())
 
-    def test_primitives(self):
+    def test_primary(self):
         self.assertEqual(self.go(None), None)
         self.assertEqual(self.go(5), 5)
         self.assertEqual(self.go(True), True)
         self.assertEqual(self.go(False), False)
 
     def test_define(self):
-        self.assertEqual(self.go(["define", "a", ["+", 5, 6]]), 11)
+        self.assertEqual(self.go(["define", "a", ["add", 5, 6]]), 11)
         self.assertEqual(self.go("a"), 11)
         self.assertEqual(self.go(["define", "a", 6]), 6)
         self.assertEqual(self.go("a"), 6)
@@ -41,7 +41,7 @@ class TestToig(unittest.TestCase):
 
     def test_assign(self):
         self.assertEqual(self.go(["define", "a", 5]), 5)
-        self.assertEqual(self.go(["assign", "a", ["+", 5, 6]]), 11)
+        self.assertEqual(self.go(["assign", "a", ["add", 5, 6]]), 11)
         self.assertEqual(self.go("a"), 11)
         self.assertEqual(self.go([["func", [], ["assign", "a", 6]]]), 6)
         self.assertEqual(self.printed([["func", [], ["seq",
@@ -58,15 +58,73 @@ class TestToig(unittest.TestCase):
         self.assertEqual(self.printed(["seq", ["print", 5], ["print", 6]]), (None, "5\n6\n"))
 
     def test_if(self):
-        self.assertEqual(self.go(["if", ["=", 5, 5], ["+", 7, 8], ["+", 9, 10]]), 15)
-        self.assertEqual(self.go(["if", ["=", 5, 6], ["+", 7, 8], ["+", 9, 10]]), 19)
+        self.assertEqual(self.go(["if", ["equal", 5, 5], ["add", 7, 8], ["add", 9, 10]]), 15)
+        self.assertEqual(self.go(["if", ["equal", 5, 6], ["add", 7, 8], ["add", 9, 10]]), 19)
         self.assertTrue(self.fails(["if", True, 5]))
 
-    def test_builtins(self):
-        self.assertEqual(self.go(["+", ["+", 5, 6], ["+", 7, 8]]), 26)
-        self.assertEqual(self.go(["-", ["-", 26, 8], ["+", 5, 6]]), 7)
-        self.assertEqual(self.go(["=", ["+", 5, 6], ["+", 6, 5]]), True)
-        self.assertEqual(self.go(["=", ["+", 5, 6], ["+", 7, 8]]), False)
+    def test_builtin_arithmetic(self):
+        self.assertEqual(self.go(["add", ["add", 5, 6], ["add", 7, 8]]), 26)
+        self.assertEqual(self.go(["sub", ["sub", 26, 8], ["add", 5, 6]]), 7)
+        self.assertEqual(self.go(["mul", ["mul", 5, 6], ["mul", 7, 8]]), 1680)
+        self.assertEqual(self.go(["div", ["div", 1680, 8], ["mul", 5, 6]]), 7)
+
+    def test_builtin_equality(self):
+        self.assertEqual(self.go(["equal", ["add", 5, 6], ["add", 6, 5]]), True)
+        self.assertEqual(self.go(["equal", ["add", 5, 6], ["add", 7, 8]]), False)
+        self.assertEqual(self.go(["not_equal", ["add", 5, 6], ["add", 6, 5]]), False)
+        self.assertEqual(self.go(["not_equal", ["add", 5, 6], ["add", 7, 8]]), True)
+
+    def test_builtin_comparison(self):
+        self.assertEqual(self.go(["less", ["add", 5, 6], ["add", 3, 7]]), False)
+        self.assertEqual(self.go(["less", ["add", 5, 6], ["add", 4, 7]]), False)
+        self.assertEqual(self.go(["less", ["add", 5, 6], ["add", 4, 8]]), True)
+        self.assertEqual(self.go(["greater", ["add", 5, 6], ["add", 3, 7]]), True)
+        self.assertEqual(self.go(["greater", ["add", 5, 6], ["add", 4, 7]]), False)
+        self.assertEqual(self.go(["greater", ["add", 5, 6], ["add", 4, 8]]), False)
+
+        self.assertEqual(self.go(["less_equal", ["add", 5, 6], ["add", 3, 7]]), False)
+        self.assertEqual(self.go(["less_equal", ["add", 5, 6], ["add", 4, 7]]), True)
+        self.assertEqual(self.go(["less_equal", ["add", 5, 6], ["add", 4, 8]]), True)
+        self.assertEqual(self.go(["greater_equal", ["add", 5, 6], ["add", 3, 7]]), True)
+        self.assertEqual(self.go(["greater_equal", ["add", 5, 6], ["add", 4, 7]]), True)
+        self.assertEqual(self.go(["greater_equal", ["add", 5, 6], ["add", 4, 8]]), False)
+
+    def test_builtin_logic(self):
+        self.assertEqual(self.go(["not", ["equal", ["add", 5, 6], ["add", 6, 5]]]), False)
+        self.assertEqual(self.go(["not", ["equal", ["add", 5, 6], ["add", 7, 8]]]), True)
+
+
+    # def test_array(self):
+    #     self.assertEqual(self.go(["arr"]), [])
+    #     self.assertEqual(self.go(["arr", ["add", 5, 6]]), [11])
+
+    #     self.go(["define", "a", ["arr", 5, 6, ["arr", 7, 8]]])
+    #     self.assertEqual(self.go("a"), [5, 6, [7, 8]])
+
+    #     self.assertEqual(self.go(["is_arr", 5]), False)
+    #     self.assertEqual(self.go(["is_arr", ["arr"]]), True)
+    #     self.assertEqual(self.go(["is_arr", "a"]), True)
+
+    #     self.assertEqual(self.go(["len", ["arr"]]), 0)
+    #     self.assertEqual(self.go(["len", "a"]), 3)
+
+    #     self.assertEqual(self.go(["getat", "a", 1]), 6)
+    #     self.assertEqual(self.go(["getat", "a", -1]), [7, 8])
+    #     self.assertEqual(self.go(["getat", ["getat", "a", 2], 1]), 8)
+
+    #     self.assertEqual(self.go(["setat", "a", 1, 9]), [5, 9, [7, 8]])
+    #     self.assertEqual(self.go("a"), [5, 9, [7, 8]])
+    #     self.assertEqual(self.go(["setat", ["getat", "a", 2], -1, 10]), [7, 10])
+    #     self.assertEqual(self.go("a"), [5, 9, [7, 10]])
+
+    #     self.assertEqual(self.go(["slice", "a", None, None, None]), [5, 9, [7, 10]])
+    #     self.assertEqual(self.go(["slice", "a", 1, None, None]), [9, [7, 10]])
+    #     self.assertEqual(self.go(["slice", "a", -2, None, None]), [9, [7, 10]])
+    #     self.assertEqual(self.go(["slice", "a", 1, 2, None]), [9])
+    #     self.assertEqual(self.go(["slice", "a", 1, -1, None]), [9])
+    #     self.assertEqual(self.go(["slice", "a", 2, 0, -1]), [[7, 10],9])
+
+    #     self.assertEqual(self.go(["add", ["arr", 5], ["arr", 6]]), [5, 6])
 
     def test_print(self):
         self.assertEqual(self.printed(["print", None]), (None, "None\n"))
@@ -76,14 +134,18 @@ class TestToig(unittest.TestCase):
         self.assertEqual(self.printed(["print"]), (None, "\n"))
         self.assertEqual(self.printed(["print", 5, 6]), (None, "5 6\n"))
 
+    def test_error(self):
+        self.assertTrue(self.fails(["error"]))
+        self.assertTrue(self.fails(["error", 5]))
+
     def test_func(self):
-        self.assertEqual(self.go([["func", ["n"], ["+", 5, "n"]], 6]), 11)
+        self.assertEqual(self.go([["func", ["n"], ["add", 5, "n"]], 6]), 11)
 
     def test_fib(self):
         self.go(["define", "fib", ["func", ["n"],
-                ["if", ["=", "n", 0], 0,
-                ["if", ["=", "n", 1], 1,
-                ["+", ["fib", ["-", "n", 1]], ["fib", ["-", "n", 2]]]]]]])
+                ["if", ["equal", "n", 0], 0,
+                ["if", ["equal", "n", 1], 1,
+                ["add", ["fib", ["sub", "n", 1]], ["fib", ["sub", "n", 2]]]]]]])
         self.assertEqual(self.go(["fib", 0]), 0)
         self.assertEqual(self.go(["fib", 1]), 1)
         self.assertEqual(self.go(["fib", 2]), 1)
@@ -92,13 +154,13 @@ class TestToig(unittest.TestCase):
 
     def test_adder(self):
         self.go(["define", "make_adder", ["func", ["n"],
-                ["func", ["m"], ["+", "n", "m"]]]])
+                ["func", ["m"], ["add", "n", "m"]]]])
         self.assertEqual(self.go([["make_adder", 5], 6]), 11)
 
     def test_counter(self):
         self.go(["define", "make_counter", ["func", [], ["seq",
                 ["define", "c", 0],
-                ["func", [], ["assign", "c", ["+", "c", 1]]]]]])
+                ["func", [], ["assign", "c", ["add", "c", 1]]]]]])
         self.go(["define", "counter1", ["make_counter"]])
         self.go(["define", "counter2", ["make_counter"]])
         self.assertEqual(self.go(["counter1"]), 1)

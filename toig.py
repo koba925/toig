@@ -151,19 +151,62 @@ class Evaluator:
             case _:
                 assert False, f"Invalid function: {self._expr}"
 
+import operator as op
+
+def is_name(expr):
+    return isinstance(expr, str)
+
+def setat(args):
+    args[0][args[1]] = args[2]
+    return args[2]
+
+def slice_(args):
+    arr, start, end, step = args
+    return arr[slice(start, end, step)]
+
+def set_slice(args):
+    arr, start, end, step, val = args
+    arr[start:end:step] = val
+    return val
+
+def error(args):
+    assert False, f"{' '.join(map(str, args))}"
+
 class Interpreter:
+
+    builtins = {
+        "add": lambda args: args[0] + args[1],
+        "sub": lambda args: args[0] - args[1],
+        "mul": lambda args: args[0] * args[1],
+        "div": lambda args: args[0] // args[1],
+        "mod": lambda args: args[0] % args[1],
+        "neg": lambda args: -args[0],
+        "equal": lambda args: args[0] == args[1],
+        "not_equal": lambda args: args[0] != args[1],
+        "less": lambda args: args[0] < args[1],
+        "greater": lambda args: args[0] > args[1],
+        "less_equal": lambda args: args[0] <= args[1],
+        "greater_equal": lambda args: args[0] >= args[1],
+        "not": lambda args: not args[0],
+
+        # "arr": lambda args: args,
+        # "is_arr": lambda args: isinstance(args[0], list),
+        # "len": lambda args: len(args),
+        # "getat": lambda args: args[0][args[1]],
+        # "setat": setat,
+        # "slice": slice_,
+        # "set_slice": set_slice,
+
+        "is_name": lambda args: isinstance(args[0], str),
+
+        "print": lambda args: print(*args),
+        "error": lambda args: error(args)
+    }
+
     def __init__(self):
         self.env = Environment()
-
-        builtins = {
-            "+": lambda args_val: args_val[0] + args_val[1],
-            "-": lambda args_val: args_val[0] - args_val[1],
-            "=": lambda args_val: args_val[0] == args_val[1],
-            "print": lambda args_val: print(*args_val),
-        }
-
-        for name in builtins:
-            self.env.define(name, builtins[name])
+        for name, func in Interpreter.builtins.items():
+            self.env.define(name, func)
         self.env = Environment(self.env)
 
     def run(self, src):
