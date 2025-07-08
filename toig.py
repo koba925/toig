@@ -53,13 +53,8 @@ class Evaluator:
                 self._apply_seq(exprs, next_cont)
             case ["$if", thn_expr, els_expr, next_cont]:
                 self._apply_if(thn_expr, els_expr, next_cont)
-            case ["$call", args_expr, call_env, next_cont]:
-                self._apply_call(args_expr, call_env, next_cont)
-            case ["$args",
-                    func_val, args_expr, args_val,
-                    call_env, next_cont]:
-                self._apply_args(func_val, args_expr, args_val,
-                                 call_env, next_cont)
+            case ["$call", elems_expr, elems_val, call_env, next_cont]:
+                self._apply_call(elems_expr, elems_val, call_env, next_cont)
             case ["$restore_env", env, next_cont]:
                 self._env, self._cont = env, next_cont
             case _:
@@ -85,30 +80,16 @@ class Evaluator:
         else:
             self._expr, self._cont = els_expr, next_cont
 
-    def _apply_call(self, args_expr, call_env, next_cont):
-        if args_expr == []:
+    def _apply_call(self, elems_expr, elems_val, call_env, next_cont):
+        elems_val += [self._expr]
+        if elems_expr == []:
             self._expr, self._env, self._cont  = [
-                "$apply", self._expr, []
+                "$apply", elems_val
             ], call_env, next_cont
         else:
-            self._expr, self._env, self._cont = args_expr[0], call_env, [
-                "$args",
-                self._expr, args_expr[1:], [],
-                call_env, next_cont
-            ]
-
-    def _apply_args(self,
-                    func_val, args_expr, args_val,
-                    call_env, next_cont):
-        args_val += [self._expr]
-        if args_expr == []:
-            self._expr, self._env, self._cont  = [
-                "$apply", func_val, args_val
-            ], call_env, next_cont
-        else:
-            self._expr, self._env, self._cont = args_expr[0], call_env, [
-                "$args",
-                func_val, args_expr[1:], args_val,
+            self._expr, self._env, self._cont = elems_expr[0], call_env, [
+                "$call",
+                elems_expr[1:], elems_val,
                 call_env, next_cont
             ]
 
@@ -130,15 +111,16 @@ class Evaluator:
             case ["if", cnd_expr, thn_expr, els_expr]:
                 self._expr, self._cont = cnd_expr, \
                     ["$if", thn_expr, els_expr, self._cont]
-            case ["$apply", func_val, args_val]:
-                self._apply_func(func_val, args_val)
+            case ["$apply", elems_val]:
+                self._apply_func(elems_val)
             case [func_expr, *args_expr]:
                 self._expr, self._cont = func_expr, \
-                    ["$call", args_expr, self._env, self._cont]
+                    ["$call", args_expr, [], self._env, self._cont]
             case _:
                 assert False, f"Invalid expression: {self._expr}"
 
-    def _apply_func(self, func_val, args_val):
+    def _apply_func(self, elems_val):
+        func_val, args_val = elems_val[0], elems_val[1:]
         match func_val:
             case f if callable(f):
                 self._expr = func_val(args_val)
