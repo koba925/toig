@@ -22,26 +22,28 @@ class Environment:
         else:
             assert False, f"name '{name}' is not defined"
 
-def is_value(expr):
-    match expr:
-        case None | bool(_) | int(_): return True
-        case ["closure", _params, _body, _env]: return True
-        case f if callable(f): return True
-        case _: return False
+from typing import Callable
+from dataclasses import dataclass
+
+ValueType = None | bool | int | Callable | list
+
+@dataclass
+class Expr:
+    elems: ValueType
 
 class Evaluator:
     def __init__(self, expr, env, cont):
-        self._expr = expr
+        self._expr: Expr | ValueType = expr
         self._env = env
         self._cont = cont
 
     def eval(self):
         while True:
-            if is_value(self._expr):
+            if isinstance(self._expr, Expr):
+                self._eval_expr()
+            else:
                 if self._cont == ["$halt"]: return self._expr
                 self._apply_val()
-            else:
-                self._eval_expr()
 
     def _apply_val(self):
         match self._cont:
@@ -72,49 +74,55 @@ class Evaluator:
         if exprs == []:
             self._cont = next_cont
         else:
-            self._expr, self._cont = exprs[0], ["$seq", exprs[1:], next_cont]
+            self._expr, self._cont = Expr(exprs[0]), \
+                ["$seq", exprs[1:], next_cont]
 
     def _apply_if(self, thn_expr, els_expr, next_cont):
         if self._expr:
-            self._expr, self._cont = thn_expr, next_cont
+            self._expr, self._cont = Expr(thn_expr), next_cont
         else:
-            self._expr, self._cont = els_expr, next_cont
+            self._expr, self._cont = Expr(els_expr), next_cont
 
     def _apply_call(self, elems_expr, elems_val, call_env, next_cont):
         elems_val += [self._expr]
         if elems_expr == []:
-            self._expr, self._env, self._cont  = [
-                "$apply", elems_val
-            ], call_env, next_cont
+            self._expr, self._env, self._cont = (
+                Expr(["$apply", elems_val]), call_env, next_cont
+            )
         else:
-            self._expr, self._env, self._cont = elems_expr[0], call_env, [
-                "$call",
-                elems_expr[1:], elems_val,
-                call_env, next_cont
-            ]
+            self._expr, self._env, self._cont = (
+                Expr(elems_expr[0]),
+                call_env,
+                ["$call", elems_expr[1:], elems_val, call_env, next_cont]
+            )
 
     def _eval_expr(self):
-        match self._expr:
+        assert isinstance(self._expr, Expr)
+        match self._expr.elems:
+            case bool(_) | int(_) | None:
+                self._expr = self._expr.elems
+            case f if callable(f):
+                self._expr = self._expr.elems
             case ["func", params, body]:
                 self._expr = ["closure", params, body, self._env]
             case str(name):
                 self._expr = self._env.get(name)
             case ["define", name, val_expr]:
-                self._expr, self._cont = val_expr, \
+                self._expr, self._cont = Expr(val_expr), \
                     ["$define", name, self._cont]
             case ["assign", name, val_expr]:
-                self._expr, self._cont = val_expr, \
+                self._expr, self._cont = Expr(val_expr), \
                     ["$assign", name, self._cont]
             case ["seq", *exprs]:
                 self._expr, self._cont = None, \
                     ["$seq", exprs, self._cont]
             case ["if", cnd_expr, thn_expr, els_expr]:
-                self._expr, self._cont = cnd_expr, \
+                self._expr, self._cont = Expr(cnd_expr), \
                     ["$if", thn_expr, els_expr, self._cont]
             case ["$apply", elems_val]:
                 self._apply_func(elems_val)
             case [func_expr, *args_expr]:
-                self._expr, self._cont = func_expr, \
+                self._expr, self._cont = Expr(func_expr), \
                     ["$call", args_expr, [], self._env, self._cont]
             case _:
                 assert False, f"Invalid expression: {self._expr}"
@@ -128,15 +136,13 @@ class Evaluator:
                 closure_env = Environment(closure_env)
                 for param, arg in zip(params, args_val):
                     closure_env.define(param, arg)
-                self._expr, self._env, self._cont = body_expr, closure_env, \
+                self._expr, self._env, self._cont = Expr(body_expr), closure_env, \
                     ["$restore_env", self._env, self._cont]
             case _:
                 assert False, f"Invalid function: {self._expr}"
 
-import operator as op
-
-def is_name(expr):
-    return isinstance(expr, str)
+def is_name(val):
+    return isinstance(val, str)
 
 def setat(args):
     args[0][args[1]] = args[2]
@@ -192,7 +198,7 @@ class Interpreter:
         self.env = Environment(self.env)
 
     def run(self, src):
-        return Evaluator(src, self.env, ["$halt"]).eval()
+        return Evaluator(Expr(src), self.env, ["$halt"]).eval()
 
 if __name__ == "__main__":
     i = Interpreter()

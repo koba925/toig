@@ -29,28 +29,27 @@ class TestToig(unittest.TestCase):
         self.assertEqual(self.go(False), False)
 
     def test_define(self):
+        self.assertEqual(self.go(["define", "a", 5]), 5)
+        self.assertEqual(self.go("a"), 5)
         self.assertEqual(self.go(["define", "a", ["add", 5, 6]]), 11)
         self.assertEqual(self.go("a"), 11)
-        self.assertEqual(self.go(["define", "a", 6]), 6)
-        self.assertEqual(self.go("a"), 6)
         self.assertEqual(self.printed([["func", [], ["seq",
                             ["print", ["define", "a", 5]],
                             ["print", "a"]]]]), (None, "5\n5\n"))
-        self.assertEqual(self.go("a"), 6)
+        self.assertEqual(self.go("a"), 11)
         self.assertTrue(self.fails(["b"]))
 
     def test_assign(self):
         self.assertEqual(self.go(["define", "a", 5]), 5)
         self.assertEqual(self.go(["assign", "a", ["add", 5, 6]]), 11)
         self.assertEqual(self.go("a"), 11)
-        self.assertEqual(self.go([["func", [], ["assign", "a", 6]]]), 6)
         self.assertEqual(self.printed([["func", [], ["seq",
                             ["print", ["assign", "a", 7]],
                             ["print", "a"]]]]), (None, "7\n7\n"))
         self.assertEqual(self.go("a"), 7)
         self.assertTrue(self.fails(["assign", "b", 6]))
 
-    def test_do(self):
+    def test_seq(self):
         self.assertEqual(self.go(["seq"]), None)
         self.assertEqual(self.go(["seq", 5]), 5)
         self.assertEqual(self.go(["seq", 5, 6]), 6)
@@ -63,6 +62,7 @@ class TestToig(unittest.TestCase):
         self.assertTrue(self.fails(["if", True, 5]))
 
     def test_builtin_arithmetic(self):
+        self.assertEqual(self.go(["add", 5, 6]), 11)
         self.assertEqual(self.go(["add", ["add", 5, 6], ["add", 7, 8]]), 26)
         self.assertEqual(self.go(["sub", ["sub", 26, 8], ["add", 5, 6]]), 7)
         self.assertEqual(self.go(["mul", ["mul", 5, 6], ["mul", 7, 8]]), 1680)
