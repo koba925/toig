@@ -177,13 +177,13 @@ class Interpreter:
         "greater_equal": lambda args: args[0] >= args[1],
         "not": lambda args: not args[0],
 
-        # "arr": lambda args: args,
-        # "is_arr": lambda args: isinstance(args[0], list),
-        # "len": lambda args: len(args),
-        # "getat": lambda args: args[0][args[1]],
-        # "setat": setat,
-        # "slice": slice_,
-        # "set_slice": set_slice,
+        "arr": lambda args: args,
+        "is_arr": lambda args: isinstance(args[0], list),
+        "len": lambda args: len(args[0]),
+        "get_at": lambda args: args[0][args[1]],
+        "set_at": setat,
+        "slice": slice_,
+        "set_slice": set_slice,
 
         "is_name": lambda args: isinstance(args[0], str),
 

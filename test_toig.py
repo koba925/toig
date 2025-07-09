@@ -94,37 +94,37 @@ class TestToig(unittest.TestCase):
         self.assertEqual(self.go(["not", ["equal", ["add", 5, 6], ["add", 7, 8]]]), True)
 
 
-    # def test_array(self):
-    #     self.assertEqual(self.go(["arr"]), [])
-    #     self.assertEqual(self.go(["arr", ["add", 5, 6]]), [11])
+    def test_array(self):
+        self.assertEqual(self.go(["arr"]), [])
+        self.assertEqual(self.go(["arr", ["add", 5, 6]]), [11])
 
-    #     self.go(["define", "a", ["arr", 5, 6, ["arr", 7, 8]]])
-    #     self.assertEqual(self.go("a"), [5, 6, [7, 8]])
+        self.go(["define", "a", ["arr", 5, 6, ["arr", 7, 8]]])
+        self.assertEqual(self.go("a"), [5, 6, [7, 8]])
 
-    #     self.assertEqual(self.go(["is_arr", 5]), False)
-    #     self.assertEqual(self.go(["is_arr", ["arr"]]), True)
-    #     self.assertEqual(self.go(["is_arr", "a"]), True)
+        self.assertEqual(self.go(["is_arr", 5]), False)
+        self.assertEqual(self.go(["is_arr", ["arr"]]), True)
+        self.assertEqual(self.go(["is_arr", "a"]), True)
 
-    #     self.assertEqual(self.go(["len", ["arr"]]), 0)
-    #     self.assertEqual(self.go(["len", "a"]), 3)
+        self.assertEqual(self.go(["len", ["arr"]]), 0)
+        self.assertEqual(self.go(["len", "a"]), 3)
 
-    #     self.assertEqual(self.go(["getat", "a", 1]), 6)
-    #     self.assertEqual(self.go(["getat", "a", -1]), [7, 8])
-    #     self.assertEqual(self.go(["getat", ["getat", "a", 2], 1]), 8)
+        self.assertEqual(self.go(["get_at", "a", 1]), 6)
+        self.assertEqual(self.go(["get_at", "a", -1]), [7, 8])
+        self.assertEqual(self.go(["get_at", ["get_at", "a", 2], 1]), 8)
 
-    #     self.assertEqual(self.go(["setat", "a", 1, 9]), [5, 9, [7, 8]])
-    #     self.assertEqual(self.go("a"), [5, 9, [7, 8]])
-    #     self.assertEqual(self.go(["setat", ["getat", "a", 2], -1, 10]), [7, 10])
-    #     self.assertEqual(self.go("a"), [5, 9, [7, 10]])
+        self.assertEqual(self.go(["set_at", "a", 1, 9]), 9)
+        self.assertEqual(self.go("a"), [5, 9, [7, 8]])
+        self.assertEqual(self.go(["set_at", ["get_at", "a", 2], -1, 10]), 10)
+        self.assertEqual(self.go("a"), [5, 9, [7, 10]])
 
-    #     self.assertEqual(self.go(["slice", "a", None, None, None]), [5, 9, [7, 10]])
-    #     self.assertEqual(self.go(["slice", "a", 1, None, None]), [9, [7, 10]])
-    #     self.assertEqual(self.go(["slice", "a", -2, None, None]), [9, [7, 10]])
-    #     self.assertEqual(self.go(["slice", "a", 1, 2, None]), [9])
-    #     self.assertEqual(self.go(["slice", "a", 1, -1, None]), [9])
-    #     self.assertEqual(self.go(["slice", "a", 2, 0, -1]), [[7, 10],9])
+        self.assertEqual(self.go(["slice", "a", None, None, None]), [5, 9, [7, 10]])
+        self.assertEqual(self.go(["slice", "a", 1, None, None]), [9, [7, 10]])
+        self.assertEqual(self.go(["slice", "a", -2, None, None]), [9, [7, 10]])
+        self.assertEqual(self.go(["slice", "a", 1, 2, None]), [9])
+        self.assertEqual(self.go(["slice", "a", 1, -1, None]), [9])
+        self.assertEqual(self.go(["slice", "a", 2, 0, -1]), [[7, 10],9])
 
-    #     self.assertEqual(self.go(["add", ["arr", 5], ["arr", 6]]), [5, 6])
+        self.assertEqual(self.go(["add", ["arr", 5], ["arr", 6]]), [5, 6])
 
     def test_print(self):
         self.assertEqual(self.printed(["print", None]), (None, "None\n"))
