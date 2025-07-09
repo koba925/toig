@@ -41,9 +41,57 @@ class Evaluator:
         while True:
             if isinstance(self._expr, Expr):
                 self._eval_expr()
+            elif self._cont == ["$halt"]:
+                return self._expr
             else:
-                if self._cont == ["$halt"]: return self._expr
                 self._apply_val()
+
+    def _eval_expr(self):
+        assert isinstance(self._expr, Expr)
+        match self._expr.elems:
+            case bool(_) | int(_) | None:
+                self._expr = self._expr.elems
+            case f if callable(f):
+                self._expr = f
+            case ["func", params, body]:
+                self._expr = ["closure", params, body, self._env]
+            case str(name):
+                self._expr = self._env.get(name)
+            case ["q", expr]:
+                self._expr = expr
+            case ["define", name, val_expr]:
+                self._expr, self._cont = Expr(val_expr), \
+                    ["$define", name, self._cont]
+            case ["assign", name, val_expr]:
+                self._expr, self._cont = Expr(val_expr), \
+                    ["$assign", name, self._cont]
+            case ["seq", *exprs]:
+                self._expr, self._cont = None, \
+                    ["$seq", exprs, self._cont]
+            case ["if", cnd_expr, thn_expr, els_expr]:
+                self._expr, self._cont = Expr(cnd_expr), \
+                    ["$if", thn_expr, els_expr, self._cont]
+            case ["$apply", elems_val]:
+                self._apply_func(elems_val)
+            case [func_expr, *args_expr]:
+                self._expr, self._cont = Expr(func_expr), \
+                    ["$call", args_expr, [], self._env, self._cont]
+            case _:
+                assert False, f"Invalid expression: {self._expr}"
+
+    def _apply_func(self, elems_val):
+        func_val, args_val = elems_val[0], elems_val[1:]
+        match func_val:
+            case f if callable(f):
+                self._expr = func_val(args_val)
+            case ["closure", params, body_expr, closure_env]:
+                closure_env = Environment(closure_env)
+                for param, arg in zip(params, args_val):
+                    closure_env.define(param, arg)
+                self._expr, self._env, self._cont = Expr(body_expr), closure_env, \
+                    ["$restore_env", self._env, self._cont]
+            case _:
+                assert False, f"Invalid function: {self._expr}"
 
     def _apply_val(self):
         match self._cont:
@@ -95,51 +143,6 @@ class Evaluator:
                 call_env,
                 ["$call", elems_expr[1:], elems_val, call_env, next_cont]
             )
-
-    def _eval_expr(self):
-        assert isinstance(self._expr, Expr)
-        match self._expr.elems:
-            case bool(_) | int(_) | None:
-                self._expr = self._expr.elems
-            case f if callable(f):
-                self._expr = self._expr.elems
-            case ["func", params, body]:
-                self._expr = ["closure", params, body, self._env]
-            case str(name):
-                self._expr = self._env.get(name)
-            case ["define", name, val_expr]:
-                self._expr, self._cont = Expr(val_expr), \
-                    ["$define", name, self._cont]
-            case ["assign", name, val_expr]:
-                self._expr, self._cont = Expr(val_expr), \
-                    ["$assign", name, self._cont]
-            case ["seq", *exprs]:
-                self._expr, self._cont = None, \
-                    ["$seq", exprs, self._cont]
-            case ["if", cnd_expr, thn_expr, els_expr]:
-                self._expr, self._cont = Expr(cnd_expr), \
-                    ["$if", thn_expr, els_expr, self._cont]
-            case ["$apply", elems_val]:
-                self._apply_func(elems_val)
-            case [func_expr, *args_expr]:
-                self._expr, self._cont = Expr(func_expr), \
-                    ["$call", args_expr, [], self._env, self._cont]
-            case _:
-                assert False, f"Invalid expression: {self._expr}"
-
-    def _apply_func(self, elems_val):
-        func_val, args_val = elems_val[0], elems_val[1:]
-        match func_val:
-            case f if callable(f):
-                self._expr = func_val(args_val)
-            case ["closure", params, body_expr, closure_env]:
-                closure_env = Environment(closure_env)
-                for param, arg in zip(params, args_val):
-                    closure_env.define(param, arg)
-                self._expr, self._env, self._cont = Expr(body_expr), closure_env, \
-                    ["$restore_env", self._env, self._cont]
-            case _:
-                assert False, f"Invalid function: {self._expr}"
 
 def is_name(val):
     return isinstance(val, str)

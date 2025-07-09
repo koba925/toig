@@ -28,6 +28,10 @@ class TestToig(unittest.TestCase):
         self.assertEqual(self.go(True), True)
         self.assertEqual(self.go(False), False)
 
+    def test_quote(self):
+        self.assertEqual(self.go(["q", 5]), 5)
+        self.assertEqual(self.go(["q", ["add", 5, 6]]), ["add", 5, 6])
+
     def test_define(self):
         self.assertEqual(self.go(["define", "a", 5]), 5)
         self.assertEqual(self.go("a"), 5)
@@ -92,7 +96,6 @@ class TestToig(unittest.TestCase):
     def test_builtin_logic(self):
         self.assertEqual(self.go(["not", ["equal", ["add", 5, 6], ["add", 6, 5]]]), False)
         self.assertEqual(self.go(["not", ["equal", ["add", 5, 6], ["add", 7, 8]]]), True)
-
 
     def test_array(self):
         self.assertEqual(self.go(["arr"]), [])
