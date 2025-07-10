@@ -3,6 +3,11 @@ class Environment:
         self._parent = parent
         self._vals = {}
 
+    def __repr__(self):
+        return f"{
+            "builtins" if "__builtins__" in self._vals else self._vals
+        } > {self._parent}"
+
     def define(self, name, val):
         self._vals[name] = val
 
@@ -166,6 +171,7 @@ def error(args):
 class Interpreter:
 
     builtins = {
+        "__builtins__": None,
         "add": lambda args: args[0] + args[1],
         "sub": lambda args: args[0] - args[1],
         "mul": lambda args: args[0] * args[1],
