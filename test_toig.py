@@ -32,6 +32,16 @@ class TestToig(unittest.TestCase):
         self.assertEqual(self.go(["q", 5]), 5)
         self.assertEqual(self.go(["q", ["add", 5, 6]]), ["add", 5, 6])
 
+    def test_quasiquote(self):
+        self.assertEqual(self.go(["qq", 5]), 5)
+        self.assertEqual(self.go(["qq", ["add", 5, 6]]), ["add", 5, 6])
+        self.assertEqual(self.go(["qq", ["mul", 4, ["add", 5, 6]]]), ["mul", 4, ["add", 5, 6]])
+        self.assertEqual(self.go(["qq", ["mul", ["add", 5, 6], 7]]), ["mul", ["add", 5, 6], 7])
+
+        self.assertEqual(self.go(["qq", ["!", ["add", 5, 6]]]), 11)
+        self.assertEqual(self.go(["qq", ["mul", 4, ["!", ["add", 5, 6]]]]), ["mul", 4, 11])
+        self.assertEqual(self.go(["qq", ["mul", ["!", ["add", 5, 6]], 7]]), ["mul", 11, 7])
+
     def test_define(self):
         self.assertEqual(self.go(["define", "a", 5]), 5)
         self.assertEqual(self.go("a"), 5)

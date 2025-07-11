@@ -64,6 +64,8 @@ class Evaluator:
                 self._expr = self._env.get(name)
             case ["q", expr]:
                 self._expr = expr
+            case ["qq", expr]:
+                self._expr, self._cont = expr, ["$qq", self._cont]
             case ["define", name, val_expr]:
                 self._expr, self._cont = Expr(val_expr), \
                     ["$define", name, self._cont]
@@ -100,6 +102,10 @@ class Evaluator:
 
     def _apply_val(self):
         match self._cont:
+            case ["$qq", next_cont]:
+                self._apply_quasiquote(next_cont)
+            case ["$qqelems", elems, elems_done, next_cont]:
+                self._apply_qq_elems(elems, elems_done, next_cont)
             case ["$define", name, next_cont]:
                 self._apply_define(name, next_cont)
             case ["$assign", name, next_cont]:
@@ -114,6 +120,33 @@ class Evaluator:
                 self._env, self._cont = env, next_cont
             case _:
                 assert False, f"Invalid continuation: {self._cont}"
+
+    def _apply_quasiquote(self, next_cont):
+        match self._expr:
+            case []:
+                self._expr, self._cont = [], next_cont
+            case ["!", expr]:
+                self._expr = Expr(expr)
+                self._cont = next_cont
+            case [first, *rest]:
+                self._expr = first
+                self._cont = ["$qq", ["$qqelems", rest, [], next_cont]]
+            case _:
+                self._cont = next_cont
+
+    def _apply_qq_elems(self, elems, elems_done, next_cont):
+        elems_done += [self._expr]
+        match elems:
+            case []:
+                self._expr, self._cont  = elems_done, next_cont
+            case ["!", expr]:
+                self._expr = Expr(expr)
+                self._cont = next_cont
+            case [first, *rest]:
+                self._expr = first
+                self._cont = ["$qq", ["$qqelems", rest, elems_done, next_cont]]
+            case _:
+                assert False, f"Invalid quasiquote elements: {elems}"
 
     def _apply_define(self, name, next_cont):
         self._env.define(name, self._expr)
