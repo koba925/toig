@@ -42,6 +42,14 @@ class TestToig(unittest.TestCase):
         self.assertEqual(self.go(["qq", ["mul", 4, ["!", ["add", 5, 6]]]]), ["mul", 4, 11])
         self.assertEqual(self.go(["qq", ["mul", ["!", ["add", 5, 6]], 7]]), ["mul", 11, 7])
 
+        self.assertEqual(self.go(["qq", ["add", ["!!", ["arr", 5, 6]]]]), ["add", 5, 6])
+        self.assertEqual(self.go(["qq", [
+            ["!!", ["arr", 3]],
+            4,
+            ["!!", ["arr", 5]],
+            6]]), [3, 4, 5, 6])
+        self.assertTrue(self.fails(["qq", ["add", ["!!", 5]]]))
+
     def test_define(self):
         self.assertEqual(self.go(["define", "a", 5]), 5)
         self.assertEqual(self.go("a"), 5)

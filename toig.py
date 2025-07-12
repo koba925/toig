@@ -104,8 +104,8 @@ class Evaluator:
         match self._cont:
             case ["$qq", next_cont]:
                 self._apply_quasiquote(next_cont)
-            case ["$qqelems", elems, elems_done, next_cont]:
-                self._apply_qq_elems(elems, elems_done, next_cont)
+            case ["$qq_elems", splicing, elems, elems_done, next_cont]:
+                self._apply_qq_elems(splicing, elems, elems_done, next_cont)
             case ["$define", name, next_cont]:
                 self._apply_define(name, next_cont)
             case ["$assign", name, next_cont]:
@@ -123,28 +123,33 @@ class Evaluator:
 
     def _apply_quasiquote(self, next_cont):
         match self._expr:
-            case []:
-                self._expr, self._cont = [], next_cont
             case ["!", expr]:
                 self._expr = Expr(expr)
                 self._cont = next_cont
+            case [["!!", elem], *rest]:
+                self._expr = Expr(elem)
+                self._cont = ["$qq_elems", True, rest, [], next_cont]
             case [first, *rest]:
                 self._expr = first
-                self._cont = ["$qq", ["$qqelems", rest, [], next_cont]]
+                self._cont = ["$qq", ["$qq_elems", False, rest, [], next_cont]]
             case _:
                 self._cont = next_cont
 
-    def _apply_qq_elems(self, elems, elems_done, next_cont):
-        elems_done += [self._expr]
+    def _apply_qq_elems(self, splicing, elems, elems_done, next_cont):
+        if splicing:
+            assert isinstance(self._expr , list), f"Cannot splice: {self._expr}"
+            elems_done += self._expr
+        else:
+            elems_done += [self._expr]
         match elems:
             case []:
                 self._expr, self._cont  = elems_done, next_cont
-            case ["!", expr]:
-                self._expr = Expr(expr)
-                self._cont = next_cont
+            case [["!!", elem], *rest]:
+                self._expr = Expr(elem)
+                self._cont = ["$qq_elems", True, rest, elems_done, next_cont]
             case [first, *rest]:
                 self._expr = first
-                self._cont = ["$qq", ["$qqelems", rest, elems_done, next_cont]]
+                self._cont = ["$qq", ["$qq_elems", False, rest, elems_done, next_cont]]
             case _:
                 assert False, f"Invalid quasiquote elements: {elems}"
 
@@ -245,4 +250,18 @@ class Interpreter:
 if __name__ == "__main__":
     i = Interpreter()
 
-    print(i.run(5))
+    assert i.run(["qq", 5]) == 5
+    assert i.run(["qq", ["add", 5, 6]]) == ["add", 5, 6]
+    assert i.run(["qq", ["mul", 4, ["add", 5, 6]]]) == ["mul", 4, ["add", 5, 6]]
+    assert i.run(["qq", ["mul", ["add", 5, 6], 7]]) == ["mul", ["add", 5, 6], 7]
+
+    assert i.run(["qq", ["!", ["add", 5, 6]]]) == 11
+    assert i.run(["qq", ["mul", 4, ["!", ["add", 5, 6]]]]) == ["mul", 4, 11]
+    assert i.run(["qq", ["mul", ["!", ["add", 5, 6]], 7]]) == ["mul", 11, 7]
+
+    assert i.run(["qq", ["add", ["!!", ["arr", 5, 6]]]]) == ["add", 5, 6]
+    assert i.run(["qq", [
+        ["!!", ["arr", 3]],
+        4,
+        ["!!", ["arr", 5, 6]],
+        7]]) == [3, 4, 5, 6, 7]
