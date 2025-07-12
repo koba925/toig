@@ -105,7 +105,8 @@ class Evaluator:
             case ["$qq", next_cont]:
                 self._apply_quasiquote(next_cont)
             case ["$qq_elems", splicing, elems, elems_done, next_cont]:
-                self._apply_qq_elems(splicing, elems, elems_done, next_cont)
+                elems_done = self._qq_add_element(elems_done,splicing)
+                self._apply_qq_elems(elems, elems_done, next_cont)
             case ["$define", name, next_cont]:
                 self._apply_define(name, next_cont)
             case ["$assign", name, next_cont]:
@@ -126,21 +127,19 @@ class Evaluator:
             case ["!", expr]:
                 self._expr = Expr(expr)
                 self._cont = next_cont
-            case [["!!", elem], *rest]:
-                self._expr = Expr(elem)
-                self._cont = ["$qq_elems", True, rest, [], next_cont]
-            case [first, *rest]:
-                self._expr = first
-                self._cont = ["$qq", ["$qq_elems", False, rest, [], next_cont]]
+            case [*elems]:
+                self._apply_qq_elems(elems, [], next_cont)
             case _:
                 self._cont = next_cont
 
-    def _apply_qq_elems(self, splicing, elems, elems_done, next_cont):
+    def _qq_add_element(self, elems_done, splicing):
         if splicing:
             assert isinstance(self._expr , list), f"Cannot splice: {self._expr}"
-            elems_done += self._expr
+            return elems_done + self._expr
         else:
-            elems_done += [self._expr]
+            return elems_done + [self._expr]
+
+    def _apply_qq_elems(self, elems, elems_done, next_cont):
         match elems:
             case []:
                 self._expr, self._cont  = elems_done, next_cont
@@ -265,3 +264,5 @@ if __name__ == "__main__":
         4,
         ["!!", ["arr", 5, 6]],
         7]]) == [3, 4, 5, 6, 7]
+
+    i.run(["qq", ["add", ["!!", 5]]])
