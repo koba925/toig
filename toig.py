@@ -32,10 +32,28 @@ class Environment:
             assert False, f"name '{name}' is not defined"
 
     def extend(self, params, args):
-        new_env = Environment(self)
-        for param, arg in zip(params, args):
-            new_env.define(param, arg)
-        return new_env
+        def _extend(params, args):
+            if params == [] and args == []: return {}
+            assert len(params) > 0, \
+                f"Argument count doesn't match: `{params}, {args}` @ extend"
+            match params[0]:
+                case str(param):
+                    assert len(args) > 0, \
+                        f"Argument count doesn't match: `{params}, {args}` @ extend"
+                    env.define(param, args[0])
+                    _extend(params[1:], args[1:])
+                case ["*", rest]:
+                    rest_len = len(args) - len(params) + 1
+                    assert rest_len >= 0, \
+                        f"Argument count doesn't match: `{params}, {args}` @ extend"
+                    env.define(rest, args[:rest_len])
+                    _extend(params[1:], args[rest_len:])
+                case unexpected:
+                    assert False, f"Unexpected param at extend: {unexpected}"
+
+        env = Environment(self)
+        _extend(params, args)
+        return env
 
 from typing import Callable
 from dataclasses import dataclass
@@ -346,6 +364,10 @@ class Interpreter:
                     ["define", "__stdlib_while_loop", ["func", [],
                         ["when", ["!", "cnd"], ["seq", ["!", "body"], ["__stdlib_while_loop"]]]]],
                     ["__stdlib_while_loop"]]]]]])
+
+        self.run(["define", "__stdlib_is_name_before", "is_name"])
+        self.run(["define", "is_name", ["macro", ["e"], ["qq",
+                ["__stdlib_is_name_before", ["q", ["!", "e"]]]]]])
 
         self.run(["define", "for", ["macro", ["e", "l", "body"], ["qq",
                 ["scope", ["seq",
