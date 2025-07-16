@@ -4,9 +4,13 @@ class Environment:
         self._vals = {}
 
     def __repr__(self):
-        return f"{
-            "builtins" if "__builtins__" in self._vals else self._vals
-        } > {self._parent}"
+        if "__builtins__" in self._vals:
+            this_env = "builtins"
+        elif "__stdlib__" in self._vals:
+            this_env = "stdlib"
+        else:
+            this_env = self._vals
+        return f"{this_env} > {self._parent}"
 
     def define(self, name, val):
         self._vals[name] = val
@@ -26,6 +30,12 @@ class Environment:
             return self._parent.get(name)
         else:
             assert False, f"name '{name}' is not defined"
+
+    def extend(self, params, args):
+        new_env = Environment(self)
+        for param, arg in zip(params, args):
+            new_env.define(param, arg)
+        return new_env
 
 from typing import Callable
 from dataclasses import dataclass
@@ -60,6 +70,8 @@ class Evaluator:
                 self._expr = f
             case ["func", params, body]:
                 self._expr = ["closure", params, body, self._env]
+            case ["macro", params, body]:
+                self._expr = ["mclosure", params, body, self._env]
             case str(name):
                 self._expr = self._env.get(name)
             case ["q", expr]:
@@ -78,29 +90,35 @@ class Evaluator:
             case ["if", cnd_expr, thn_expr, els_expr]:
                 self._expr, self._cont = Expr(cnd_expr), \
                     ["$if", thn_expr, els_expr, self._cont]
-            case ["$apply", elems_val]:
-                self._apply_func(elems_val)
-            case [func_expr, *args_expr]:
-                self._expr, self._cont = Expr(func_expr), \
-                    ["$call", args_expr, [], self._env, self._cont]
+            case ["expand", [op_expr, *args_expr]]:
+                self._expr, self._cont = Expr(op_expr), \
+                    ["$expand", args_expr, self._env, self._cont]
+            case ["$apply", op_val, args_val]:
+                self._apply_op(op_val, args_val)
+            case [op_expr, *args_expr]:
+                self._expr, self._cont = Expr(op_expr), \
+                    ["$call", args_expr, self._env, self._cont]
             case _:
                 assert False, f"Invalid expression: {self._expr}"
 
-    def _apply_func(self, elems_val):
-        func_val, args_val = elems_val[0], elems_val[1:]
-        match func_val:
+    def _apply_op(self, op_val, args_val):
+        match op_val:
             case f if callable(f):
-                self._expr = func_val(args_val)
+                self._expr = op_val(args_val)
             case ["closure", params, body_expr, closure_env]:
-                closure_env = Environment(closure_env)
-                for param, arg in zip(params, args_val):
-                    closure_env.define(param, arg)
+                closure_env = closure_env.extend(params, args_val)
                 self._expr, self._env, self._cont = Expr(body_expr), closure_env, \
                     ["$restore_env", self._env, self._cont]
+            case ["mclosure", params, body_expr, mclosure_env]:
+                mclosure_env = mclosure_env.extend(params, args_val)
+                self._expr, self._env, self._cont = Expr(body_expr), mclosure_env, \
+                    ["$meval", self._env, self._cont]
             case _:
                 assert False, f"Invalid function: {self._expr}"
 
     def _apply_val(self):
+        assert not isinstance(self._expr, Expr), \
+            f"Invalid value: {self._expr}"
         match self._cont:
             case ["$qq", next_cont]:
                 self._apply_quasiquote(next_cont)
@@ -115,8 +133,16 @@ class Evaluator:
                 self._apply_seq(exprs, next_cont)
             case ["$if", thn_expr, els_expr, next_cont]:
                 self._apply_if(thn_expr, els_expr, next_cont)
-            case ["$call", elems_expr, elems_val, call_env, next_cont]:
-                self._apply_call(elems_expr, elems_val, call_env, next_cont)
+            case ["$call", args_expr, call_env, next_cont]:
+                self._apply_call(args_expr, call_env, next_cont)
+            case ["$args", op_expr, args_expr, args_val, call_env, next_cont]:
+                self._apply_args(op_expr, args_expr, args_val, call_env, next_cont)
+            case ["$expand", args_expr, call_env, next_cont]:
+                self._apply_expand(args_expr, call_env, next_cont)
+            case ["$meval", mclosure_env, next_cont]:
+                self._expr, self._env, self._cont = (
+                    Expr(self._expr), mclosure_env, next_cont
+                )
             case ["$restore_env", env, next_cont]:
                 self._env, self._cont = env, next_cont
             case _:
@@ -173,18 +199,41 @@ class Evaluator:
         else:
             self._expr, self._cont = Expr(els_expr), next_cont
 
-    def _apply_call(self, elems_expr, elems_val, call_env, next_cont):
-        elems_val += [self._expr]
-        if elems_expr == []:
+    def _apply_call(self, args_expr, call_env, next_cont):
+        match self._expr:
+            case ["mclosure", _params, _body_expr, _mclosure_env]:
+                self._expr, self._env, self._cont = (
+                    Expr(["$apply", self._expr, args_expr]), call_env, next_cont
+                )
+            case op_val:
+                self._apply_arg(op_val, args_expr, [], call_env, next_cont)
+
+    def _apply_args(self, op_val, args_expr, args_val, call_env, next_cont):
+        args_val += [self._expr]
+        self._apply_arg(op_val, args_expr, args_val, call_env, next_cont)
+
+    def _apply_arg(self, op_val, args_expr, args_val, call_env, next_cont):
+        if args_expr == []:
             self._expr, self._env, self._cont = (
-                Expr(["$apply", elems_val]), call_env, next_cont
+                Expr(["$apply", op_val, args_val]), call_env, next_cont
             )
         else:
             self._expr, self._env, self._cont = (
-                Expr(elems_expr[0]),
+                Expr(args_expr[0]),
                 call_env,
-                ["$call", elems_expr[1:], elems_val, call_env, next_cont]
+                ["$args", op_val, args_expr[1:], args_val, call_env, next_cont]
             )
+
+    def _apply_expand(self, args_expr, call_env, next_cont):
+        match self._expr:
+            case ["mclosure", params, body_expr, mclosure_env]:
+                mclosure_env = mclosure_env.extend(params, args_expr)
+                self._expr, self._env, self._cont = (
+                    Expr(body_expr), mclosure_env,
+                    ["$restore_env", call_env, next_cont]
+                )
+            case unexpected:
+                assert False, f"Cannot expand: {unexpected}"
 
 def is_name(val):
     return isinstance(val, str)
@@ -246,23 +295,75 @@ class Interpreter:
     def run(self, src):
         return Evaluator(Expr(src), self.env, ["$halt"]).eval()
 
+    def stdlib(self):
+        self.run(["define", "__stdlib__", None])
+
+        self.run(["define", "id", ["func", ["x"], "x"]])
+
+        self.run(["define", "inc", ["func", ["x"], ["add", "x", 1]]])
+        self.run(["define", "dec", ["func", ["x"], ["sub", "x", 1]]])
+
+        self.run(["define", "first", ["func", ["l"], ["get_at", "l", 0]]])
+        self.run(["define", "rest", ["func", ["l"], ["slice", "l", 1, None, None]]])
+        self.run(["define", "last", ["func", ["l"], ["get_at", "l", -1]]])
+        self.run(["define", "append", ["func", ["l", "a"], ["add", "l", ["arr", "a"]]]])
+        self.run(["define", "prepend", ["func", ["a", "l"], ["add", ["arr", "a"], "l"]]])
+
+        self.run(["define", "foldl", ["func", ["l", "f", "init"],
+                ["if", ["equal", "l", ["arr"]],
+                    "init",
+                    ["foldl", ["rest", "l"], "f", ["f", "init", ["first", "l"]]]]]])
+        self.run(["define", "unfoldl", ["func", ["x", "p", "h", "t"], ["seq",
+                ["define", "_unfoldl", ["func", ["x", "b"],
+                    ["if", ["p", "x"],
+                        "b",
+                        ["_unfoldl", ["t", "x"], ["add", "b", ["arr", ["h", "x"]]]]]]],
+                ["_unfoldl", "x", ["arr"]]]]])
+
+        self.run(["define", "map", ["func", ["l", "f"],
+                ["foldl", "l", ["func", ["acc", "e"], ["append", "acc", ["f", "e"]]], ["arr"]]]])
+        self.run(["define", "range", ["func", ["s", "e"],
+                ["unfoldl", "s", ["func", ["x"], ["greater_equal", "x", "e"]], "id", "inc"]]])
+
+        self.run(["define", "scope", ["macro", ["body"],
+                ["qq", [["func", [], ["!", "body"]]]]]])
+
+        self.run(["define", "when", ["macro", ["cnd", "thn"],
+                ["qq", ["if", ["!", "cnd"], ["!", "thn"], None]]]])
+
+        self.run(["define", "aif", ["macro", ["cnd", "thn", "els"],
+                ["qq", ["scope", ["seq",
+                    ["define", "it", ["!", "cnd"]],
+                    ["if", "it", ["!", "thn"], ["!", "els"]]]]]]])
+
+        self.run(["define", "and", ["macro", ["a", "b"],
+                ["qq", ["aif", ["!", "a"], ["!", "b"], "it"]]]])
+        self.run(["define", "or", ["macro", ["a", "b"],
+                ["qq", ["aif", ["!", "a"], "it", ["!", "b"]]]]])
+
+        self.run(["define", "while", ["macro", ["cnd", "body"], ["qq",
+                ["scope", ["seq",
+                    ["define", "__stdlib_while_loop", ["func", [],
+                        ["when", ["!", "cnd"], ["seq", ["!", "body"], ["__stdlib_while_loop"]]]]],
+                    ["__stdlib_while_loop"]]]]]])
+
+        self.run(["define", "for", ["macro", ["e", "l", "body"], ["qq",
+                ["scope", ["seq",
+                    ["define", "__stdlib_for_index", 0],
+                    ["define", ["!", "e"], None],
+                    ["while", ["less", "__stdlib_for_index", ["len", ["!", "l"]]], ["seq",
+                        ["assign", ["!", "e"], ["get_at", ["!", "l"], "__stdlib_for_index"]],
+                        ["!", "body"],
+                        ["assign", "__stdlib_for_index", ["inc", "__stdlib_for_index"]]]]]]]]])
+
+        self.env = Environment(self.env)
+
 if __name__ == "__main__":
     i = Interpreter()
+    i.stdlib()
 
-    assert i.run(["qq", 5]) == 5
-    assert i.run(["qq", ["add", 5, 6]]) == ["add", 5, 6]
-    assert i.run(["qq", ["mul", 4, ["add", 5, 6]]]) == ["mul", 4, ["add", 5, 6]]
-    assert i.run(["qq", ["mul", ["add", 5, 6], 7]]) == ["mul", ["add", 5, 6], 7]
-
-    assert i.run(["qq", ["!", ["add", 5, 6]]]) == 11
-    assert i.run(["qq", ["mul", 4, ["!", ["add", 5, 6]]]]) == ["mul", 4, 11]
-    assert i.run(["qq", ["mul", ["!", ["add", 5, 6]], 7]]) == ["mul", 11, 7]
-
-    assert i.run(["qq", ["add", ["!!", ["arr", 5, 6]]]]) == ["add", 5, 6]
-    assert i.run(["qq", [
-        ["!!", ["arr", 3]],
-        4,
-        ["!!", ["arr", 5, 6]],
-        7]]) == [3, 4, 5, 6, 7]
-
-    i.run(["qq", ["add", ["!!", 5]]])
+    i.run(["print", ["expand", [["macro", [], ["q", ["add", 5, 6]]]]]])
+    i.run(["print", ["expand", [
+        ["macro", ["a", "b"], ["qq", ["add", ["!", "a"], ["!", "b"]]]],
+        ["add", 5, 6], 7]]])
+    i.run(["print", [["macro", [], ["q", ["add", 5, 6]]]]])

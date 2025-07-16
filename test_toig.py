@@ -8,6 +8,7 @@ class TestToig(unittest.TestCase):
 
     def setUp(self):
         self.i = Interpreter()
+        self.i.stdlib()
 
     def go(self, src):
         return self.i.run(src)
@@ -16,6 +17,9 @@ class TestToig(unittest.TestCase):
         try: self.i.run(src)
         except AssertionError: return True
         else: return False
+
+    def expanded(self, src):
+        return self.i.run(["expand", src])
 
     def printed(self, src):
         with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
@@ -162,6 +166,21 @@ class TestToig(unittest.TestCase):
     def test_func(self):
         self.assertEqual(self.go([["func", ["n"], ["add", 5, "n"]], 6]), 11)
 
+    def test_macro(self):
+        self.assertEqual(self.expanded([["macro", [], ["q", ["add", 5, 6]]]]), ["add", 5, 6])
+        self.assertEqual(
+            self.expanded([
+                ["macro", ["a", "b"], ["qq", ["add", ["!", "a"], ["!","b"]]]],
+                ["add", 5, 6], 7]), ["add", ["add", 5, 6], 7])
+
+        # self.go(["define", "build_exp", ["macro", ["op", ["*", "r"]],
+        #         ["add", ["arr", "op"], "r"]]])
+        # self.assertEqual(self.expanded(["build_exp", "add"]), ["add"])
+        # self.assertEqual(self.expanded(["build_exp", "add", 5]), ["add", 5])
+        # self.assertEqual(self.expanded(["build_exp", "add", 5, 6]), ["add", 5, 6])
+
+        # self.assertTrue(self.fails([["macro", [["*", "r"], "a"], 5]]))
+
     def test_fib(self):
         self.go(["define", "fib", ["func", ["n"],
                 ["if", ["equal", "n", 0], 0,
@@ -190,6 +209,136 @@ class TestToig(unittest.TestCase):
         self.assertEqual(self.go(["counter2"]), 2)
         self.assertEqual(self.go(["counter1"]), 3)
         self.assertEqual(self.go(["counter2"]), 3)
+
+class TestStdlib(TestToig):
+    def test_id(self):
+        self.assertEqual(self.go(["id", ["add", 5, 6]]), 11)
+
+    def test_inc_dec(self):
+        self.assertEqual(self.go(["inc", ["add", 5, 6]]), 12)
+        self.assertEqual(self.go(["dec", ["add", 5, 6]]), 10)
+
+    def test_first_rest_last(self):
+        self.assertEqual(self.go(["first", ["arr", 5, 6, 7]]), 5)
+        self.assertEqual(self.go(["rest", ["arr", 5, 6, 7]]), [6, 7])
+        self.assertEqual(self.go(["last", ["arr", 5, 6, 7]]), 7)
+
+    def test_append_prepend(self):
+        self.assertEqual(self.go(["append", ["arr", 5, 6], ["inc", 7]]), [5, 6, 8])
+        self.assertEqual(self.go(["prepend", ["inc", 5], ["arr", 7, 8]]), [6, 7, 8])
+
+    def test_map(self):
+        self.assertEqual(self.go(["map", ["arr"], "inc"]), [])
+        self.assertEqual(self.go(["map", ["arr", 5, 6, 7], "inc"]), [6, 7, 8])
+
+    def test_range(self):
+        self.assertEqual(self.go(["range", 5, 5]), [])
+        self.assertEqual(self.go(["range", 5, 8]), [5, 6, 7])
+
+    def test_scope(self):
+        self.assertEqual(self.expanded(["scope", ["seq", ["define", "a", 5]]]),
+                         [["func", [], ["seq", ["define", "a", 5]]]])
+        self.assertEqual(self.printed(["seq",
+            ["define", "a", 5],
+            ["scope", ["seq", ["define", "a", 6], ["print", "a"]]],
+            ["print", "a"]]), (None, "6\n5\n"))
+
+    def test_when(self):
+        self.assertEqual(self.go(["expand",
+                            ["when", ["not", ["equal", "b", 0]], ["div", "a", "b"]]]),
+                         ["if", ["not", ["equal", "b", 0]], ["div", "a", "b"], None])
+        self.go(["define", "a", 30])
+        self.go(["define", "b", 5])
+        self.assertEqual(self.go(["when", ["not", ["equal", "b", 0]], ["div", "a", "b"]]), 6)
+        self.go(["assign", "b", 0])
+        self.assertEqual(self.go(["when", ["not", ["equal", "b", 0]], ["div", "a", "b"]]), None)
+
+    def test_aif(self):
+        self.assertEqual(self.go(["aif", ["inc", 5], ["inc", "it"], 8]), 7)
+        self.assertEqual(self.go(["aif", ["dec", 1], 5, "it"]), 0)
+
+    def test_and_or(self):
+        self.assertEqual(self.expanded(["and", ["equal", "a", 0], ["equal", "b", 0]]),
+                         ["aif", ["equal", "a", 0], ["equal", "b", 0], "it"])
+        self.assertEqual(self.go(["and", False, "nosuchvariable"]), False)
+        self.assertEqual(self.go(["and", None, "nosuchvariable"]), None)
+        self.assertEqual(self.go(["and", True, False]), False)
+        self.assertEqual(self.go(["and", True, None]), None)
+        self.assertEqual(self.go(["and", True, True]), True)
+        self.assertEqual(self.go(["and", True, 5]), 5)
+
+        self.assertEqual(self.expanded(["or", ["equal", "a", 0], ["equal", "b", 0]]),
+                         ["aif", ["equal", "a", 0], "it", ["equal", "b", 0]])
+        self.assertEqual(self.go(["or", False, False]), False)
+        self.assertEqual(self.go(["or", False, None]), None)
+        self.assertEqual(self.go(["or", False, True]), True)
+        self.assertEqual(self.go(["or", False, 5]), 5)
+        self.assertEqual(self.go(["or", True, "nosuchvariable"]), True)
+        self.assertEqual(self.go(["or", 5, "nosuchvariable"]), 5)
+
+        self.assertEqual(self.printed(["scope", ["seq",
+            ["define", "foo", 5],
+            ["print", ["or", "foo", ["q", "default"]]],
+            ["assign", "foo", None],
+            ["print", ["or", "foo", ["q", "default"]]]
+        ]]), (None, "5\ndefault\n"))
+
+        self.assertEqual(self.expanded(
+            ["and", ["or", ["equal", 5, 6], ["equal", 7, 7]], ["equal", 8, 8]]),
+            ["aif", ["or", ["equal", 5, 6], ["equal", 7, 7]], ["equal", 8, 8], "it"])
+        self.assertEqual(
+            self.go(["and", ["or", ["equal", 5, 6], ["equal", 7, 7]], ["equal", 8, 8]]),
+            True)
+
+    def test_while(self):
+        self.assertEqual(self.go(["expand",
+            ["while", ["less", "a", 5], ["seq",
+                ["assign", "b", ["add", "b", ["arr", "a"]]],
+                ["assign", "a", ["add", "a", 1]]]]]),
+            ["scope", ["seq",
+                ["define", "__stdlib_while_loop", ["func", [],
+                    ["when", ["less", "a", 5],
+                        ["seq",
+                            ["seq",
+                                ["assign", "b", ["add", "b", ["arr", "a"]]],
+                                ["assign", "a", ["add", "a", 1]]],
+                            ["__stdlib_while_loop"]]]]],
+                ["__stdlib_while_loop"]]])
+
+        self.go(["seq",
+            ["define", "a", 0],
+            ["define", "b", ["arr"]],
+            ["while", ["less", "a", 5], ["seq",
+                ["assign", "b", ["add", "b", ["arr", "a"]]],
+                ["assign", "a", ["add", "a", 1]]]]])
+        self.assertEqual(self.go("a"), 5)
+        self.assertEqual(self.go("b"), [0, 1, 2, 3, 4])
+        self.go(["seq",
+            ["define", "r", ["arr"]],
+            ["define", "c", ["arr"]],
+            ["while", ["less", ["len", "r"], 3],
+                ["seq",
+                    ["assign", "c", ["arr"]],
+                    ["while", ["less", ["len", "c"], 3],
+                        ["assign", "c", ["add", "c", ["arr", 0]]]],
+                    ["assign", "r", ["add", "r", ["arr", "c"]]]]]])
+        self.assertEqual(self.go("r"), [[0, 0, 0], [0, 0, 0], [0, 0, 0]])
+
+    def test_for(self):
+        self.assertEqual(self.go(["expand",
+            ["for", "i", ["arr", 5, 6, 7], ["assign", "sum", ["add", "sum", "i"]]]]),
+            ["scope", ["seq",
+                ["define", "__stdlib_for_index", 0],
+                ["define", "i", None],
+                ["while", ["less", "__stdlib_for_index", ["len", ["arr", 5, 6, 7]]], ["seq",
+                    ["assign", "i", ["get_at", ["arr", 5, 6, 7], "__stdlib_for_index"]],
+                    ["assign", "sum", ["add", "sum", "i"]],
+                    ["assign", "__stdlib_for_index", ["inc", "__stdlib_for_index"]]]]]])
+
+        self.assertEqual(self.go(["seq",
+            ["define", "sum", 0],
+            ["for", "i", ["arr", 5, 6, 7], ["assign", "sum", ["add", "sum", "i"]]],
+            "sum"]), 18)
 
 if __name__ == "__main__":
     unittest.main()
