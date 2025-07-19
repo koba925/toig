@@ -174,21 +174,6 @@ class TestCore(TestToig):
         self.assertEqual(self.go([["func", ["a", ["*", "rest"]], ["arr", "a", "rest"]], 5, 6]), [5, [6]])
         self.assertEqual(self.go([["func", ["a", ["*", "rest"]], ["arr", "a", "rest"]], 5, 6, 7]), [5, [6, 7]])
 
-    def test_macro(self):
-        self.assertEqual(self.expanded([["macro", [], ["q", ["add", 5, 6]]]]), ["add", 5, 6])
-        self.assertEqual(
-            self.expanded([
-                ["macro", ["a", "b"], ["qq", ["add", ["!", "a"], ["!","b"]]]],
-                ["add", 5, 6], 7]), ["add", ["add", 5, 6], 7])
-
-        self.go(["define", "build_exp", ["macro", ["op", ["*", "r"]],
-                ["add", ["arr", "op"], "r"]]])
-        self.assertEqual(self.expanded(["build_exp", "add"]), ["add"])
-        self.assertEqual(self.expanded(["build_exp", "add", 5]), ["add", 5])
-        self.assertEqual(self.expanded(["build_exp", "add", 5, 6]), ["add", 5, 6])
-
-        self.assertTrue(self.fails([["macro", [["*", "r"], "a"], 5]]))
-
     def test_closure_adder(self):
         self.go(["define", "make_adder", ["func", ["n"],
                 ["func", ["m"], ["add", "n", "m"]]]])
@@ -206,6 +191,38 @@ class TestCore(TestToig):
         self.assertEqual(self.go(["counter2"]), 2)
         self.assertEqual(self.go(["counter1"]), 3)
         self.assertEqual(self.go(["counter2"]), 3)
+
+    def test_macro(self):
+        self.assertEqual(self.expanded([["macro", [], ["q", ["add", 5, 6]]]]), ["add", 5, 6])
+        self.assertEqual(
+            self.expanded([
+                ["macro", ["a", "b"], ["qq", ["add", ["!", "a"], ["!","b"]]]],
+                ["add", 5, 6], 7]), ["add", ["add", 5, 6], 7])
+
+        self.go(["define", "build_exp", ["macro", ["op", ["*", "r"]],
+                ["add", ["arr", "op"], "r"]]])
+        self.assertEqual(self.expanded(["build_exp", "add"]), ["add"])
+        self.assertEqual(self.expanded(["build_exp", "add", 5]), ["add", 5])
+        self.assertEqual(self.expanded(["build_exp", "add", 5, 6]), ["add", 5, 6])
+
+        self.assertTrue(self.fails([["macro", [["*", "r"], "a"], 5]]))
+
+    def test_letcc(self):
+        self.assertEqual(self.go(["letcc", "skip-to", ["add", 5, 6]]), 11)
+        self.assertEqual(self.go(["letcc", "skip-to", ["add", ["skip-to", 5], 6]]), 5)
+        self.assertEqual(self.go(["add", 5, ["letcc", "skip-to", ["skip-to", 6]]]), 11)
+        self.assertEqual(self.go(["letcc", "skip1", ["add", ["skip1", ["letcc", "skip2", ["add", ["skip2", 5], 6]]], 7]]), 5)
+
+        self.go(["define", "inner", ["func", ["raise"], ["raise", 5]]])
+        self.go(["define", "outer", ["func", [],
+                [ "letcc", "raise", ["add", ["inner", "raise"], 6]]]])
+        self.assertEqual(self.go(["outer"]), 5)
+
+    def test_letcc_reuse(self):
+        self.go(["define", "add5", None])
+        self.assertEqual(self.go(["add", 5, ["letcc", "cc", ["seq", ["assign", "add5", "cc"], 6]]]), 11)
+        self.assertEqual(self.go(["add5", 7]), 12)
+        self.assertEqual(self.go(["add5", 8]), 13)
 
 class TestStdlib(TestToig):
     def test_id(self):
@@ -288,20 +305,6 @@ class TestStdlib(TestToig):
             True)
 
     def test_while(self):
-        self.assertEqual(self.go(["expand",
-            ["while", ["less", "a", 5], ["seq",
-                ["assign", "b", ["add", "b", ["arr", "a"]]],
-                ["assign", "a", ["add", "a", 1]]]]]),
-            ["scope", ["seq",
-                ["define", "__stdlib_while_loop", ["func", [],
-                    ["when", ["less", "a", 5],
-                        ["seq",
-                            ["seq",
-                                ["assign", "b", ["add", "b", ["arr", "a"]]],
-                                ["assign", "a", ["add", "a", 1]]],
-                            ["__stdlib_while_loop"]]]]],
-                ["__stdlib_while_loop"]]])
-
         self.go(["seq",
             ["define", "a", 0],
             ["define", "b", ["arr"]],
@@ -321,26 +324,107 @@ class TestStdlib(TestToig):
                     ["assign", "r", ["add", "r", ["arr", "c"]]]]]])
         self.assertEqual(self.go("r"), [[0, 0, 0], [0, 0, 0], [0, 0, 0]])
 
+    def test_awhile(self):
+        self.go(["seq",
+                ["define", "a", 0],
+                ["define", "b", ["arr"]],
+                ["awhile", ["less", "a", 10], ["seq",
+                    ["when", ["equal", "a", 5], ["break", None]],
+                    ["assign", "a", ["add", "a", 1]],
+                    ["when", ["equal", "a", 3], ["continue"]],
+                    ["assign", "b", ["add", "b", ["arr", "a"]]],
+                    ]]])
+        self.assertEqual(self.go("a"), 5)
+        self.assertEqual(self.go("b"), [1, 2, 4, 5])
+
+        self.go(["seq",
+                ["define", "r", ["arr"]],
+                ["define", "c", ["arr"]],
+                ["awhile", ["less", ["len", "r"], 3],
+                    ["seq",
+                        ["assign", "c", ["arr"]],
+                        ["awhile", ["less", ["len", "c"], 3],
+                            ["assign", "c", ["add", "c", ["arr", 0]]]],
+                        ["assign", "r", ["add", "r", ["arr", "c"]]]]]])
+        self.assertEqual(self.go("r"), [[0, 0, 0], [0, 0, 0], [0, 0, 0]])
+
     def test_is_name(self):
         self.assertEqual(self.go(["is_name", "a"]), True)
         self.assertEqual(self.go(["is_name", 5]), False)
         self.assertEqual(self.go(["is_name", ["neg", 5]]), False)
 
     def test_for(self):
-        self.assertEqual(self.go(["expand",
-            ["for", "i", ["arr", 5, 6, 7], ["assign", "sum", ["add", "sum", "i"]]]]),
-            ["scope", ["seq",
-                ["define", "__stdlib_for_index", 0],
-                ["define", "i", None],
-                ["while", ["less", "__stdlib_for_index", ["len", ["arr", 5, 6, 7]]], ["seq",
-                    ["assign", "i", ["get_at", ["arr", 5, 6, 7], "__stdlib_for_index"]],
-                    ["assign", "sum", ["add", "sum", "i"]],
-                    ["assign", "__stdlib_for_index", ["inc", "__stdlib_for_index"]]]]]])
+        self.assertEqual(self.go(["seq",
+            ["define", "sum", 0],
+            ["for", "i", ["arr", 5, 6, 7, 8, 9], ["seq",
+                ["assign", "sum", ["add", "sum", "i"]]]],
+            "sum"]), 35)
 
         self.assertEqual(self.go(["seq",
             ["define", "sum", 0],
-            ["for", "i", ["arr", 5, 6, 7], ["assign", "sum", ["add", "sum", "i"]]],
+            ["for", "i", ["arr", 5, 6, 7, 8, 9], ["seq",
+                ["when", ["equal", "i", 8], ["break", None]],
+                ["assign", "sum", ["add", "sum", "i"]]]],
             "sum"]), 18)
+
+        self.assertEqual(self.go(["seq",
+            ["define", "sum", 0],
+            ["for", "i", ["arr", 5, 6, 7, 8, 9], ["seq",
+                ["when", ["equal", "i", 7], ["continue"]],
+                ["assign", "sum", ["add", "sum", "i"]]]],
+            "sum"]), 28)
+
+    # see https://zenn.dev/link/comments/ea605f282d4c97
+    def test_letcc_generator(self):
+        self.go(["define", "g3", ["gfunc", ["n"], ["seq",
+                ["yield", "n"],
+                ["assign", "n", ["add", "n", 1]],
+                ["yield", "n"],
+                ["assign", "n", ["add", "n", 1]],
+                ["yield", "n"]]]])
+
+        self.go(["define", "gsum", ["func", ["gen"],
+                ["aif", ["gen"], ["add", "it", ["gsum", "gen"]], 0]]])
+        self.assertEqual(self.go(["gsum", ["g3", 2]]), 9)
+        self.assertEqual(self.go(["gsum", ["g3", 5]]), 18)
+
+        self.go(["define", "walk", ["gfunc", ["tree"], ["seq",
+                ["define", "_walk", ["func",["t"], ["seq",
+                    ["if", ["is_arr", ["first", "t"]],
+                        ["_walk", ["first", "t"]],
+                        ["yield", ["first", "t"]]],
+                    ["if", ["is_arr", ["last", "t"]],
+                        ["_walk", ["last", "t"]],
+                        ["yield", ["last", "t"]]]]]],
+                ["_walk", "tree"]]]])
+
+        self.go(["define", "gen", ["walk", ["q", [[[5, 6], 7], [8, [9, 10]]]]]])
+        self.assertEqual(self.printed(["awhile", ["gen"], ["print", "it"]]),
+                         (None, "5\n6\n7\n8\n9\n10\n"))
+
+    def test_agen(self):
+        self.go(["define", "gen", ["agen", ["q", [2, 3, 4]]]])
+        self.assertEqual(self.go(["gen"]), 2)
+        self.assertEqual(self.go(["gen"]), 3)
+        self.assertEqual(self.go(["gen"]), 4)
+        self.assertEqual(self.go(["gen"]), None)
+
+        self.go(["define", "gen0", ["agen", ["q", []]]])
+        self.assertEqual(self.go(["gen"]), None)
+
+    def test_gfor(self):
+        self.assertEqual(self.printed(["gfor", "n", ["agen", ["q", []]],
+                                    ["print", "n"]]),
+                         (None, ""))
+        self.assertEqual(self.printed(["gfor", "n", ["agen", ["q", [2, 3, 4]]],
+                                    ["print", "n"]]),
+                         (None, "2\n3\n4\n"))
+        self.assertEqual(self.printed(["gfor", "n", ["agen", ["q", [2, 3, 4, 5, 6]]],
+                                    ["seq",
+                                        ["when", ["equal", "n", 5], ["break", None]],
+                                        ["when", ["equal", "n", 3], ["continue"]],
+                                        ["print", "n"]]]),
+                         (None, "2\n4\n"))
 
 class TestProblems(TestToig):
 
@@ -446,6 +530,132 @@ class TestProblems(TestToig):
         self.assertEqual(self.go(["fib", 2]), 1)
         self.assertEqual(self.go(["fib", 3]), 2)
         self.assertEqual(self.go(["fib", 10]), 55)
+
+    def test_letcc_return(self):
+        self.go(["define", "early-return", ["func", ["n"],
+                ["letcc", "return", ["seq",
+                    ["if", ["equal", "n", 1], ["return", 5], 6],
+                    7]]]])
+        self.assertEqual(self.go(["early-return", 1]), 5)
+        self.assertEqual(self.go(["early-return", 2]), 7)
+
+        self.go(["define", "runc", ["macro", ["params", "body"], ["qq",
+                ["func", ["!", "params"], ["letcc", "return", ["!", "body"]]]]]])
+        self.go(["define", "early_return_runc", ["runc", ["n"], ["seq",
+                ["if", ["equal", "n", 1], ["return", 5], 6],
+                7]]])
+        self.assertEqual(self.go(["early_return_runc", 1]), 5)
+        self.assertEqual(self.go(["early_return_runc", 2]), 7)
+
+        self.go(["define", "early_return_runc2", ["runc", ["n"], ["seq",
+                ["if", ["equal", ["early_return_runc", "n"], 5], ["return", 6], 7],
+                8]]])
+        self.assertEqual(self.go(["early_return_runc2", 1]), 6)
+        self.assertEqual(self.go(["early_return_runc2", 2]), 8)
+
+    def test_letcc_escape(self):
+        self.go(["define", "riskyfunc", ["func", ["n", "escape"], ["seq",
+                ["if", ["equal", "n", 1], ["escape", 5], 6],
+                7]]])
+        self.go(["define", "middlefunc", ["func", ["n", "escape"], ["seq",
+                ["riskyfunc", "n", "escape"],
+                8]]])
+        self.go(["define", "parentfunc", ["func", ["n"],
+                ["letcc", "escape", ["middlefunc", "n", "escape"]]]])
+        self.assertEqual(self.go(["parentfunc", 1]), 5)
+        self.assertEqual(self.go(["parentfunc", 2]), 8)
+
+    def test_letcc_except(self):
+        self.go(["define", "raise", None])
+        self.go(["define", "riskyfunc", ["func", ["n"], ["seq",
+                ["if", ["equal", "n", 1], ["raise", 5], None],
+                ["print", 6]]]])
+        self.go(["define", "middlefunc", ["func", ["n"], ["seq",
+                ["riskyfunc", "n"],
+                ["print", 7]]]])
+        self.go(["define", "parentfunc", ["func", ["n"], ["seq",
+                ["letcc", "escape", ["seq",
+                    ["assign", "raise", ["func", ["e"], ["escape", ["seq",
+                        ["print", "e"]]]]],
+                    ["middlefunc", "n"],
+                    ["print", 8]]],
+                ["print", 9]]]])
+        self.assertEqual(self.printed(["parentfunc", 1]), (None, "5\n9\n"))
+        self.assertEqual(self.printed(["parentfunc", 2]), (None, "6\n7\n8\n9\n"))
+
+    def test_letcc_try(self):
+        self.go(["define", "raise", ["func", ["e"], ["error", ["q", "Raised outside of try:"], "e"]]])
+        self.go(["define", "try", ["macro", ["try-expr", "_", "exc-var", "exc-expr"], ["qq",
+                ["scope", ["seq",
+                    ["define", "prev-raise", "raise"],
+                    ["letcc", "escape", ["seq",
+                        ["assign", "raise", ["func", [["!", "exc-var"]],
+                            ["escape", ["!", "exc-expr"]]]],
+                        ["!", "try-expr"]]],
+                    ["assign", "raise", "prev-raise"]]]]]])
+
+        self.go(["define", "riskyfunc", ["func", ["n"], ["seq",
+                ["if", ["equal", "n", 1], ["raise", 5], None],
+                ["print", 6]]]])
+        self.go(["define", "middlefunc", ["func", ["n"], ["seq",
+                ["riskyfunc", "n"],
+                ["print", 7]]]])
+        self.go(["define", "parentfunc", ["func", ["n"], ["seq",
+                ["try", ["seq",
+                    ["middlefunc", "n"],
+                    ["print", 8]],
+                    "except", "e", ["seq",
+                        ["print", "e"]]],
+                ["print", 9]]]])
+
+        self.assertEqual(self.printed(["parentfunc", 1]), (None, "5\n9\n"))
+        self.assertEqual(self.printed(["parentfunc", 2]), (None, "6\n7\n8\n9\n"))
+
+        self.go(["define", "nested", ["func", ["n"], ["seq",
+                ["try", ["seq",
+                    ["if", ["equal", "n", 1], ["raise", 5], None],
+                    ["print", 6],
+                    ["try", ["seq",
+                        ["if", ["equal", "n", 2], ["raise", 7], None],
+                        ["print", 8]],
+                        "except", "e", ["seq",
+                            ["print", ["q", "exception inner try:"], "e"]]],
+                    ["if", ["equal", "n", 3], ["raise", 9], None],
+                    ["print", 10]],
+                    "except", "e", ["seq",
+                        ["print", ["q", "exception outer try:"], "e"]]],
+                ["print", 11]]]])
+
+        self.assertEqual(self.printed(["nested", 1]), (None, "exception outer try: 5\n11\n"))
+        self.assertEqual(self.printed(["nested", 2]), (None, "6\nexception inner try: 7\n10\n11\n"))
+        self.assertEqual(self.printed(["nested", 3]), (None, "6\n8\nexception outer try: 9\n11\n"))
+        self.assertEqual(self.printed(["nested", 4]), (None, "6\n8\n10\n11\n"))
+
+        self.assertTrue(self.fails(["raise", 5]))
+
+    def test_letcc_concurrent(self):
+        self.go(["define", "tasks", ["arr"]])
+        self.go(["define", "add-task", ["func", ["t"],
+                ["assign", "tasks", ["append", "tasks", "t"]]]])
+        self.go(["define", "start", ["func", [],
+                ["while", ["not_equal", "tasks", ["arr"]], ["seq",
+                    ["define", "next-task", ["first", "tasks"]],
+                    ["assign", "tasks", ["rest", "tasks"]],
+                    ["when", ["next-task"], ["add-task", "next-task"]]]]]])
+
+        self.go(["define", "three-times", ["gfunc", ["n"], ["seq",
+                ["print", "n"],
+                ["yield", True],
+                ["print", "n"],
+                ["yield", True],
+                ["print", "n"],
+            ]]])
+
+        self.go(["add-task", ["three-times", 5]])
+        self.go(["add-task", ["three-times", 6]])
+        self.go(["add-task", ["three-times", 7]])
+
+        self.assertEqual(self.printed(["start"]), (None, "5\n6\n7\n5\n6\n7\n5\n6\n7\n"))
 
 if __name__ == "__main__":
     unittest.main()

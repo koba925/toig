@@ -108,6 +108,9 @@ class Evaluator:
             case ["if", cnd_expr, thn_expr, els_expr]:
                 self._expr, self._cont = Expr(cnd_expr), \
                     ["$if", thn_expr, els_expr, self._cont]
+            case ["letcc", name, body]:
+                self._env.define(name, ["cont", self._env, self._cont])
+                self._expr = Expr(body)
             case ["expand", [op_expr, *args_expr]]:
                 self._expr, self._cont = Expr(op_expr), \
                     ["$expand", args_expr, self._env, self._cont]
@@ -131,6 +134,9 @@ class Evaluator:
                 mclosure_env = mclosure_env.extend(params, args_val)
                 self._expr, self._env, self._cont = Expr(body_expr), mclosure_env, \
                     ["$meval", self._env, self._cont]
+            case ["cont", env, cont]:
+                val = args_val[0] if args_val else None
+                self._expr, self._env, self._cont = val, env, cont
             case _:
                 assert False, f"Invalid function: {self._expr}"
 
@@ -227,7 +233,7 @@ class Evaluator:
                 self._apply_arg(op_val, args_expr, [], call_env, next_cont)
 
     def _apply_args(self, op_val, args_expr, args_val, call_env, next_cont):
-        args_val += [self._expr]
+        args_val = args_val + [self._expr]
         self._apply_arg(op_val, args_expr, args_val, call_env, next_cont)
 
     def _apply_arg(self, op_val, args_expr, args_val, call_env, next_cont):
@@ -378,14 +384,80 @@ class Interpreter:
                         ["!", "body"],
                         ["assign", "__stdlib_for_index", ["inc", "__stdlib_for_index"]]]]]]]]])
 
+
+        self.run(["define", "while", ["macro", ["cnd", "body"], ["qq",
+                ["scope", ["seq",
+                    ["define", "__stdlib_while_val", None],
+                    ["define", "loop", ["func", [], ["seq",
+                        ["letcc", "continue", None],
+                        ["if", ["!", "cnd"],
+                            ["seq",
+                                ["assign", "__stdlib_while_val", ["!", "body"]],
+                                ["loop"]],
+                            "__stdlib_while_val"]]]],
+                    ["letcc", "break", ["loop"]]]]]]])
+
+        self.run(["define", "awhile", ["macro", ["cnd", "body"], ["qq",
+                ["scope", ["seq",
+                    ["define", "__stdlib_awhile_val", None],
+                    ["define", "loop", ["func", [], ["seq",
+                        ["letcc", "continue", None],
+                        ["define", "it", ["!", "cnd"]],
+                        ["if", "it",
+                            ["seq",
+                                ["assign", "__stdlib_awhile_val", ["!", "body"]],
+                                ["loop"]],
+                            "__stdlib_awhile_val"]]]],
+                    ["letcc", "break", ["loop"]]]]]]])
+
+        self.run(["define", "for", ["macro", ["e", "l", "body"], ["qq",
+                ["scope", ["seq",
+                    ["define", "__stdlib_for_index", -1],
+                    ["define", ["!", "e"], None],
+                    ["define", "__stdlib_for_val", None],
+                    ["define", "loop", ["func", [], ["seq",
+                        ["letcc", "continue", None],
+                        ["assign", "__stdlib_for_index", ["inc", "__stdlib_for_index"]],
+                        ["if", ["less", "__stdlib_for_index", ["len", ["!", "l"]]],
+                            ["seq",
+                                ["assign", ["!", "e"], ["get_at", ["!", "l"], "__stdlib_for_index"]],
+                                ["define", "__stdlib_for_val", ["!", "body"]],
+                                ["loop"]],
+                            "__stdlib_for_val"]]]],
+                    ["letcc", "break", ["loop"]]]]]]])
+
+        self.run(["define", "gfunc", ["macro", ["params", "body"], ["qq",
+                ["func", ["!", "params"], ["seq",
+                    ["define", "yd", None],
+                    ["define", "nx", None],
+                    ["define", "yield", ["func", ["x"],
+                        ["letcc", "cc", ["seq",
+                            ["assign", "nx", "cc"],
+                            ["yd", "x"]]]]],
+                    ["define", "next", ["func", [],
+                        ["letcc", "cc", ["seq",
+                            ["assign", "yd", "cc"],
+                            ["nx", None]]]]],
+                    ["assign", "nx", ["func", ["_"], ["seq",
+                        ["!", "body"],
+                        ["yield", None]]]],
+                    "next"]]]]])
+
+        self.run(["define", "agen", ["gfunc", ["a"], ["for", "e", "a", ["yield", "e"]]]])
+
+        self.run(["define", "gfor", ["macro", ["e", "gen", "body"], ["qq",
+                ["scope", ["seq",
+                    ["define", "__stdlib_gfor_gen", ["!", "gen"]],
+                    ["define", ["!", "e"], None],
+                    ["while", ["not_equal", ["assign", ["!", "e"], ["__stdlib_gfor_gen"]], None],
+                        ["!", "body"]]]]]]])
         self.env = Environment(self.env)
 
 if __name__ == "__main__":
     i = Interpreter()
     i.stdlib()
 
-    i.run(["print", ["expand", [["macro", [], ["q", ["add", 5, 6]]]]]])
-    i.run(["print", ["expand", [
-        ["macro", ["a", "b"], ["qq", ["add", ["!", "a"], ["!", "b"]]]],
-        ["add", 5, 6], 7]]])
-    i.run(["print", [["macro", [], ["q", ["add", 5, 6]]]]])
+    i.run(["define", "add5", None])
+    print(i.run(["add", 5, ["letcc", "cc", ["seq", ["assign", "add5", "cc"], 6]]]))
+    print(i.run(["add5", 7]))
+    print(i.run(["add5", 8]))
