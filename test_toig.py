@@ -154,6 +154,13 @@ class TestCore(TestToig):
 
         self.assertEqual(self.go(["add", ["arr", 5], ["arr", 6]]), [5, 6])
 
+    def test_array_set(self):
+        self.go(["define", "a", ["arr", 5, 6, 7, 8, 9]])
+        self.assertEqual(self.go(["assign", ["get_at", "a", 1], True]), True)
+        self.assertEqual(self.go("a"), [5, True, 7, 8, 9])
+        self.assertEqual(self.go(["assign", ["slice", "a", 3, None, None], ["arr", 10, 11]]), [10, 11])
+        self.assertEqual(self.go("a"), [5, True, 7, 10, 11])
+
     def test_print(self):
         self.assertEqual(self.printed(["print", None]), (None, "None\n"))
         self.assertEqual(self.printed(["print", 5]), (None, "5\n"))

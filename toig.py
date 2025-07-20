@@ -99,9 +99,8 @@ class Evaluator:
             case ["define", name, val_expr]:
                 self._expr, self._cont = Expr(val_expr), \
                     ["$define", name, self._cont]
-            case ["assign", name, val_expr]:
-                self._expr, self._cont = Expr(val_expr), \
-                    ["$assign", name, self._cont]
+            case ["assign", left, val_expr]:
+                self._eval_assign(left, val_expr)
             case ["seq", *exprs]:
                 self._expr, self._cont = None, \
                     ["$seq", exprs, self._cont]
@@ -121,6 +120,18 @@ class Evaluator:
                     ["$call", args_expr, self._env, self._cont]
             case _:
                 assert False, f"Invalid expression: {self._expr}"
+
+    def _eval_assign(self, left, val_expr):
+        match left:
+            case name if is_name(name):
+                self._expr, self._cont = Expr(val_expr), \
+                    ["$assign", name, self._cont]
+            case ["get_at", arr, idx]:
+                self._expr = Expr(["set_at", arr, idx, val_expr])
+            case ["slice", arr, start, end, step]:
+                self._expr = Expr(["set_slice", arr, start, end, step, val_expr])
+            case _:
+                assert False, f"Invalid assign target: {left} @ eval_assign"
 
     def _apply_op(self, op_val, args_val):
         match op_val:
