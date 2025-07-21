@@ -73,7 +73,9 @@ def scanner(src):
             advance()
         line = "".join(line)
         if line.startswith("rule "):
-            rule = parse(line[5:])
+            rule = parse(line[5:]).elems
+            assert isinstance(rule, list) and len(rule) >= 2, \
+                f"Invalid rule: {rule} @ comment"
             add_rule(rule[1], rule[2:])
         return next_token()
 
@@ -194,7 +196,7 @@ def parse(src):
             start = expression()
         if current_token == "]":
             advance()
-            return ["getat", target, start]
+            return ["get_at", target, start]
 
         if current_token != ":":
             assert False, f"Invalid index/slice: `{current_token}` @ index_slice"
@@ -320,205 +322,292 @@ def parse(src):
     expr = expression()
     assert current_token == "$EOF", \
         f"Unexpected token at end: `{current_token}` @ parse"
-    return expr
+    return Expr(expr)
 
-# environment
+class Environment:
+    def __init__(self, parent=None):
+        self._parent = parent
+        self._vals = {}
 
-def new_env(): return {"parent": None, "vals": {}}
-def new_scope(env): return {"parent": env, "vals": {}}
+    def __repr__(self):
+        if "__builtins__" in self._vals:
+            this_env = "builtins"
+        elif "__stdlib__" in self._vals:
+            this_env = "stdlib"
+        else:
+            this_env = self._vals
+        return f"{this_env} > {self._parent}"
 
-top_env = new_env()
+    def define(self, name, val):
+        self._vals[name] = val
 
-def define(env, name, val):
-    # assert name not in env["vals"], \
-    #     f"Variable already defined: `{name}` @ define"
-    env["vals"][name] = val
-    return val
+    def assign(self, name, val):
+        if name in self._vals:
+            self._vals[name] = val
+        elif self._parent is not None:
+            self._parent.assign(name, val)
+        else:
+            assert False, f"name '{name}' is not defined"
 
-def assign(env, name, val):
-    assert env is not None, f"Undefined variable: `{name}` @ assign."
-    if name in env["vals"]:
-        env["vals"][name] = val
-        return val
-    else:
-        return assign(env["parent"], name, val)
+    def get(self, name):
+        if name in self._vals:
+            return self._vals[name]
+        elif self._parent is not None:
+            return self._parent.get(name)
+        else:
+            assert False, f"name '{name}' is not defined"
 
-def get(env, name):
-    assert env is not None, f"Undefined variable: `{name}` @ get"
-    if name in env["vals"]:
-        return env["vals"][name]
-    else:
-        return get(env["parent"], name)
+    def extend(self, params, args):
+        def _extend(params, args):
+            if params == [] and args == []: return {}
+            assert len(params) > 0, \
+                f"Argument count doesn't match: `{params}, {args}` @ extend"
+            match params[0]:
+                case str(param):
+                    assert len(args) > 0, \
+                        f"Argument count doesn't match: `{params}, {args}` @ extend"
+                    env.define(param, args[0])
+                    _extend(params[1:], args[1:])
+                case ["*", rest]:
+                    rest_len = len(args) - len(params) + 1
+                    assert rest_len >= 0, \
+                        f"Argument count doesn't match: `{params}, {args}` @ extend"
+                    env.define(rest, args[:rest_len])
+                    _extend(params[1:], args[rest_len:])
+                case unexpected:
+                    assert False, f"Unexpected param at extend: {unexpected}"
 
-def print_env(env={}):
-    if env == {}: env = top_env
-    if env is None: return
-    print(env["vals"])
-    print_env(env["parent"])
+        env = Environment(self)
+        _extend(params, args)
+        return env
 
-# CPS operations
+from typing import Callable
+from dataclasses import dataclass
 
-def foldl_cps(l, f, init, cont):
-    return lambda: (
-        cont(init) if l == [] else
-        f(init, l[0], lambda r: foldl_cps(l[1:], f, r, cont)))
+ValueType = None | bool | int | Callable | list
 
-def map_cps(l, f, cont):
-    return lambda: foldl_cps(l,
-        lambda acc, e, cont: f(e, lambda r: cont(acc + [r])),
-        [], cont)
+@dataclass
+class Expr:
+    elems: ValueType
 
-# evaluator
+class Evaluator:
+    def __init__(self, expr, env, cont):
+        self._expr: Expr | ValueType = expr
+        self._env = env
+        self._cont = cont
 
-class Skip(Exception):
-    def __init__(self, skip): self.skip = skip
+    def eval(self):
+        while True:
+            if isinstance(self._expr, Expr):
+                self._eval_expr()
+            elif self._cont == ["$halt"]:
+                return self._expr
+            else:
+                self._apply_val()
 
-def eval_expr(expr, env, cont):
-    # print("eval_expr:", expr)
-    match expr:
-        case None | bool(_) | int(_): return lambda: cont(expr)
-        case str(name): return lambda: cont(get(env, name))
-        case ["q", elem]: return lambda: cont(elem)
-        case ["qq", elem]: return lambda: eval_quasiquote(elem, env, cont)
-        case ["func", params, body]:
-            return lambda: cont(["func", params, body, env])
-        case ["macro", params, body]:
-            return lambda: cont(["macro", params, body, env])
-        case ["define", name, expr]:
-            assert is_name(name), f"Invalid name: `{name}` @ eval_define"
-            return lambda: eval_expr(expr, env,
-                lambda val: cont(define(env, name, val)))
-        case ["assign", left, expr]:
-            return lambda: eval_assign(left, expr, env, cont)
-        case ["scope", expr]:
-            return lambda: eval_expr(expr, new_scope(env), cont)
-        case ["seq", *exprs]:
-            return lambda: foldl_cps(exprs,
-                lambda _, expr, c: eval_expr(expr, env, c),
-                None, cont)
-        case ["if", cnd_expr, thn_expr, els_expr]:
-            return lambda: eval_expr(cnd_expr, env, lambda cnd:
-                eval_expr(thn_expr, env, cont) if cnd else
-                eval_expr(els_expr, env, cont))
-        case ["letcc", name, body]:
-            def skip(args): raise Skip(lambda: cont(args[0] if len(args) > 0 else None))
-            return lambda: apply(["func", [name], body, env], [skip], cont)
-        case ["expand", [op_expr, *args_expr]]:
-            return lambda: eval_expand(op_expr, args_expr, env, cont)
-        case [op_expr, *args_expr]:
-            return lambda: eval_op(op_expr, args_expr, env, cont)
-        case unexpected:
-            assert False, f"Unexpected expression: {unexpected} @ eval"
-
-def eval_assign(left, expr, env, cont):
-    match left:
-        case str(name):
-            return lambda: eval_expr(expr, env, lambda val: cont(assign(env, name, val)))
-        case ["getat", arr, idx]:
-            return eval_expr(["setat", arr, idx, expr], env, cont)
-        case ["slice", arr, start, end, step]:
-            return eval_expr(["set_slice", arr, start, end, step, expr], env, cont)
-    assert False, f"Invalid assign target: {left} @ eval_assign"
-
-def eval_quasiquote(expr, env, cont):
-    def splice(quoted, elem_vals, cont):
-        assert isinstance(elem_vals, list), \
-            f"Cannot splice: {elem_vals} @ eval_quasiquote"
-        return lambda: cont(quoted + elem_vals)
-
-    def unquote_splice(quoted, elem, cont):
-        match elem:
-            case ["!!", e]:
-                return lambda: eval_expr(e, env,
-                    lambda e_val: splice(quoted, e_val, cont))
+    def _eval_expr(self):
+        assert isinstance(self._expr, Expr)
+        match self._expr.elems:
+            case bool(_) | int(_) | None:
+                self._expr = self._expr.elems
+            case f if callable(f):
+                self._expr = f
+            case ["func", params, body]:
+                self._expr = ["closure", params, body, self._env]
+            case ["macro", params, body]:
+                self._expr = ["mclosure", params, body, self._env]
+            case str(name):
+                self._expr = self._env.get(name)
+            case ["q", expr]:
+                self._expr = expr
+            case ["qq", expr]:
+                self._expr, self._cont = expr, ["$qq", self._cont]
+            case ["define", name, val_expr]:
+                assert is_name(name), f"Invalid name: `{name}`"
+                self._expr, self._cont = Expr(val_expr), \
+                    ["$define", name, self._cont]
+            case ["assign", left, val_expr]:
+                self._eval_assign(left, val_expr)
+            case ["scope", expr]:
+                self._expr, self._env, self._cont = (
+                    Expr(expr), Environment(self._env),
+                    ["$restore_env", self._env, self._cont])
+            case ["seq", *exprs]:
+                self._expr, self._cont = None, \
+                    ["$seq", exprs, self._cont]
+            case ["if", cnd_expr, thn_expr, els_expr]:
+                self._expr, self._cont = Expr(cnd_expr), \
+                    ["$if", thn_expr, els_expr, self._cont]
+            case ["letcc", name, body]:
+                self._env.define(name, ["cont", self._env, self._cont])
+                self._expr = Expr(body)
+            case ["expand", [op_expr, *args_expr]]:
+                self._expr, self._cont = Expr(op_expr), \
+                    ["$expand", args_expr, self._env, self._cont]
+            case ["$apply", op_val, args_val]:
+                self._apply_op(op_val, args_val)
+            case [op_expr, *args_expr]:
+                self._expr, self._cont = Expr(op_expr), \
+                    ["$call", args_expr, self._env, self._cont]
             case _:
-                return lambda: eval_quasiquote(elem, env,
-                    lambda elem_val: cont(quoted + [elem_val]))
+                assert False, f"Invalid expression: {self._expr}"
 
-    match expr:
-        case ["!", elem]: return lambda: eval_expr(elem, env, cont)
-        case [*elems]: return lambda: foldl_cps(elems, unquote_splice, [], cont)
-        case _: return lambda: cont(expr)
+    def _eval_assign(self, left, val_expr):
+        match left:
+            case name if is_name(name):
+                self._expr, self._cont = Expr(val_expr), \
+                    ["$assign", name, self._cont]
+            case ["get_at", arr, idx]:
+                self._expr = Expr(["set_at", arr, idx, val_expr])
+            case ["slice", arr, start, end, step]:
+                self._expr = Expr(["set_slice", arr, start, end, step, val_expr])
+            case _:
+                assert False, f"Invalid assign target: {left} @ eval_assign"
 
-def eval_expand(op_expr, args_expr, env, cont):
-    def _eval_expand(op):
-        match op:
-            case ["macro", params, body, macro_env]:
-                return lambda: expand(body, params, args_expr, macro_env, cont)
+    def _apply_op(self, op_val, args_val):
+        match op_val:
+            case f if callable(f):
+                self._expr = op_val(args_val)
+            case ["closure", params, body_expr, closure_env]:
+                closure_env = closure_env.extend(params, args_val)
+                self._expr, self._env, self._cont = Expr(body_expr), closure_env, \
+                    ["$restore_env", self._env, self._cont]
+            case ["mclosure", params, body_expr, mclosure_env]:
+                mclosure_env = mclosure_env.extend(params, args_val)
+                self._expr, self._env, self._cont = Expr(body_expr), mclosure_env, \
+                    ["$meval", self._env, self._cont]
+            case ["cont", env, cont]:
+                val = args_val[0] if args_val else None
+                self._expr, self._env, self._cont = val, env, cont
+            case _:
+                assert False, f"Invalid function: {self._expr}"
+
+    def _apply_val(self):
+        assert not isinstance(self._expr, Expr), \
+            f"Invalid value: {self._expr}"
+        match self._cont:
+            case ["$qq", next_cont]:
+                self._apply_quasiquote(next_cont)
+            case ["$qq_elems", splicing, elems, elems_done, next_cont]:
+                elems_done = self._qq_add_element(elems_done,splicing)
+                self._apply_qq_elems(elems, elems_done, next_cont)
+            case ["$define", name, next_cont]:
+                self._apply_define(name, next_cont)
+            case ["$assign", name, next_cont]:
+                self._apply_assign(name, next_cont)
+            case ["$seq", exprs, next_cont]:
+                self._apply_seq(exprs, next_cont)
+            case ["$if", thn_expr, els_expr, next_cont]:
+                self._apply_if(thn_expr, els_expr, next_cont)
+            case ["$call", args_expr, call_env, next_cont]:
+                self._apply_call(args_expr, call_env, next_cont)
+            case ["$args", op_expr, args_expr, args_val, call_env, next_cont]:
+                self._apply_args(op_expr, args_expr, args_val, call_env, next_cont)
+            case ["$expand", args_expr, call_env, next_cont]:
+                self._apply_expand(args_expr, call_env, next_cont)
+            case ["$meval", mclosure_env, next_cont]:
+                self._expr, self._env, self._cont = (
+                    Expr(self._expr), mclosure_env, next_cont
+                )
+            case ["$restore_env", env, next_cont]:
+                self._env, self._cont = env, next_cont
+            case _:
+                assert False, f"Invalid continuation: {self._cont}"
+
+    def _apply_quasiquote(self, next_cont):
+        match self._expr:
+            case ["!", expr]:
+                self._expr = Expr(expr)
+                self._cont = next_cont
+            case [*elems]:
+                self._apply_qq_elems(elems, [], next_cont)
+            case _:
+                self._cont = next_cont
+
+    def _qq_add_element(self, elems_done, splicing):
+        if splicing:
+            assert isinstance(self._expr , list), f"Cannot splice: {self._expr}"
+            return elems_done + self._expr
+        else:
+            return elems_done + [self._expr]
+
+    def _apply_qq_elems(self, elems, elems_done, next_cont):
+        match elems:
+            case []:
+                self._expr, self._cont  = elems_done, next_cont
+            case [["!!", elem], *rest]:
+                self._expr = Expr(elem)
+                self._cont = ["$qq_elems", True, rest, elems_done, next_cont]
+            case [first, *rest]:
+                self._expr = first
+                self._cont = ["$qq", ["$qq_elems", False, rest, elems_done, next_cont]]
+            case _:
+                assert False, f"Invalid quasiquote elements: {elems}"
+
+    def _apply_define(self, name, next_cont):
+        self._env.define(name, self._expr)
+        self._cont = next_cont
+
+    def _apply_assign(self, name, next_cont):
+        self._env.assign(name, self._expr)
+        self._cont = next_cont
+
+    def _apply_seq(self, exprs, next_cont):
+        if exprs == []:
+            self._cont = next_cont
+        else:
+            self._expr, self._cont = Expr(exprs[0]), \
+                ["$seq", exprs[1:], next_cont]
+
+    def _apply_if(self, thn_expr, els_expr, next_cont):
+        if self._expr:
+            self._expr, self._cont = Expr(thn_expr), next_cont
+        else:
+            self._expr, self._cont = Expr(els_expr), next_cont
+
+    def _apply_call(self, args_expr, call_env, next_cont):
+        match self._expr:
+            case ["mclosure", _params, _body_expr, _mclosure_env]:
+                self._expr, self._env, self._cont = (
+                    Expr(["$apply", self._expr, args_expr]), call_env, next_cont
+                )
+            case op_val:
+                self._apply_arg(op_val, args_expr, [], call_env, next_cont)
+
+    def _apply_args(self, op_val, args_expr, args_val, call_env, next_cont):
+        args_val = args_val + [self._expr]
+        self._apply_arg(op_val, args_expr, args_val, call_env, next_cont)
+
+    def _apply_arg(self, op_val, args_expr, args_val, call_env, next_cont):
+        if args_expr == []:
+            self._expr, self._env, self._cont = (
+                Expr(["$apply", op_val, args_val]), call_env, next_cont
+            )
+        else:
+            self._expr, self._env, self._cont = (
+                Expr(args_expr[0]),
+                call_env,
+                ["$args", op_val, args_expr[1:], args_val, call_env, next_cont]
+            )
+
+    def _apply_expand(self, args_expr, call_env, next_cont):
+        match self._expr:
+            case ["mclosure", params, body_expr, mclosure_env]:
+                mclosure_env = mclosure_env.extend(params, args_expr)
+                self._expr, self._env, self._cont = (
+                    Expr(body_expr), mclosure_env,
+                    ["$restore_env", call_env, next_cont]
+                )
             case unexpected:
-                assert False, f"Macro expected: {unexpected} @ eval_expand"
+                assert False, f"Cannot expand: {unexpected}"
 
-    return lambda: eval_expr(op_expr, env, _eval_expand)
-
-def eval_op(op_expr, args_expr, env, cont):
-    def _eval_op(op):
-        match op:
-            case ["macro", params, body, macro_env]:
-                return lambda: expand(body, params, args_expr, macro_env,
-                    lambda expanded: eval_expr(expanded, env, cont))
-            case func:
-                return lambda: map_cps(args_expr,
-                    lambda arg_expr, c: eval_expr(arg_expr, env, c),
-                    lambda args: apply(func, args, cont))
-
-    return lambda: eval_expr(op_expr, env, _eval_op)
-
-def expand(body, params, args, env, cont):
-    env = new_scope(env); extend(env, params, args)
-    return lambda: eval_expr(body, env, cont)
-
-def apply(func, args, cont):
-    if callable(func):
-        return lambda: cont(func(args))
-    else:
-        _, params, body, env = func
-        env = new_scope(env); extend(env, params, args)
-        return lambda: eval_expr(body, env, cont)
-
-def extend(env, params, args):
-    if params == [] and args == []: return {}
-    assert len(params) > 0, \
-        f"Argument count doesn't match: `{params}, {args}` @ extend"
-    match params[0]:
-        case str(param):
-            assert len(args) > 0, \
-                f"Argument count doesn't match: `{params}, {args}` @ extend"
-            define(env, param, args[0])
-            extend(env, params[1:], args[1:])
-        case ["*", rest]:
-            rest_len = len(args) - len(params) + 1
-            assert rest_len >= 0, \
-                f"Argument count doesn't match: `{params}, {args}` @ extend"
-            define(env, rest, args[:rest_len])
-            extend(env, params[1:], args[rest_len:])
-        case unexpected:
-            assert False, f"Unexpected param at extend: {unexpected}"
-
-# runtime
-
-import operator as op
-
-def n_ary(n, f, args):
-    assert len(args) == n, \
-        f"Argument count doesn't match: `{args}` @ n_ary"
-    return f(*args[0:n])
-
-def is_arr(elem):
-    return isinstance(elem, list)
-
-def setat(args):
-    assert len(args) == 3, \
-        f"Argument count doesn't match: `{args}` @ setat"
+def set_at(args):
     args[0][args[1]] = args[2]
     return args[2]
 
 def slice_(args):
-    match args:
-        case [arr]: return arr[:]
-        case [arr, start]: return arr[start:]
-        case [arr, start, end]: return arr[start:end]
-        case [arr, start, end, step]: return arr[slice(start, end, step)]
-        case _: assert False, f"Invalid slice: args=`{args}` @ slice"
+    arr, start, end, step = args
+    return arr[slice(start, end, step)]
 
 def set_slice(args):
     arr, start, end, step, val = args
@@ -528,214 +617,202 @@ def set_slice(args):
 def error(args):
     assert False, f"{' '.join(map(str, args))}"
 
-builtins = {
-    "add": lambda args: n_ary(2, op.add, args),
-    "sub": lambda args: n_ary(2, op.sub, args),
-    "mul": lambda args: n_ary(2, op.mul, args),
-    "div": lambda args: n_ary(2, op.floordiv, args),
-    "mod": lambda args: n_ary(2, op.mod, args),
-    "neg": lambda args: n_ary(1, op.neg, args),
-    "equal": lambda args: n_ary(2, op.eq, args),
-    "not_equal": lambda args: n_ary(2, op.ne, args),
-    "less": lambda args: n_ary(2, op.lt, args),
-    "greater": lambda args: n_ary(2, op.gt, args),
-    "less_equal": lambda args: n_ary(2, op.le, args),
-    "greater_equal": lambda args: n_ary(2, op.ge, args),
-    "not": lambda args: n_ary(1, op.not_, args),
+class Interpreter:
 
-    "arr": lambda args: args,
-    "is_arr": lambda args: n_ary(1, is_arr, args),
-    "len": lambda args: n_ary(1, len, args),
-    "getat": lambda args: n_ary(2, lambda arr, ind: arr[ind], args),
-    "setat": setat,
-    "slice": slice_,
-    "set_slice": set_slice,
+    builtins = {
+        "__builtins__": None,
+        "add": lambda args: args[0] + args[1],
+        "sub": lambda args: args[0] - args[1],
+        "mul": lambda args: args[0] * args[1],
+        "div": lambda args: args[0] // args[1],
+        "mod": lambda args: args[0] % args[1],
+        "neg": lambda args: -args[0],
+        "equal": lambda args: args[0] == args[1],
+        "not_equal": lambda args: args[0] != args[1],
+        "less": lambda args: args[0] < args[1],
+        "greater": lambda args: args[0] > args[1],
+        "less_equal": lambda args: args[0] <= args[1],
+        "greater_equal": lambda args: args[0] >= args[1],
+        "not": lambda args: not args[0],
 
-    "is_name": lambda args: n_ary(1, is_name, args),
+        "arr": lambda args: args,
+        "is_arr": lambda args: isinstance(args[0], list),
+        "len": lambda args: len(args[0]),
+        "get_at": lambda args: args[0][args[1]],
+        "set_at": set_at,
+        "slice": slice_,
+        "set_slice": set_slice,
 
-    "print": lambda args: print(*args),
-    "error": lambda args: error(args)
-}
+        "is_name": lambda args: isinstance(args[0], str),
 
-def init_env():
-    global top_env
-    top_env = new_env()
-    for name, func in builtins.items(): define(top_env, name, func)
-    top_env = new_scope(top_env)
+        "print": lambda args: print(*args),
+        "error": lambda args: error(args)
+    }
 
-def stdlib():
-    run("None #rule [scope, scope, EXPR, end]")
-    run("None #rule [qq, qq, EXPR, end]")
+    def __init__(self):
+        self.env = Environment()
+        for name, func in Interpreter.builtins.items():
+            self.env.define(name, func)
+        self.env = Environment(self.env)
+        init_rule()
 
-    run("id := func (x) do x end")
+    def stdlib(self):
+        self.run("__stdlib__ := None")
 
-    run("inc := func (n) do n + 1 end")
-    run("dec := func (n) do n - 1 end")
+        self.run("None #rule [scope, scope, EXPR, end]")
+        self.run("None #rule [qq, qq, EXPR, end]")
 
-    run("first := func (l) do l[0] end")
-    run("rest := func (l) do l[1:] end")
-    run("last := func (l) do l[-1] end")
-    run("append := func (l, a) do l + [a] end")
-    run("prepend := func (a, l) do [a] + l end")
+        self.run("id := func (x) do x end")
 
-    run("""
-        foldl := func (l, f, init) do
-            if l == [] then init else
-                foldl(rest(l), f, f(init, first(l)))
+        self.run("inc := func (n) do n + 1 end")
+        self.run("dec := func (n) do n - 1 end")
+
+        self.run("first := func (l) do l[0] end")
+        self.run("rest := func (l) do l[1:] end")
+        self.run("last := func (l) do l[-1] end")
+        self.run("append := func (l, a) do l + [a] end")
+        self.run("prepend := func (a, l) do [a] + l end")
+
+        self.run("""
+            foldl := func (l, f, init) do
+                if l == [] then init else
+                    foldl(rest(l), f, f(init, first(l)))
+                end
             end
-        end
-    """)
-    run("""
-        unfoldl := func (x, p, h, t) do
-            _unfoldl := func (x, b) do
-                if p(x) then b else _unfoldl(t(x), b + [h(x)]) end
-            end;
-            _unfoldl(x, [])
-        end
-    """)
-
-    run("map := func (l, f) do foldl(l, func(acc, e) do append(acc, f(e)) end, []) end")
-    run("range := func (s, e) do unfoldl(s, func (x) do x >= e end, id, inc) end")
-
-    run("""
-        __stdlib_when := macro (cnd, thn) do qq
-            if !(cnd) then !(thn) end
-        end end
-
-        #rule [when, __stdlib_when, EXPR, do, EXPR, end]
-    """)
-
-    run("""
-        _aif := macro (cnd, thn, *rest) do
-            if len(rest) == 0 then qq scope
-                it := !(cnd); if it then !(thn) else None end
-            end end elif len(rest) == 1 then qq scope
-                it := !(cnd); if it then !(thn) else !(rest[0]) end
-            end end else qq scope
-                it := !(cnd); if it then !(thn) else _aif(!!(rest)) end
-            end end end
-        end
-
-        #rule [aif, _aif, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], ?[else, EXPR], end]
+        """)
+        self.run("""
+            unfoldl := func (x, p, h, t) do
+                _unfoldl := func (x, b) do
+                    if p(x) then b else _unfoldl(t(x), b + [h(x)]) end
+                end;
+                _unfoldl(x, [])
+            end
         """)
 
-    run("and := macro (a, b) do qq aif !(a) then !(b) else it end end end")
-    run("or := macro (a, b) do qq aif !(a) then it else !(b) end end end")
+        self.run("map := func (l, f) do foldl(l, func(acc, e) do append(acc, f(e)) end, []) end")
+        self.run("range := func (s, e) do unfoldl(s, func (x) do x >= e end, id, inc) end")
 
-    run("""
-        __stdlib_while := macro (cnd, body) do qq scope
-            continue := val := None;
-            letcc break do
-                loop := func() do
-                    letcc cc do continue = cc end;
-                    if !(cnd) then val = !(body); loop() else val end
-                end;
-                loop()
+        self.run("""
+            __stdlib_when := macro (cnd, thn) do qq
+                if !(cnd) then !(thn) end
+            end end
+
+            #rule [when, __stdlib_when, EXPR, do, EXPR, end]
+        """)
+
+        self.run("""
+            _aif := macro (cnd, thn, *rest) do
+                if len(rest) == 0 then qq scope
+                    it := !(cnd); if it then !(thn) else None end
+                end end elif len(rest) == 1 then qq scope
+                    it := !(cnd); if it then !(thn) else !(rest[0]) end
+                end end else qq scope
+                    it := !(cnd); if it then !(thn) else _aif(!!(rest)) end
+                end end end
             end
-        end end end
 
-        #rule [while, __stdlib_while, EXPR, do, EXPR, end]
-    """)
+            #rule [aif, _aif, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], ?[else, EXPR], end]
+            """)
 
-    run("""
-        __stdlib_awhile := macro (cnd, body) do qq scope
-            continue := val := None;
-            letcc break do
-                loop := func() do
-                    letcc cc do continue = cc end;
-                    it := !(cnd);
-                    if it then val = !(body); loop() else val end
-                end;
-                loop()
-            end
-        end end end
+        self.run("and := macro (a, b) do qq aif !(a) then !(b) else it end end end")
+        self.run("or := macro (a, b) do qq aif !(a) then it else !(b) end end end")
 
-        #rule [awhile, __stdlib_awhile, EXPR, do, EXPR, end]
-    """)
+        self.run("""
+            __stdlib_while := macro (cnd, body) do qq scope
+                continue := val := None;
+                letcc break do
+                    loop := func() do
+                        letcc cc do continue = cc end;
+                        if !(cnd) then val = !(body); loop() else val end
+                    end;
+                    loop()
+                end
+            end end end
 
-    run("""
-        __stdlib_is_name_before := is_name;
-        is_name := macro (e) do qq __stdlib_is_name_before(q(!(e))) end end
-    """)
+            #rule [while, __stdlib_while, EXPR, do, EXPR, end]
+        """)
 
-    run("""
-        __stdlib_for := macro (e, l, body) do qq scope
-            __stdlib_for_index := -1;
-            __stdlib_for_l := !(l);
-            continue := __stdlib_for_val := !(e) := None;
-            letcc break do
-                loop := func () do
-                    letcc cc do continue = cc end;
-                    __stdlib_for_index = __stdlib_for_index + 1;
-                    if __stdlib_for_index < len(__stdlib_for_l) then
-                        !(e) = __stdlib_for_l[__stdlib_for_index];
-                        __stdlib_for_val = !(body);
-                        loop()
-                    else __stdlib_for_val end
-                end;
-                loop()
-            end
-        end end end
+        self.run("""
+            __stdlib_awhile := macro (cnd, body) do qq scope
+                continue := val := None;
+                letcc break do
+                    loop := func() do
+                        letcc cc do continue = cc end;
+                        it := !(cnd);
+                        if it then val = !(body); loop() else val end
+                    end;
+                    loop()
+                end
+            end end end
 
-        #rule [for, __stdlib_for, NAME, in, EXPR, do, EXPR, end]
-    """)
+            #rule [awhile, __stdlib_awhile, EXPR, do, EXPR, end]
+        """)
 
-    run("""
-        __stdlib_gfunc := macro (params, body) do qq
-            func (!!(params[1:])) do
-                yd := nx := None;
-                yield := func (x) do letcc cc do nx = cc; yd(x) end end;
-                next := func () do letcc cc do yd = cc; nx(None) end end;
-                nx := func (_) do !(body); yield(None) end;
-                next
-            end
-        end end
+        self.run("""
+            __stdlib_is_name_before := is_name;
+            is_name := macro (e) do qq __stdlib_is_name_before(q(!(e))) end end
+        """)
 
-        #rule [gfunc, __stdlib_gfunc, PARAMS, do, EXPR, end]
-    """)
+        self.run("""
+            __stdlib_for := macro (e, l, body) do qq scope
+                __stdlib_for_index := -1;
+                __stdlib_for_l := !(l);
+                continue := __stdlib_for_val := !(e) := None;
+                letcc break do
+                    loop := func () do
+                        letcc cc do continue = cc end;
+                        __stdlib_for_index = __stdlib_for_index + 1;
+                        if __stdlib_for_index < len(__stdlib_for_l) then
+                            !(e) = __stdlib_for_l[__stdlib_for_index];
+                            __stdlib_for_val = !(body);
+                            loop()
+                        else __stdlib_for_val end
+                    end;
+                    loop()
+                end
+            end end end
 
-    run("agen := gfunc (a) do for e in a do yield(e) end end")
+            #rule [for, __stdlib_for, NAME, in, EXPR, do, EXPR, end]
+        """)
 
-    run("""
-        __stdlib_gfor := macro(e, gen, body) do qq scope
-            __stdlib_gfor_gen := !(gen);
-            !(e) := None;
-            while (!(e) = __stdlib_gfor_gen()) != None do !(body) end
-        end end end
+        self.run("""
+            __stdlib_gfunc := macro (params, body) do qq
+                func (!!(params[1:])) do
+                    yd := nx := None;
+                    yield := func (x) do letcc cc do nx = cc; yd(x) end end;
+                    next := func () do letcc cc do yd = cc; nx(None) end end;
+                    nx := func (_) do !(body); yield(None) end;
+                    next
+                end
+            end end
 
-        #rule [gfor, __stdlib_gfor, NAME, in, EXPR, do, EXPR, end]
-    """)
+            #rule [gfunc, __stdlib_gfunc, PARAMS, do, EXPR, end]
+        """)
 
-    global top_env
-    top_env = new_scope(top_env)
+        self.run("agen := gfunc (a) do for e in a do yield(e) end end")
 
-result = None
+        self.run("""
+            __stdlib_gfor := macro(e, gen, body) do qq scope
+                __stdlib_gfor_gen := !(gen);
+                !(e) := None;
+                while (!(e) = __stdlib_gfor_gen()) != None do !(body) end
+            end end end
 
-def eval(expr):
-    # print("eval: ", expr)
-    computation = lambda: eval_expr(expr, top_env, lambda result: result)
-    while callable(computation):
-        try:
-            computation = computation()
-        except Skip as s:
-            computation = s.skip
-    return computation
+            #rule [gfor, __stdlib_gfor, NAME, in, EXPR, do, EXPR, end]
+        """)
 
-def run(src):
-    return eval(parse(src))
+        self.env = Environment(self.env)
+
+    def run(self, src):
+        return Evaluator(parse(src), self.env, ["$halt"]).eval()
 
 if __name__ == "__main__":
-    init_env()
-    init_rule()
-    stdlib()
+    i = Interpreter()
+    i.stdlib()
 
     code = """
-        while True do
-            if i >= 10 then break(sum) end;
-            sum = sum + i;
-            i = i + 1
-        end
+        5
     """
     print(parse(code))
-    run(f"print(expand({code}))")
-    # print(run(code))
+    # i.run(f"print(expand({code}))")
+    print(i.run(code))
