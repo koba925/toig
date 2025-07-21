@@ -547,7 +547,7 @@ class TestStdlib(TestToig):
                 yield(n); n = inc(n);
                 yield(n)
             end;
-            gsum := func (gen) do aif(gen(), it + gsum(gen), 0) end
+            gsum := func (gen) do aif gen() then it + gsum(gen) else 0 end end
         """)
         self.assertEqual(run("gsum(g3(2))"), 9)
         self.assertEqual(run("gsum(g3(5))"), 18)

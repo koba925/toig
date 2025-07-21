@@ -411,24 +411,14 @@ def eval_expr(expr, env, cont):
             assert False, f"Unexpected expression: {unexpected} @ eval"
 
 def eval_assign(left, expr, env, cont):
-    def _eval_assign(val):
-        match left:
-            case str(name):
-                return cont(assign(env, name, val))
-            case ["getat", arr, idx]:
-                return eval_expr(arr, env,
-                    lambda arr_val: eval_expr(idx, env,
-                        lambda idx_val: cont(setat([arr_val, idx_val, val]))))
-            case ["slice", arr, start, end, step]:
-                return eval_expr(arr, env,
-                    lambda arr_val: eval_expr(start, env,
-                        lambda start_val: eval_expr(end, env,
-                            lambda end_val: eval_expr(step, env,
-                                lambda step_val: cont(set_slice(
-                                    [arr_val, start_val, end_val, step_val, val]))))))
-        assert False, f"Invalid assign target: {left} @ eval_assign"
-
-    return lambda: eval_expr(expr, env, _eval_assign)
+    match left:
+        case str(name):
+            return lambda: eval_expr(expr, env, lambda val: cont(assign(env, name, val)))
+        case ["getat", arr, idx]:
+            return eval_expr(["setat", arr, idx, expr], env, cont)
+        case ["slice", arr, start, end, step]:
+            return eval_expr(["set_slice", arr, start, end, step, expr], env, cont)
+    assert False, f"Invalid assign target: {left} @ eval_assign"
 
 def eval_quasiquote(expr, env, cont):
     def splice(quoted, elem_vals, cont):
@@ -634,12 +624,14 @@ def stdlib():
 
     run("""
         __stdlib_while := macro (cnd, body) do qq scope
-            break := continue := val := None;
-            loop := func() do
-                letcc cc do continue = cc end;
-                if !(cnd) then val = !(body); loop() else val end
-            end;
-            letcc cc do break = cc; loop() end
+            continue := val := None;
+            letcc break do
+                loop := func() do
+                    letcc cc do continue = cc end;
+                    if !(cnd) then val = !(body); loop() else val end
+                end;
+                loop()
+            end
         end end end
 
         #rule [while, __stdlib_while, EXPR, do, EXPR, end]
@@ -647,13 +639,15 @@ def stdlib():
 
     run("""
         __stdlib_awhile := macro (cnd, body) do qq scope
-            break := continue := val := None;
-            loop := func() do
-                letcc cc do continue = cc end;
-                it := !(cnd);
-                if it then val = !(body); loop() else val end
-            end;
-            letcc cc do break = cc; loop() end
+            continue := val := None;
+            letcc break do
+                loop := func() do
+                    letcc cc do continue = cc end;
+                    it := !(cnd);
+                    if it then val = !(body); loop() else val end
+                end;
+                loop()
+            end
         end end end
 
         #rule [awhile, __stdlib_awhile, EXPR, do, EXPR, end]
@@ -668,17 +662,19 @@ def stdlib():
         __stdlib_for := macro (e, l, body) do qq scope
             __stdlib_for_index := -1;
             __stdlib_for_l := !(l);
-            break := continue := __stdlib_for_val := !(e) := None;
-            loop := func () do
-                letcc __stdlib_for_cc do continue = __stdlib_for_cc end;
-                __stdlib_for_index = __stdlib_for_index + 1;
-                if __stdlib_for_index < len(__stdlib_for_l) then
-                    !(e) = __stdlib_for_l[__stdlib_for_index];
-                    __stdlib_for_val = !(body);
-                    loop()
-                else __stdlib_for_val end
-            end;
-            letcc __stdlib_for_cc do break = __stdlib_for_cc; loop() end
+            continue := __stdlib_for_val := !(e) := None;
+            letcc break do
+                loop := func () do
+                    letcc cc do continue = cc end;
+                    __stdlib_for_index = __stdlib_for_index + 1;
+                    if __stdlib_for_index < len(__stdlib_for_l) then
+                        !(e) = __stdlib_for_l[__stdlib_for_index];
+                        __stdlib_for_val = !(body);
+                        loop()
+                    else __stdlib_for_val end
+                end;
+                loop()
+            end
         end end end
 
         #rule [for, __stdlib_for, NAME, in, EXPR, do, EXPR, end]
@@ -733,7 +729,13 @@ if __name__ == "__main__":
     init_rule()
     stdlib()
 
-    code = "if 5 then 6 end"
+    code = """
+        while True do
+            if i >= 10 then break(sum) end;
+            sum = sum + i;
+            i = i + 1
+        end
+    """
     print(parse(code))
-    # run(f"print(expand({code}))")
-    print(run(code))
+    run(f"print(expand({code}))")
+    # print(run(code))
