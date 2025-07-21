@@ -7,7 +7,6 @@ from toig import Interpreter
 class TestToig(unittest.TestCase):
     def setUp(self):
         self.i = Interpreter()
-        self.i.stdlib()
 
     def go(self, src):
         return self.i.run(src)

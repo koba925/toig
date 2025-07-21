@@ -1,328 +1,332 @@
+# Scanner
 
-# custom rules
-
-def init_rule():
-    global custom_rule
-    custom_rule = {}
-
-def add_rule(name, rule):
-    global custom_rule
-    custom_rule[name] = rule
-
-def print_rule():
-    print(custom_rule)
-
-# scanner
+class CustomRules(dict): pass
 
 def is_name_first(c): return c.isalpha() or c == "_"
 def is_name_rest(c): return c.isalnum() or c == "_"
 def is_name(expr): return isinstance(expr, str) and is_name_first(expr[0])
 
-def scanner(src):
-    def advance(): nonlocal pos; pos += 1
-    def current_char(): return src[pos] if pos < len(src) else "$EOF"
+class Scanner():
+    def __init__(self, src, custom_rules):
+        self._src = src
+        self._custom_rules = custom_rules
+        self._pos = 0
+        self._token = ""
 
-    def append_char():
-        nonlocal token
-        token += current_char()
-        advance()
+    def next_token(self):
+        while self._current_char().isspace(): self._advance()
 
-    def word(is_rest):
-        append_char()
-        while is_rest(current_char()): append_char()
+        self._token = ""
 
-    def name():
-        word(is_name_rest)
-        match token:
+        match self._current_char():
+            case "$EOF": return "$EOF"
+            case "#": return self._comment()
+            case c if is_name_first(c):
+                return self._name()
+            case c if c.isnumeric():
+                self._word(str.isnumeric)
+                return int(self._token)
+            case c if c in "!":
+                self._append_char()
+                if self._current_char() == "=" or self._current_char() == "!":
+                    self._append_char()
+            case c if c in "=<>:":
+                self._append_char()
+                if self._current_char() == "=": self._append_char()
+            case c if c in "+-*/%?()[],;":
+                self._append_char()
+
+        return self._token
+
+    def _advance(self): self._pos += 1
+
+    def _current_char(self):
+        if self._pos < len(self._src):
+            return self._src[self._pos]
+        else:
+            return "$EOF"
+
+    def _append_char(self):
+        self._token += self._current_char()
+        self._advance()
+
+    def _word(self, is_rest):
+        self._append_char()
+        while is_rest(self._current_char()):
+            self._append_char()
+
+    def _name(self):
+        self._word(is_name_rest)
+        match self._token:
             case "None": return None
             case "True": return True
             case "False": return False
-            case _ : return token
+            case _ : return self._token
 
-    def next_token():
-        while current_char().isspace(): advance()
-
-        nonlocal token
-        token = ""
-
-        match current_char():
-            case "$EOF": return "$EOF"
-            case "#": return comment()
-            case c if is_name_first(c):
-                return name()
-            case c if c.isnumeric():
-                word(str.isnumeric)
-                return int(token)
-            case c if c in "!":
-                append_char()
-                if current_char() == "=" or current_char() == "!":
-                    append_char()
-            case c if c in "=<>:":
-                append_char()
-                if current_char() == "=": append_char()
-            case c if c in "+-*/%?()[],;":
-                append_char()
-
-        return token
-
-    def comment():
-        advance()
+    def _comment(self):
+        self._advance()
         line = []
-        while current_char() not in("\n", "$EOF"):
-            line += current_char()
-            advance()
+        while self._current_char() not in("\n", "$EOF"):
+            line += self._current_char()
+            self._advance()
         line = "".join(line)
         if line.startswith("rule "):
-            rule = parse(line[5:]).elems
+            rule = Parser(line[5:], CustomRules()).parse().elems
             assert isinstance(rule, list) and len(rule) >= 2, \
                 f"Invalid rule: {rule} @ comment"
-            add_rule(rule[1], rule[2:])
-        return next_token()
+            self._custom_rules[rule[1]] = rule[2:]
+        return self.next_token()
 
-    pos = 0; token = ""
-    return next_token
+# Parser
 
-# parser
+class Parser:
+    def __init__(self, src, custom_rules):
+        self._src = src
+        self._custom_rules = custom_rules
+        self._scanner = Scanner(src, custom_rules)
+        self._current_token = self._scanner.next_token()
 
-def parse(src):
+    def parse(self):
+        expr = self._expression()
+        assert self._current_token == "$EOF", \
+            f"Unexpected token at end: `{self._current_token}` @ parse"
+        return Expr(expr)
 
-    # helpers
+    # Helpers
 
-    def advance():
-        nonlocal current_token
-        prev_token = current_token
-        current_token = next_token()
+    def _advance(self):
+        prev_token = self._current_token
+        self._current_token = self._scanner.next_token()
         return prev_token
 
-    def consume(expected):
-        assert isinstance(current_token, str) and current_token in expected, \
-            f"Expected `{expected}`, found `{current_token}` @ consume"
-        return advance()
+    def _consume(self, expected):
+        assert isinstance(self._current_token, str) and \
+            self._current_token in expected, \
+            f"Expected `{expected}`, found `{self._current_token}` @ consume"
+        return self._advance()
 
-    def binary_left(ops, sub_elem):
+    def _binary_left(self, ops, sub_elem):
         left = sub_elem()
-        while (op := current_token) in ops:
-            advance()
+        while (op := self._current_token) in ops:
+            self._advance()
             left = [ops[op], left, sub_elem()]
         return left
 
-    def binary_right(ops, sub_elem):
+    def _binary_right(self, ops, sub_elem):
         left = sub_elem()
-        if (op := current_token) in ops:
-            advance()
-            return [ops[op], left, binary_right(ops, sub_elem)]
+        if (op := self._current_token) in ops:
+            self._advance()
+            return [ops[op], left, self._binary_right(ops, sub_elem)]
         return left
 
-    def unary(ops, sub_elem):
-        if (op := current_token) not in ops:
+    def _unary(self, ops, sub_elem):
+        if (op := self._current_token) not in ops:
             return sub_elem()
-        advance()
-        return [ops[op], unary(ops, sub_elem)]
+        self._advance()
+        return [ops[op], self._unary(ops, sub_elem)]
 
-    def comma_separated_exprs(closing_token):
+    def _comma_separated_exprs(self, closing_token):
         cse = []
-        if current_token != closing_token:
-            cse.append(expression())
-            while current_token == ",":
-                advance()
-                cse.append(expression())
-        consume(closing_token)
+        if self._current_token != closing_token:
+            cse.append(self._expression())
+            while self._current_token == ",":
+                self._advance()
+                cse.append(self._expression())
+        self._consume(closing_token)
         return cse
 
-    # grammar
+    # Grammar
 
-    def expression():
-        return sequence()
+    def _expression(self):
+        return self._sequence()
 
-    def sequence():
-        exprs = [define_assign()]
-        while current_token == ";":
-            advance()
-            exprs.append(define_assign())
+    def _sequence(self):
+        exprs = [self._define_assign()]
+        while self._current_token == ";":
+            self._advance()
+            exprs.append(self._define_assign())
         return exprs[0] if len(exprs) == 1 else ["seq"] + exprs
 
-    def define_assign():
-        return binary_right({
+    def _define_assign(self):
+        return self._binary_right({
             ":=": "define", "=": "assign"
-        }, or_)
+        }, self._or)
 
-    def or_():
-        return binary_left({"or": "or"}, and_)
+    def _or(self):
+        return self._binary_left({"or": "or"}, self._and)
 
-    def and_():
-        return binary_left({"and": "and"}, not_)
+    def _and(self):
+        return self._binary_left({"and": "and"}, self._not)
 
-    def not_():
-        return unary({"not": "not"}, comparison)
+    def _not(self):
+        return self._unary({"not": "not"}, self._comparison)
 
-    def comparison():
-        return binary_left({
+    def _comparison(self):
+        return self._binary_left({
             "==": "equal", "!=": "not_equal",
             "<": "less", ">": "greater",
             "<=": "less_equal", ">=": "greater_equal"
-        }, add_sub)
+        }, self._add_sub)
 
-    def add_sub():
-        return binary_left({
+    def _add_sub(self):
+        return self._binary_left({
             "+": "add", "-": "sub"
-        }, mul_div_mod)
+        }, self._mul_div_mod)
 
-    def mul_div_mod():
-        return binary_left({
+    def _mul_div_mod(self):
+        return self._binary_left({
             "*": "mul", "/": "div", "%": "mod"
-        }, unary_ops)
+        }, self._unary_ops)
 
-    def unary_ops():
-        return unary({"-": "neg", "*": "*", "?": "?"}, call_index)
+    def _unary_ops(self):
+        return self._unary({"-": "neg", "*": "*", "?": "?"}, self._call_index)
 
-    def call_index():
-        target = primary()
-        while current_token in ("(", "["):
-            match current_token:
+    def _call_index(self):
+        target = self._primary()
+        while self._current_token in ("(", "["):
+            match self._current_token:
                 case "(":
-                    advance()
-                    target = [target] + comma_separated_exprs(")")
+                    self._advance()
+                    target = [target] + self._comma_separated_exprs(")")
                 case "[":
-                    advance()
-                    target = index_slice(target)
+                    self._advance()
+                    target = self._index_slice(target)
         return target
 
-    def index_slice(target):
+    def _index_slice(self, target):
         start = end = step = None
 
-        if current_token == "]":
-            assert False, f"Invalid index/slice: `{current_token}` @ index_slice"
-        if current_token != ":":
-            start = expression()
-        if current_token == "]":
-            advance()
+        if self._current_token == "]":
+            assert False, f"Invalid index/slice: `{self._current_token}` @ index_slice"
+        if self._current_token != ":":
+            start = self._expression()
+        if self._current_token == "]":
+            self._advance()
             return ["get_at", target, start]
 
-        if current_token != ":":
-            assert False, f"Invalid index/slice: `{current_token}` @ index_slice"
-        advance()
+        if self._current_token != ":":
+            assert False, f"Invalid index/slice: `{self._current_token}` @ index_slice"
+        self._advance()
 
-        if current_token == "]":
-            advance()
+        if self._current_token == "]":
+            self._advance()
             return ["slice", target, start, end, step]
-        if current_token != ":":
-            end = expression()
-        if current_token == "]":
-            advance()
-            return ["slice", target, start, end, step]
-
-        if current_token != ":":
-            assert False, f"Invalid index/slice: `{current_token}` @ index_slice"
-        advance()
-        if current_token == "]":
-            advance()
-            return ["slice", target, start, end, step]
-        if current_token != ":":
-            step = expression()
-        if current_token == "]":
-            advance()
+        if self._current_token != ":":
+            end = self._expression()
+        if self._current_token == "]":
+            self._advance()
             return ["slice", target, start, end, step]
 
-        assert False, f"Invalid index/slice: `{current_token}` @ index_slice"
+        if self._current_token != ":":
+            assert False, f"Invalid index/slice: `{self._current_token}` @ index_slice"
+        self._advance()
+        if self._current_token == "]":
+            self._advance()
+            return ["slice", target, start, end, step]
+        if self._current_token != ":":
+            step = self._expression()
+        if self._current_token == "]":
+            self._advance()
+            return ["slice", target, start, end, step]
 
-    def primary():
-        match current_token:
+        assert False, f"Invalid index/slice: `{self._current_token}` @ index_slice"
+
+    def _primary(self):
+        match self._current_token:
             case "(":
-                advance(); expr = expression(); consume(")")
+                self._advance();
+                expr = self._expression();
+                self._consume(")")
                 return expr
             case "[":
-                advance(); elems = comma_separated_exprs("]")
+                self._advance();
+                elems = self._comma_separated_exprs("]")
                 return ["arr"] + elems
             case "func":
-                advance(); return func_()
+                self._advance(); return self._func()
             case "macro":
-                advance(); return macro()
+                self._advance(); return self._macro()
             case "if":
-                advance(); return if_()
+                self._advance(); return self._if()
             case "letcc":
-                advance(); return letcc()
-            case op if op in custom_rule:
-                advance(); return custom(custom_rule[op])
-        return advance()
+                self._advance(); return self._letcc()
+            case op if op in self._custom_rules:
+                self._advance();
+                return self._custom(self._custom_rules[op])
+        return self._advance()
 
-    def if_():
-        cnd = expression()
-        consume("then")
-        thn = expression()
-        if current_token == "elif":
-            advance()
-            return ["if", cnd, ["scope", thn], if_()]
-        if current_token == "else":
-            advance()
-            els = expression()
-            consume("end")
+    def _if(self):
+        cnd = self._expression()
+        self._consume("then")
+        thn = self._expression()
+        if self._current_token == "elif":
+            self._advance()
+            return ["if", cnd, ["scope", thn], self._if()]
+        if self._current_token == "else":
+            self._advance()
+            els = self._expression()
+            self._consume("end")
             return ["if", cnd, ["scope", thn], ["scope", els]]
-        consume("end")
+        self._consume("end")
         return ["if", cnd, ["scope", thn], None]
 
-    def letcc():
-        name = advance()
+    def _letcc(self):
+        name = self._advance()
         assert is_name(name), f"Invalid name: `{name}` @ letcc"
-        consume("do")
-        body = expression()
-        consume("end")
+        self._consume("do")
+        body = self._expression()
+        self._consume("end")
         return ["letcc", name, ["scope", body]]
 
-    def func_():
-        consume("(")
-        params = comma_separated_exprs(")")
-        consume("do")
-        body = expression()
-        consume("end")
+    def _func(self):
+        self._consume("(")
+        params = self._comma_separated_exprs(")")
+        self._consume("do")
+        body = self._expression()
+        self._consume("end")
         return ["func", params, body]
 
-    def macro():
-        consume("(")
-        params = comma_separated_exprs(")")
-        consume("do")
-        body = expression()
-        consume("end")
+    def _macro(self):
+        self._consume("(")
+        params = self._comma_separated_exprs(")")
+        self._consume("do")
+        body = self._expression()
+        self._consume("end")
         return ["macro", params, body]
 
-    def custom(rule):
+    def _custom(self, rule):
         def _custom(r):
             if r == []: return []
             match r[0]:
                 case "EXPR":
-                    return  [expression()] + _custom(r[1:])
+                    return  [self._expression()] + _custom(r[1:])
                 case "NAME":
-                    name = expression()
+                    name = self._expression()
                     assert is_name(name), f"Invalid name: `{name}` @ custom({rule[0]})"
                     return [name] + _custom(r[1:])
                 case "PARAMS":
-                    consume("(")
-                    return  [["arr"] + comma_separated_exprs(")")] + _custom(r[1:])
+                    self._consume("(")
+                    return  [["arr"] + self._comma_separated_exprs(")")] + _custom(r[1:])
                 case keyword if is_name(keyword):
-                    consume(keyword); return  _custom(r[1:])
+                    self._consume(keyword); return _custom(r[1:])
                 case ["*", subrule]:
                     ast = []
-                    while current_token == subrule[1]:
-                        advance()
+                    while self._current_token == subrule[1]:
+                        self._advance()
                         ast += _custom(subrule[2:])
                     return ast + _custom(r[1:])
                 case ["?", subrule]:
                     ast = []
-                    if current_token == subrule[1]:
-                        advance()
+                    if self._current_token == subrule[1]:
+                        self._advance()
                         ast += _custom(subrule[2:])
                     return ast + _custom(r[1:])
                 case unexpected:
                     assert False, f"Illegal rule: `{unexpected}` @ custom({rule[0]})"
 
-        ast = [rule[0]] + _custom(rule[1:])
-        return ast
+        return [rule[0]] + _custom(rule[1:])
 
-    next_token = scanner(src)
-    current_token = next_token()
-    expr = expression()
-    assert current_token == "$EOF", \
-        f"Unexpected token at end: `{current_token}` @ parse"
-    return Expr(expr)
+# Environment
 
 class Environment:
     def __init__(self, parent=None):
@@ -380,6 +384,8 @@ class Environment:
         env = Environment(self)
         _extend(params, args)
         return env
+
+# Evaluator
 
 from typing import Callable
 from dataclasses import dataclass
@@ -601,6 +607,8 @@ class Evaluator:
             case unexpected:
                 assert False, f"Cannot expand: {unexpected}"
 
+# Runtime
+
 def set_at(args):
     args[0][args[1]] = args[2]
     return args[2]
@@ -617,70 +625,77 @@ def set_slice(args):
 def error(args):
     assert False, f"{' '.join(map(str, args))}"
 
-class Interpreter:
+class BuiltIns:
+    def __init__(self, env):
+        self._env = env
 
-    builtins = {
-        "__builtins__": None,
-        "add": lambda args: args[0] + args[1],
-        "sub": lambda args: args[0] - args[1],
-        "mul": lambda args: args[0] * args[1],
-        "div": lambda args: args[0] // args[1],
-        "mod": lambda args: args[0] % args[1],
-        "neg": lambda args: -args[0],
-        "equal": lambda args: args[0] == args[1],
-        "not_equal": lambda args: args[0] != args[1],
-        "less": lambda args: args[0] < args[1],
-        "greater": lambda args: args[0] > args[1],
-        "less_equal": lambda args: args[0] <= args[1],
-        "greater_equal": lambda args: args[0] >= args[1],
-        "not": lambda args: not args[0],
+    def load(self):
+        _builtins = {
+            "__builtins__": None,
+            "add": lambda args: args[0] + args[1],
+            "sub": lambda args: args[0] - args[1],
+            "mul": lambda args: args[0] * args[1],
+            "div": lambda args: args[0] // args[1],
+            "mod": lambda args: args[0] % args[1],
+            "neg": lambda args: -args[0],
+            "equal": lambda args: args[0] == args[1],
+            "not_equal": lambda args: args[0] != args[1],
+            "less": lambda args: args[0] < args[1],
+            "greater": lambda args: args[0] > args[1],
+            "less_equal": lambda args: args[0] <= args[1],
+            "greater_equal": lambda args: args[0] >= args[1],
+            "not": lambda args: not args[0],
 
-        "arr": lambda args: args,
-        "is_arr": lambda args: isinstance(args[0], list),
-        "len": lambda args: len(args[0]),
-        "get_at": lambda args: args[0][args[1]],
-        "set_at": set_at,
-        "slice": slice_,
-        "set_slice": set_slice,
+            "arr": lambda args: args,
+            "is_arr": lambda args: isinstance(args[0], list),
+            "len": lambda args: len(args[0]),
+            "get_at": lambda args: args[0][args[1]],
+            "set_at": set_at,
+            "slice": slice_,
+            "set_slice": set_slice,
 
-        "is_name": lambda args: isinstance(args[0], str),
+            "is_name": lambda args: isinstance(args[0], str),
 
-        "print": lambda args: print(*args),
-        "error": lambda args: error(args)
-    }
+            "print": lambda args: print(*args),
+            "error": lambda args: error(args)
+        }
 
-    def __init__(self):
-        self.env = Environment()
-        for name, func in Interpreter.builtins.items():
-            self.env.define(name, func)
-        self.env = Environment(self.env)
-        init_rule()
+        for name, func in _builtins.items():
+            self._env.define(name, func)
 
-    def stdlib(self):
-        self.run("__stdlib__ := None")
 
-        self.run("None #rule [scope, scope, EXPR, end]")
-        self.run("None #rule [qq, qq, EXPR, end]")
+class StdLib:
+    def __init__(self, interpreter):
+        self._interpreter = interpreter
 
-        self.run("id := func (x) do x end")
+    def _run(self, src):
+        self._interpreter.run(src)
 
-        self.run("inc := func (n) do n + 1 end")
-        self.run("dec := func (n) do n - 1 end")
+    def load(self):
+        self._run("__stdlib__ := None")
 
-        self.run("first := func (l) do l[0] end")
-        self.run("rest := func (l) do l[1:] end")
-        self.run("last := func (l) do l[-1] end")
-        self.run("append := func (l, a) do l + [a] end")
-        self.run("prepend := func (a, l) do [a] + l end")
+        self._run("None #rule [scope, scope, EXPR, end]")
+        self._run("None #rule [qq, qq, EXPR, end]")
 
-        self.run("""
+        self._run("id := func (x) do x end")
+
+        self._run("inc := func (n) do n + 1 end")
+        self._run("dec := func (n) do n - 1 end")
+
+        self._run("first := func (l) do l[0] end")
+        self._run("rest := func (l) do l[1:] end")
+        self._run("last := func (l) do l[-1] end")
+        self._run("append := func (l, a) do l + [a] end")
+        self._run("prepend := func (a, l) do [a] + l end")
+
+        self._run("""
             foldl := func (l, f, init) do
                 if l == [] then init else
                     foldl(rest(l), f, f(init, first(l)))
                 end
             end
         """)
-        self.run("""
+        self._run("""
             unfoldl := func (x, p, h, t) do
                 _unfoldl := func (x, b) do
                     if p(x) then b else _unfoldl(t(x), b + [h(x)]) end
@@ -689,10 +704,10 @@ class Interpreter:
             end
         """)
 
-        self.run("map := func (l, f) do foldl(l, func(acc, e) do append(acc, f(e)) end, []) end")
-        self.run("range := func (s, e) do unfoldl(s, func (x) do x >= e end, id, inc) end")
+        self._run("map := func (l, f) do foldl(l, func(acc, e) do append(acc, f(e)) end, []) end")
+        self._run("range := func (s, e) do unfoldl(s, func (x) do x >= e end, id, inc) end")
 
-        self.run("""
+        self._run("""
             __stdlib_when := macro (cnd, thn) do qq
                 if !(cnd) then !(thn) end
             end end
@@ -700,7 +715,7 @@ class Interpreter:
             #rule [when, __stdlib_when, EXPR, do, EXPR, end]
         """)
 
-        self.run("""
+        self._run("""
             _aif := macro (cnd, thn, *rest) do
                 if len(rest) == 0 then qq scope
                     it := !(cnd); if it then !(thn) else None end
@@ -714,10 +729,10 @@ class Interpreter:
             #rule [aif, _aif, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], ?[else, EXPR], end]
             """)
 
-        self.run("and := macro (a, b) do qq aif !(a) then !(b) else it end end end")
-        self.run("or := macro (a, b) do qq aif !(a) then it else !(b) end end end")
+        self._run("and := macro (a, b) do qq aif !(a) then !(b) else it end end end")
+        self._run("or := macro (a, b) do qq aif !(a) then it else !(b) end end end")
 
-        self.run("""
+        self._run("""
             __stdlib_while := macro (cnd, body) do qq scope
                 continue := val := None;
                 letcc break do
@@ -732,7 +747,7 @@ class Interpreter:
             #rule [while, __stdlib_while, EXPR, do, EXPR, end]
         """)
 
-        self.run("""
+        self._run("""
             __stdlib_awhile := macro (cnd, body) do qq scope
                 continue := val := None;
                 letcc break do
@@ -748,12 +763,12 @@ class Interpreter:
             #rule [awhile, __stdlib_awhile, EXPR, do, EXPR, end]
         """)
 
-        self.run("""
+        self._run("""
             __stdlib_is_name_before := is_name;
             is_name := macro (e) do qq __stdlib_is_name_before(q(!(e))) end end
         """)
 
-        self.run("""
+        self._run("""
             __stdlib_for := macro (e, l, body) do qq scope
                 __stdlib_for_index := -1;
                 __stdlib_for_l := !(l);
@@ -775,7 +790,7 @@ class Interpreter:
             #rule [for, __stdlib_for, NAME, in, EXPR, do, EXPR, end]
         """)
 
-        self.run("""
+        self._run("""
             __stdlib_gfunc := macro (params, body) do qq
                 func (!!(params[1:])) do
                     yd := nx := None;
@@ -789,9 +804,9 @@ class Interpreter:
             #rule [gfunc, __stdlib_gfunc, PARAMS, do, EXPR, end]
         """)
 
-        self.run("agen := gfunc (a) do for e in a do yield(e) end end")
+        self._run("agen := gfunc (a) do for e in a do yield(e) end end")
 
-        self.run("""
+        self._run("""
             __stdlib_gfor := macro(e, gen, body) do qq scope
                 __stdlib_gfor_gen := !(gen);
                 !(e) := None;
@@ -801,18 +816,29 @@ class Interpreter:
             #rule [gfor, __stdlib_gfor, NAME, in, EXPR, do, EXPR, end]
         """)
 
-        self.env = Environment(self.env)
+# Interpreter
+
+class Interpreter:
+    def __init__(self):
+        self._env = Environment()
+        BuiltIns(self._env).load()
+        self._env = Environment(self._env)
+        self._custom_rule = CustomRules()
+        StdLib(self).load()
+        self._env = Environment(self._env)
+
+    def parse(self, src):
+        return Parser(src, self._custom_rule).parse()
 
     def run(self, src):
-        return Evaluator(parse(src), self.env, ["$halt"]).eval()
+        return Evaluator(self.parse(src), self._env, ["$halt"]).eval()
 
 if __name__ == "__main__":
     i = Interpreter()
-    i.stdlib()
 
-    code = """
+    src = """
         5
     """
-    print(parse(code))
+    print(i.parse(src))
     # i.run(f"print(expand({code}))")
-    print(i.run(code))
+    print(i.run(src))
