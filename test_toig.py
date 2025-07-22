@@ -676,8 +676,10 @@ class TestProblems(TestToig):
             let2 vars [[a, 5], [b, 6]] do a + b end
         """), 11)
 
+    def test_let3(self):
         self.go("""
             _let3 := macro(*bindings, body) do
+                print(bindings);
                 defines := func (bindings) do
                     map(bindings, func (b) do
                         qq !(b[1]) := !(b[2]) end
@@ -691,11 +693,48 @@ class TestProblems(TestToig):
             #rule [let3, _let3, *[var, EXPR], do, EXPR, end]
         """)
 
+        print(self.i.run("""expand(
+            let3
+                var [a, 5]
+                var [b, 6]
+            do
+                a + b
+            end
+        )"""))
+
         self.assertEqual(self.go("let3 do 5 end"), 5)
         self.assertEqual(self.go("""
             let3
                 var [a, 5]
                 var [b, 6]
+            do
+                a + b
+            end
+        """), 11)
+
+    def test_let4(self):
+        self.go("""
+            _let4 := macro(*bindings, body) do
+                i := 0; defines := arr();
+                while i < len(bindings) do
+                    defines = defines + arr(
+                        qq !(bindings[i]) := !(bindings[i + 1]) end
+                    );
+                    i = i + 2
+                end;
+                qq scope
+                    !!(defines); !(body)
+                end end
+            end
+
+            #rule [let4, _let4, *[var, NAME, is, EXPR], do, EXPR, end]
+        """)
+
+        self.assertEqual(self.go("let4 do 5 end"), 5)
+        self.assertEqual(self.go("""
+            let4
+                var a is 5
+                var b is 6
             do
                 a + b
             end
@@ -731,6 +770,42 @@ class TestProblems(TestToig):
         self.assertEqual(self.go("fib(3)"), 2)
         self.assertEqual(self.go("fib(10)"), 55)
 
+
+    def test_cond2(self):
+        self.go("""
+            _cond := macro(*clauses) do
+                __cond := func (clauses) do
+                    if clauses == [] then None else
+                        cnd := first(clauses); clauses := rest(clauses);
+                        thn := first(clauses); clauses := rest(clauses);
+                        qq
+                            if !(cnd) then !(thn) else !(__cond(clauses)) end
+                        end
+                    end
+                end;
+                __cond(clauses)
+            end
+
+            #rule [cond, _cond, *[case, EXPR, then, EXPR], end]
+        """)
+        self.go("""
+            fib := func (n) do
+                cond
+                    case n == 0 then
+                        0
+                    case n == 1 then
+                        1
+                    case True then
+                        fib(n - 1) + fib(n - 2)
+                end
+            end
+        """)
+        self.assertEqual(self.go("fib(0)"), 0)
+        self.assertEqual(self.go("fib(1)"), 1)
+        self.assertEqual(self.go("fib(2)"), 1)
+        self.assertEqual(self.go("fib(3)"), 2)
+        self.assertEqual(self.go("fib(10)"), 55)
+
     def test_my_if(self):
         self.go("""
             _my_if := macro(cnd, thn, *rest) do
@@ -745,24 +820,6 @@ class TestProblems(TestToig):
 
             #rule [my_if, _my_if, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], ?[else, EXPR], end]
         """)
-
-        self.go("print(expand(_my_if(True, 5 + 6)))")
-        self.go("print(expand(my_if True then 5 + 6 end))")
-
-        self.go("print(expand(_my_if(True, 5 + 6, 7 + 8)))")
-        self.go("print(expand(my_if True then 5 + 6 else 7 + 8 end))")
-
-        self.go("print(expand(_my_if(False, 5 + 6, True, 7 + 8)))")
-        self.go("print(expand(my_if False then 5 + 6 elif True then 7 + 8 end))")
-
-        self.go("print(expand(_my_if(False, 5 + 6, True, 7 + 8, 9 + 10)))")
-        self.go("print(expand(my_if False then 5 + 6 elif True then 7 + 8 else 9 + 10 end))")
-
-        self.go("print(expand(_my_if(False, 5 + 6, False, 7 + 8, True, 9 + 10)))")
-        self.go("print(expand(my_if False then 5 + 6 elif False then 7 + 8 elif True then 9 + 10 end))")
-
-        self.go("print(expand(_my_if(False, 5 + 6, False, 7 + 8, True, 9 + 10, 11 + 12)))")
-        self.go("print(expand(my_if False then 5 + 6 elif False then 7 + 8 elif True then 9 + 10 else 11 + 12 end))")
 
         self.assertEqual(self.go("_my_if(True, 5)"), 5)
         self.assertEqual(self.go("_my_if(False, 5)"), None)
@@ -867,7 +924,7 @@ class TestProblems(TestToig):
                 raise = prev_raise
             end end end;
 
-            #rule [try, _try, EXPR, catch, EXPR, do, EXPR, end]
+            #rule [try, _try, EXPR, catch, NAME, do, EXPR, end]
 
             riskyfunc := func (n) do
                 if n == 1 then raise(5) end; print(6)
