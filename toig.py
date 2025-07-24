@@ -435,9 +435,12 @@ class Evaluator:
             case ["assign", left, val_expr]:
                 self._eval_assign(left, val_expr)
             case ["scope", expr]:
-                self._expr, self._env, self._cont = (
-                    Expr(expr), Environment(self._env),
-                    ["$restore_env", self._env, self._cont])
+                if not isinstance(self._cont, list) or \
+                        self._cont[0] != "$restore_env":
+                    self._cont = ["$restore_env", self._env, self._cont]
+                self._expr, self._env = (
+                    Expr(expr), Environment(self._env)
+                )
             case ["seq", *exprs]:
                 self._expr, self._cont = None, \
                     ["$seq", exprs, self._cont]
@@ -476,8 +479,10 @@ class Evaluator:
                 self._expr = op_val(args_val)
             case ["closure", params, body_expr, closure_env]:
                 closure_env = closure_env.extend(params, args_val)
-                self._expr, self._env, self._cont = Expr(body_expr), closure_env, \
-                    ["$restore_env", self._env, self._cont]
+                if not isinstance(self._cont, list) or \
+                        self._cont[0] != "$restore_env":
+                    self._cont = ["$restore_env", self._env, self._cont]
+                self._expr, self._env = Expr(body_expr), closure_env
             case ["mclosure", params, body_expr, mclosure_env]:
                 mclosure_env = mclosure_env.extend(params, args_val)
                 self._expr, self._env, self._cont = Expr(body_expr), mclosure_env, \
@@ -511,9 +516,9 @@ class Evaluator:
                 self._apply_args(op_expr, args_expr, args_val, call_env, next_cont)
             case ["$expand", args_expr, call_env, next_cont]:
                 self._apply_expand(args_expr, call_env, next_cont)
-            case ["$meval", mclosure_env, next_cont]:
+            case ["$meval", call_env, next_cont]:
                 self._expr, self._env, self._cont = (
-                    Expr(self._expr), mclosure_env, next_cont
+                    Expr(self._expr), call_env, next_cont
                 )
             case ["$restore_env", env, next_cont]:
                 self._env, self._cont = env, next_cont
@@ -600,9 +605,11 @@ class Evaluator:
         match self._expr:
             case ["mclosure", params, body_expr, mclosure_env]:
                 mclosure_env = mclosure_env.extend(params, args_expr)
-                self._expr, self._env, self._cont = (
-                    Expr(body_expr), mclosure_env,
-                    ["$restore_env", call_env, next_cont]
+                if not isinstance(self._cont, list) or \
+                        self._cont[0] != "$restore_env":
+                    self._cont = ["$restore_env", call_env, next_cont]
+                self._expr, self._env = (
+                    Expr(body_expr), mclosure_env
                 )
             case unexpected:
                 assert False, f"Cannot expand: {unexpected}"
@@ -837,8 +844,28 @@ if __name__ == "__main__":
     i = Interpreter()
 
     src = """
-        5
+        loop := func () do loop() end;
+        loop()
     """
+    src = """
+        loop := func (n) do if n > 0 then loop(n - 1) end end;
+        loop(3)
+    """
+    src = """
+        wh := macro (cnd, body) do qq
+            loop := func() do
+                if !(cnd) then !(body); loop() end
+            end;
+            loop()
+        end end;
+        n := 3;
+        wh(n > 0, n = n - 1)
+    """
+
+    src = """
+        when 1 > 0 do when 1 > 0 do when 1 > 0 do None end end end
+    """
+
     print(i.parse(src))
     # i.run(f"print(expand({code}))")
     print(i.run(src))

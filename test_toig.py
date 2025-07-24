@@ -679,7 +679,6 @@ class TestProblems(TestToig):
     def test_let3(self):
         self.go("""
             _let3 := macro(*bindings, body) do
-                print(bindings);
                 defines := func (bindings) do
                     map(bindings, func (b) do
                         qq !(b[1]) := !(b[2]) end
@@ -692,15 +691,6 @@ class TestProblems(TestToig):
 
             #rule [let3, _let3, *[var, EXPR], do, EXPR, end]
         """)
-
-        print(self.i.run("""expand(
-            let3
-                var [a, 5]
-                var [b, 6]
-            do
-                a + b
-            end
-        )"""))
 
         self.assertEqual(self.go("let3 do 5 end"), 5)
         self.assertEqual(self.go("""
