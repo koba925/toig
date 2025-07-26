@@ -234,12 +234,12 @@ class Parser:
     def _primary(self):
         match self._current_token:
             case "(":
-                self._advance();
-                expr = self._expression();
+                self._advance()
+                expr = self._expression()
                 self._consume(")")
                 return expr
             case "[":
-                self._advance();
+                self._advance()
                 elems = self._comma_separated_exprs("]")
                 return ["arr"] + elems
             case "func":
@@ -251,7 +251,7 @@ class Parser:
             case "letcc":
                 self._advance(); return self._letcc()
             case op if op in self._custom_rules:
-                self._advance();
+                self._advance()
                 return self._custom(self._custom_rules[op])
         return self._advance()
 
@@ -564,11 +564,13 @@ class Evaluator:
         self._cont = next_cont
 
     def _apply_seq(self, exprs, next_cont):
-        if exprs == []:
-            self._cont = next_cont
-        else:
-            self._expr, self._cont = Expr(exprs[0]), \
-                ["$seq", exprs[1:], next_cont]
+        match exprs:
+            case []:
+                self._cont = next_cont
+            case [expr]:
+                self._expr, self._cont = Expr(expr), next_cont
+            case [expr, *rest]:
+                self._expr, self._cont = Expr(expr), ["$seq", rest, next_cont]
 
     def _apply_if(self, thn_expr, els_expr, next_cont):
         if self._expr:
@@ -844,14 +846,6 @@ if __name__ == "__main__":
     i = Interpreter()
 
     src = """
-        loop := func () do loop() end;
-        loop()
-    """
-    src = """
-        loop := func (n) do if n > 0 then loop(n - 1) end end;
-        loop(3)
-    """
-    src = """
         wh := macro (cnd, body) do qq
             loop := func() do
                 if !(cnd) then !(body); loop() end
@@ -864,6 +858,21 @@ if __name__ == "__main__":
 
     src = """
         when 1 > 0 do when 1 > 0 do when 1 > 0 do None end end end
+    """
+
+    src = """
+        loop := func (n) do if n > 0 then loop(n - 1) end end;
+        loop(3)
+    """
+
+    src = """
+        loop := func (n) do if n > 0 then n = n - 1; loop(n) end end;
+        loop(3)
+    """
+
+    src = """
+        loop := func () do loop() end;
+        loop()
     """
 
     print(i.parse(src))
