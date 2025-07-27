@@ -1,80 +1,110 @@
-# environment
+class Environment:
+    def __init__(self, parent=None):
+        self._parent = parent
+        self._vals = {}
 
-def define(env, name, val):
-    assert name not in env["vals"], \
-        f"Variable already defined: `{name}` @ define"
-    env["vals"][name] = val
-    return val
-
-def assign(env, name, val):
-    assert env is not None, f"Undefined variable: `{name}` @ assign."
-    if name in env["vals"]:
-        env["vals"][name] = val
+    def define(self, name, val):
+        self._vals[name] = val
         return val
-    else:
-        return assign(env["parent"], name, val)
 
-def get(env, name):
-    assert env is not None, f"Undefined variable: `{name}` @ get"
-    if name in env["vals"]:
-        return env["vals"][name]
-    else:
-        return get(env["parent"], name)
+    def assign(self, name, val):
+        if name in self._vals:
+            self._vals[name] = val
+            return val
+        elif self._parent is not None:
+            return self._parent.assign(name, val)
+        else:
+            assert False, f"Undefined variable: `{name}` @ assign."
 
-# evaluator
+    def get(self, name):
+        if name in self._vals:
+            return self._vals[name]
+        elif self._parent is not None:
+            return self._parent.get(name)
+        else:
+            assert False, f"Undefined variable: `{name}` @ get"
 
-from functools import reduce
+    def extend(self, params, args):
+        env = Environment(self)
+        for param, arg in zip(params, args):
+            env.define(param, arg)
+        return env
 
-def eval(expr, env):
-    match expr:
-        case None | bool(_) | int(_): return expr
-        case str(name): return get(env, name)
-        case ["func", params, body]: return ["func", params, body, env]
-        case ["define", name, val]:
-            return define(env, name, eval(val, env))
-        case ["assign", name, val]:
-            return assign(env, name, eval(val, env))
-        case ["do", *exprs]:
-            return reduce(lambda _, e: eval(e, env), exprs, None)
-        case ["if", cnd, thn, els]:
-            return eval(thn, env) if eval(cnd, env) else eval(els, env)
-        case [func, *args]:
-            return apply(eval(func, env), [eval(arg, env) for arg in args])
-        case unexpected:
-            assert False, f"Unexpected expression: {unexpected} @ eval"
+class Evaluator:
+    def __init__(self, env):
+        self._env = env
 
-def apply(f_val, args_val):
-    if callable(f_val): return f_val(args_val)
-    _, params, body, env = f_val
-    assert len(params) == len(args_val), \
-        f"Argument count doesn't match: `{args_val}` @ apply"
-    env = {"parent": env, "vals": dict(zip(params, args_val))}
-    return eval(body, env)
+    def eval(self, expr):
+        match expr:
+            case None | bool(_) | int(_):
+                return expr
+            case str(name):
+                return self._env.get(name)
+            case ["func", params, body]:
+                return ["func", params, body, self._env]
+            case ["define", name, val]:
+                return self._env.define(name, self.eval(val))
+            case ["assign", name, val]:
+                return self._env.assign(name, self.eval(val))
+            case ["seq", *exprs]:
+                return self._eval_seq(exprs)
+            case ["if", cnd, thn, els]:
+                return self._eval_if(cnd, thn, els)
+            case [func, *args]:
+                return self._apply(
+                    self.eval(func),
+                    [self.eval(arg) for arg in args])
+            case unexpected:
+                assert False, f"Unexpected expression: {unexpected} @ eval"
 
-# runtime
+    def _eval_seq(self, exprs):
+        val = None
+        for expr in exprs:
+            val = self.eval(expr)
+        return val
 
-import operator as op
+    def _eval_if(self, cnd, thn, els):
+        if self.eval(cnd):
+            return self.eval(thn)
+        else:
+            return self.eval(els)
 
-def binary_op(f, args):
-    assert len(args) == 2, \
-        f"Argument count doesn't match: `{args}` @ binary_op"
-    return f(args[0], args[1])
+    def _apply(self, f_val, args_val):
+        if callable(f_val):
+            return f_val(*args_val)
+        _, params, body, env = f_val
+        prev_env = self._env
+        self._env =  env.extend(params, args_val)
+        val = self.eval(body)
+        self._env = prev_env
+        return val
 
-builtins = {
-    "+": lambda args_val: binary_op(op.add, args_val),
-    "-": lambda args_val: binary_op(op.sub, args_val),
-    "=": lambda args_val: binary_op(op.eq, args_val),
-    "print": lambda args_val: print(*args_val),
-}
+import operator
 
-top_env = None
+class Interpreter:
+    def __init__(self):
+        self._env = Environment()
 
-def init_env():
-    global top_env
-    top_env = {
-        "parent": {"parent": None, "vals": builtins.copy()},
-        "vals": {}
-    }
+        _builtins = {
+            "__builtins__": None,
+            "add": operator.add,
+            "sub": operator.sub,
+            "equal": operator.eq,
+            "print": print,
+        }
 
-def run(src):
-    return eval(src, top_env)
+        for name, func in _builtins.items():
+            self._env.define(name, func)
+
+        self._env = Environment(self._env)
+
+    def go(self, src):
+        return Evaluator(self._env).eval(src)
+
+if __name__ == "__main__":
+    i = Interpreter()
+    i.go(["define", "fib", ["func", ["n"],
+            ["if", ["equal", "n", 0], 0,
+            ["if", ["equal", "n", 1], 1,
+            ["add", ["fib", ["sub", "n", 1]], ["fib", ["sub", "n", 2]]]]]]])
+    i.go(["print", ["fib", 10]])
