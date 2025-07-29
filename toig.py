@@ -24,12 +24,6 @@ class Environment:
         else:
             assert False, f"Undefined variable: `{name}` @ get"
 
-    def extend(self, params, args):
-        env = Environment(self)
-        for param, arg in zip(params, args):
-            env.define(param, arg)
-        return env
-
 class Evaluator:
     def eval(self, expr, env):
         match expr:
@@ -69,10 +63,12 @@ class Evaluator:
     def _apply(self, f_val, args_val):
         if callable(f_val):
             return f_val(*args_val)
-        _, params, body, env = f_val
-        return self.eval(body, env.extend(params, args_val))
 
-import operator
+        _, params, body, env = f_val
+        new_env = Environment(env)
+        for param, arg in zip(params, args_val):
+            new_env.define(param, arg)
+        return self.eval(body, new_env)
 
 class Interpreter:
     def __init__(self):
@@ -81,11 +77,10 @@ class Interpreter:
 
     def init_builtins(self):
         _builtins = {
-            "__builtins__": None,
-            "add": operator.add,
-            "sub": operator.sub,
-            "equal": operator.eq,
-            "print": print,
+            "add": lambda a, b: a + b,
+            "sub": lambda a, b: a - b,
+            "equal": lambda a, b: a == b,
+            "print": print
         }
 
         for name, func in _builtins.items():
@@ -98,8 +93,21 @@ class Interpreter:
 
 if __name__ == "__main__":
     i = Interpreter()
+
     i.go(["define", "fib", ["func", ["n"],
             ["if", ["equal", "n", 0], 0,
             ["if", ["equal", "n", 1], 1,
             ["add", ["fib", ["sub", "n", 1]], ["fib", ["sub", "n", 2]]]]]]])
     i.go(["print", ["fib", 10]])
+
+    i.go(["define", "make_counter", ["func", [], ["seq",
+            ["define", "c", 0],
+            ["func", [], ["assign", "c", ["add", "c", 1]]]]]])
+    i.go(["define", "counter1", ["make_counter"]])
+    i.go(["define", "counter2", ["make_counter"]])
+    i.go(["print", ["counter1"]])
+    i.go(["print", ["counter1"]])
+    i.go(["print", ["counter2"]])
+    i.go(["print", ["counter2"]])
+    i.go(["print", ["counter1"]])
+    i.go(["print", ["counter2"]])
