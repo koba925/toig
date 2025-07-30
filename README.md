@@ -3,14 +3,16 @@
 実験用のトイ言語です。実用性はまったくありません。
 
 mainブランチは最小限の機能をシンプルに実装したものです。
-Pythonの配列でソース（ASTともいう）を書いてフィボナッチ数が求められる程度。
+機能はフィボナッチ数が求められるギリギリしかありません。
 
-```py
-    run(["define", "fib", ["func", ["n"],
-            ["if", ["equal", "n", 0], 0,
-            ["if", ["equal", "n", 1], 1,
-            ["add", ["fib", ["sub", "n", 1]], ["fib", ["sub", "n", 2]]]]]]])
-    run(["fib", 10])
+```
+    fib := func (n) do
+        if n == 0 then 0
+        elif n == 1 then 1
+        else fib(n - 1) + fib(n - 2) end
+    end;
+
+    print(fib(10))
 ```
 
 そこを起点に[ブランチを分けながら](https://github.com/koba925/toig/branches)いろいろ試しています。
