@@ -23,88 +23,103 @@ class TestToig(unittest.TestCase):
             return (val, mock_stdout.getvalue())
 
     def test_primitives(self):
-        self.assertEqual(self.go(None), None)
-        self.assertEqual(self.go(5), 5)
-        self.assertEqual(self.go(True), True)
-        self.assertEqual(self.go(False), False)
+        self.assertEqual(self.go("None"), None)
+        self.assertEqual(self.go("5"), 5)
+        self.assertEqual(self.go("True"), True)
+        self.assertEqual(self.go("False"), False)
 
     def test_define(self):
-        self.assertEqual(self.go(["define", "a", ["add", 5, 6]]), 11)
-        self.assertEqual(self.go("a"), 11)
-        self.assertTrue(self.fails(["b"]))
-        self.assertEqual(self.printed([["func", [], ["seq",
-                            ["print", ["define", "a", 5]],
-                            ["print", "a"]]]]), (None, "5\n5\n"))
-        self.assertEqual(self.go("a"), 11)
+        self.assertEqual(self.go("x := 5 == 5 "), True)
+        self.assertEqual(self.go("x"), True)
+        self.assertEqual(self.go("y := z := 6"), 6)
+        self.assertEqual(self.go("y"), 6)
+        self.assertEqual(self.go("z"), 6)
 
     def test_assign(self):
-        self.assertEqual(self.go(["define", "a", 5]), 5)
-        self.assertEqual(self.go(["assign", "a", ["add", 5, 6]]), 11)
-        self.assertEqual(self.go("a"), 11)
-        self.assertTrue(self.fails(["assign", "b", 6]))
-        self.assertEqual(self.go([["func", [], ["assign", "a", 6]]]), 6)
-        self.assertEqual(self.printed([["func", [], ["seq",
-                            ["print", ["assign", "a", 6]],
-                            ["print", "a"]]]]), (None, "6\n6\n"))
-        self.assertEqual(self.go("a"), 6)
+        self.assertEqual(self.go("x := y := 5"), 5)
+        self.assertEqual(self.go("x"), 5)
+        self.assertEqual(self.go("x = 5 == 5"), True)
+        self.assertEqual(self.go("x"), True)
+        self.assertEqual(self.go("x = y = 7"), 7)
+        self.assertEqual(self.go("x"), 7)
+        self.assertEqual(self.go("y"), 7)
 
-    def test_do(self):
-        self.assertEqual(self.go(["seq"]), None)
-        self.assertEqual(self.go(["seq", 5]), 5)
-        self.assertEqual(self.go(["seq", 5, 6]), 6)
-        self.assertEqual(self.printed(["seq", ["print", 5]]), (None, "5\n"))
-        self.assertEqual(self.printed(["seq", ["print", 5], ["print", 6]]), (None, "5\n6\n"))
+    def test_sequence(self):
+        self.assertEqual(self.go("x := 5; y := 6; x + y"), 11)
+        self.assertEqual(self.go("x"), 5)
+        self.assertEqual(self.go("y"), 6)
+        self.assertTrue(self.fails(";"))
 
-    def test_if(self):
-        self.assertEqual(self.go(["if", ["equal", 5, 5], ["add", 7, 8], ["add", 9, 10]]), 15)
-        self.assertEqual(self.go(["if", ["equal", 5, 6], ["add", 7, 8], ["add", 9, 10]]), 19)
-        self.assertTrue(self.fails(["if", True, 5]))
+    def test_comparison(self):
+        self.assertTrue(self.go("5 + 8 == 6 + 7"))
+        self.assertFalse(self.go("5 + 6 == 6 + 7"))
 
-    def test_builtins(self):
-        self.assertEqual(self.go(["add", ["add", 5, 6], ["add", 7, 8]]), 26)
-        self.assertEqual(self.go(["sub", ["sub", 26, 8], ["add", 5, 6]]), 7)
-        self.assertEqual(self.go(["equal", ["add", 5, 6], ["add", 6, 5]]), True)
-        self.assertEqual(self.go(["equal", ["add", 5, 6], ["add", 7, 8]]), False)
+    def test_add_sub(self):
+        self.assertEqual(self.go("5 + 6 + 7"), 18)
+        self.assertEqual(self.go("18 - 6 - 7"), 5)
+
+    def test_paren(self):
+        self.assertEqual(self.go("5 + 6; 7"), 7)
+        self.assertEqual(self.go("5 + (6; 7)"), 12)
+        self.assertEqual(self.go("(5) + 6"), 11)
+
+    def test_call(self):
+        self.assertEqual(self.go("add(5; 6, 7; 8)"), 14)
 
     def test_print(self):
-        self.assertEqual(self.printed(["print", None]), (None, "None\n"))
-        self.assertEqual(self.printed(["print", 5]), (None, "5\n"))
-        self.assertEqual(self.printed(["print", True]), (None, "True\n"))
-        self.assertEqual(self.printed(["print", False]), (None, "False\n"))
-        self.assertEqual(self.printed(["print"]), (None, "\n"))
-        self.assertEqual(self.printed(["print", 5, 6]), (None, "5 6\n"))
+        self.assertEqual(self.printed("print(None)"), (None, "None\n"))
+        self.assertEqual(self.printed("print(5)"), (None, "5\n"))
+        self.assertEqual(self.printed("print(True)"), (None, "True\n"))
+        self.assertEqual(self.printed("print(False)"), (None, "False\n"))
+        self.assertEqual(self.printed("print()"), (None, "\n"))
+        self.assertEqual(self.printed("print(5, 6)"), (None, "5 6\n"))
 
     def test_func(self):
-        self.assertEqual(self.go([["func", ["n"], ["add", 5, "n"]], 6]), 11)
+        self.assertEqual(self.go("func (a, b) do a + b end (5, 6)"), 11)
+
+    def test_if(self):
+        self.assertEqual(self.go("if 5; True then 6; 7 end"), 7)
+        self.assertEqual(self.go("if 5; False then 6; 7 end"), None)
+        self.assertEqual(self.go("if 5; True then 6; 7 else 8; 9 end"), 7)
+        self.assertEqual(self.go("if 5; False then 6; 7 else 8; 9 end"), 9)
+        self.assertEqual(self.go("if 5; True then 6; 7 elif 8; True then 9; 10 else 11; 12 end"), 7)
+        self.assertEqual(self.go("if 5; False then 6; 7 elif 8; True then 9; 10 else 11; 12 end"), 10)
+        self.assertEqual(self.go("if 5; False then 6; 7 elif 8; False then 9; 10 else 11; 12 end"), 12)
+
+        self.assertTrue(self.fails("if True end"))
+        self.assertTrue(self.fails("if True then"))
+        self.assertTrue(self.fails("if True then 5 else"))
 
     def test_fib(self):
-        self.go(["define", "fib", ["func", ["n"],
-                ["if", ["equal", "n", 0], 0,
-                ["if", ["equal", "n", 1], 1,
-                ["add", ["fib", ["sub", "n", 1]], ["fib", ["sub", "n", 2]]]]]]])
-        self.assertEqual(self.go(["fib", 0]), 0)
-        self.assertEqual(self.go(["fib", 1]), 1)
-        self.assertEqual(self.go(["fib", 2]), 1)
-        self.assertEqual(self.go(["fib", 3]), 2)
-        self.assertEqual(self.go(["fib", 10]), 55)
+        self.go("""
+            fib := func (n) do
+                if n == 0 then 0
+                elif n == 1 then 1
+                else fib(n - 1) + fib(n - 2) end
+            end
+        """)
+        self.assertEqual(self.go("fib(0)"), 0)
+        self.assertEqual(self.go("fib(1)"), 1)
+        self.assertEqual(self.go("fib(2)"), 1)
+        self.assertEqual(self.go("fib(3)"), 2)
+        self.assertEqual(self.go("fib(10)"), 55)
 
-    def test_adder(self):
-        self.go(["define", "make_adder", ["func", ["n"],
-                ["func", ["m"], ["add", "n", "m"]]]])
-        self.assertEqual(self.go([["make_adder", 5], 6]), 11)
+    def test_closure_adder(self):
+        self.go("make_adder := func (n) do func (m) do n + m end end")
+        self.assertEqual(self.go("make_adder(5)(6)"), 11)
 
-    def test_counter(self):
-        self.go(["define", "make_counter", ["func", [], ["seq",
-                ["define", "c", 0],
-                ["func", [], ["assign", "c", ["add", "c", 1]]]]]])
-        self.go(["define", "counter1", ["make_counter"]])
-        self.go(["define", "counter2", ["make_counter"]])
-        self.assertEqual(self.go(["counter1"]), 1)
-        self.assertEqual(self.go(["counter1"]), 2)
-        self.assertEqual(self.go(["counter2"]), 1)
-        self.assertEqual(self.go(["counter2"]), 2)
-        self.assertEqual(self.go(["counter1"]), 3)
-        self.assertEqual(self.go(["counter2"]), 3)
+    def test_closure_counter(self):
+        self.go("""
+            make_counter := func () do c := 0; func() do c = c + 1 end end;
+            counter1 := make_counter();
+            counter2 := make_counter()
+        """)
+        self.assertEqual(self.go("counter1()"), 1)
+        self.assertEqual(self.go("counter1()"), 2)
+        self.assertEqual(self.go("counter2()"), 1)
+        self.assertEqual(self.go("counter2()"), 2)
+        self.assertEqual(self.go("counter1()"), 3)
+        self.assertEqual(self.go("counter2()"), 3)
 
 if __name__ == "__main__":
     unittest.main()

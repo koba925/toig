@@ -1,3 +1,183 @@
+# Scanner
+
+def is_name_first(c): return c.isalpha() or c == "_"
+def is_name_rest(c): return c.isalnum() or c == "_"
+
+class Scanner():
+    def __init__(self, src):
+        self._src = src
+        self._pos = 0
+        self._token = ""
+
+    def next_token(self):
+        while self._current_char().isspace(): self._advance()
+
+        self._token = ""
+
+        match self._current_char():
+            case "$EOF": return "$EOF"
+            case c if is_name_first(c):
+                return self._name()
+            case c if c.isnumeric():
+                self._word(str.isnumeric)
+                return int(self._token)
+            case c if c in "=:":
+                self._append_char()
+                if self._current_char() == "=": self._append_char()
+            case c if c in "+-(),;":
+                self._append_char()
+
+        return self._token
+
+    def _name(self):
+        self._word(is_name_rest)
+        match self._token:
+            case "None": return None
+            case "True": return True
+            case "False": return False
+            case _ : return self._token
+
+    def _word(self, is_rest):
+        self._append_char()
+        while is_rest(self._current_char()):
+            self._append_char()
+
+    def _append_char(self):
+        self._token += self._current_char()
+        self._advance()
+
+    def _current_char(self):
+        if self._pos < len(self._src):
+            return self._src[self._pos]
+        else:
+            return "$EOF"
+
+    def _advance(self): self._pos += 1
+
+
+# Parser
+
+class Parser:
+    def __init__(self, src):
+        self._src = src
+        self._scanner = Scanner(src)
+        self._current_token = self._scanner.next_token()
+
+    def parse(self):
+        expr = self._expression()
+        assert self._current_token == "$EOF", \
+            f"Unexpected token at end: `{self._current_token}` @ parse"
+        return expr
+
+    # Grammar
+
+    def _expression(self):
+        return self._sequence()
+
+    def _sequence(self):
+        exprs = [self._define_assign()]
+        while self._current_token == ";":
+            self._advance()
+            exprs.append(self._define_assign())
+        return exprs[0] if len(exprs) == 1 else ["seq"] + exprs
+
+    def _define_assign(self):
+        return self._binary_right({
+            ":=": "define", "=": "assign"
+        }, self._comparison)
+
+    def _comparison(self):
+        return self._binary_left({
+            "==": "equal",
+        }, self._add_sub)
+
+    def _add_sub(self):
+        return self._binary_left({
+            "+": "add", "-": "sub"
+        }, self._call)
+
+    def _call(self):
+        target = self._primary()
+        while self._current_token == "(":
+            self._advance()
+            target = [target] + self._comma_separated_exprs(")")
+        return target
+
+    def _primary(self):
+        match self._current_token:
+            case "(":
+                self._advance()
+                expr = self._expression()
+                self._consume(")")
+                return expr
+            case "func":
+                self._advance(); return self._func()
+            case "if":
+                self._advance(); return self._if()
+        return self._advance()
+
+    def _if(self):
+        cnd = self._expression()
+        self._consume("then")
+        thn = self._expression()
+        if self._current_token == "elif":
+            self._advance()
+            return ["if", cnd, thn, self._if()]
+        if self._current_token == "else":
+            self._advance()
+            els = self._expression()
+            self._consume("end")
+            return ["if", cnd, thn, els]
+        self._consume("end")
+        return ["if", cnd, thn, None]
+
+    def _func(self):
+        self._consume("(")
+        params = self._comma_separated_exprs(")")
+        self._consume("do")
+        body = self._expression()
+        self._consume("end")
+        return ["func", params, body]
+
+    # Helpers
+
+    def _binary_left(self, ops, sub_elem):
+        left = sub_elem()
+        while (op := self._current_token) in ops:
+            self._advance()
+            left = [ops[op], left, sub_elem()]
+        return left
+
+    def _binary_right(self, ops, sub_elem):
+        left = sub_elem()
+        if (op := self._current_token) in ops:
+            self._advance()
+            return [ops[op], left, self._binary_right(ops, sub_elem)]
+        return left
+
+    def _comma_separated_exprs(self, closing_token):
+        cse = []
+        if self._current_token != closing_token:
+            cse.append(self._expression())
+            while self._current_token == ",":
+                self._advance()
+                cse.append(self._expression())
+        self._consume(closing_token)
+        return cse
+
+    def _consume(self, expected):
+        assert isinstance(self._current_token, str) and \
+            self._current_token in expected, \
+            f"Expected `{expected}`, found `{self._current_token}` @ consume"
+        return self._advance()
+
+    def _advance(self):
+        prev_token = self._current_token
+        self._current_token = self._scanner.next_token()
+        return prev_token
+
+# Evaluator
+
 class Environment:
     def __init__(self, parent=None):
         self._parent = parent
@@ -89,25 +269,34 @@ class Interpreter:
         self._env = Environment(self._env)
 
     def go(self, src):
-        return Evaluator().eval(src, self._env)
+        return Evaluator().eval(Parser(src).parse(), self._env)
 
 if __name__ == "__main__":
     i = Interpreter()
 
-    i.go(["define", "fib", ["func", ["n"],
-            ["if", ["equal", "n", 0], 0,
-            ["if", ["equal", "n", 1], 1,
-            ["add", ["fib", ["sub", "n", 1]], ["fib", ["sub", "n", 2]]]]]]])
-    i.go(["print", ["fib", 10]])
+    i.go("""
+        fib := func (n) do
+            if n == 0 then 0
+            elif n == 1 then 1
+            else fib(n - 1) + fib(n - 2) end
+        end;
 
-    i.go(["define", "make_counter", ["func", [], ["seq",
-            ["define", "c", 0],
-            ["func", [], ["assign", "c", ["add", "c", 1]]]]]])
-    i.go(["define", "counter1", ["make_counter"]])
-    i.go(["define", "counter2", ["make_counter"]])
-    i.go(["print", ["counter1"]])
-    i.go(["print", ["counter1"]])
-    i.go(["print", ["counter2"]])
-    i.go(["print", ["counter2"]])
-    i.go(["print", ["counter1"]])
-    i.go(["print", ["counter2"]])
+        print(fib(10))
+    """)
+
+    i.go("""
+        make_counter := func () do
+            c := 0;
+            func() do c = c + 1 end
+        end;
+
+        counter1 := make_counter();
+        counter2 := make_counter();
+
+        print(counter1());
+        print(counter1());
+        print(counter2());
+        print(counter2());
+        print(counter1());
+        print(counter2())
+    """)
