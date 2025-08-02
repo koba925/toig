@@ -228,37 +228,40 @@ class Environment:
         self._vals = {}
 
     def define(self, name, val):
-        self._vals[name] = val
+        self._vals[name.val] = val
         return val
 
     def assign(self, name, val):
-        if name in self._vals:
-            self._vals[name] = val
+        if name.val in self._vals:
+            self._vals[name.val] = val
             return val
         elif self._parent is not None:
             return self._parent.assign(name, val)
         else:
-            assert False, f"Undefined variable: `{name}` @ assign."
+            self._report_error(f"Undefined variable", name)
 
     def get(self, name):
-        if name in self._vals:
-            return self._vals[name]
+        if name.val in self._vals:
+            return self._vals[name.val]
         elif self._parent is not None:
             return self._parent.get(name)
         else:
-            assert False, f"Undefined variable: `{name}` @ get"
+            self._report_error(f"Undefined variable", name)
+
+    def _report_error(self, msg, name):
+        report_error(msg, name.text, name.line)
 
 class Evaluator:
     def eval(self, expr, env):
         match expr:
             case Token(val=v):
-                return env.get(v) if isinstance(v, str) else v
+                return env.get(expr) if isinstance(v, str) else v
             case [Token(val="func"), params, body]:
                 return ["func", params, body, env]
             case [Token(val="define"), name, val]:
-                return env.define(name.val, self.eval(val, env))
+                return env.define(name, self.eval(val, env))
             case [Token(val="assign"), name, val]:
-                return env.assign(name.val, self.eval(val, env))
+                return env.assign(name, self.eval(val, env))
             case [Token(val="seq"), *exprs]:
                 return self._eval_seq(exprs, env)
             case [Token(val="if"), cnd, thn, els]:
@@ -289,7 +292,7 @@ class Evaluator:
         _, params, body, env = f_val
         new_env = Environment(env)
         for param, arg in zip(params, args_val):
-            new_env.define(param.val, arg)
+            new_env.define(param, arg)
         return self.eval(body, new_env)
 
 class Interpreter:
@@ -306,7 +309,7 @@ class Interpreter:
         }
 
         for name, func in _builtins.items():
-            self._env.define(name, func)
+            self._env.define(Token(name, name, 0), func)
 
         self._env = Environment(self._env)
 
