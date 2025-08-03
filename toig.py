@@ -45,6 +45,11 @@ class Scanner():
             case c if c.isnumeric():
                 self._word(str.isnumeric)
                 return self._token(int(self._text))
+            case c if c in "!":
+                self._append_char()
+                if self._current_char() == "!":
+                    self._append_char()
+                return self._token(self._text)
             case c if c in "=:":
                 self._append_char()
                 if self._current_char() == "=": self._append_char()
@@ -149,8 +154,8 @@ class Parser:
                 expr = self._expression()
                 self._consume(")")
                 return expr
-            case "func":
-                return self._func()
+            case "func" | "macro":
+                return self._func_macro()
             case "if":
                 return self._if()
         return self._advance()
@@ -170,7 +175,7 @@ class Parser:
         self._consume("end")
         return [op, cnd, thn, Token(None, "", op.line)]
 
-    def _func(self):
+    def _func_macro(self):
         op = self._advance()
         self._consume("(")
         params = self._comma_separated_exprs(")")
@@ -258,8 +263,14 @@ class Evaluator:
                     return env.get(v) if isinstance(v, str) else v
                 except VariableNotFoundError:
                     self._report_error(f"Variable not found", expr)
+            case [Token(val="q"), elem]:
+                return elem
+            case [Token(val="qq"), elem]:
+                return self._eval_quasiquote(elem, env)
             case [Token(val="func"), params, body]:
                 return ["func", params, body, env]
+            case [Token(val="macro"), params, body]:
+                return ["macro", params, body, env]
             case [Token(val="define"), name, val]:
                 return env.define(name.val, self.eval(val, env))
             case [Token(val="assign"), name, val]:
@@ -271,12 +282,29 @@ class Evaluator:
                 return self._eval_seq(exprs, env)
             case [Token(val="if"), cnd, thn, els]:
                 return self._eval_if(cnd, thn, els, env)
-            case [func, *args]:
-                return self._apply(
-                    self.eval(func, env),
-                    [self.eval(arg, env) for arg in args])
+            case [Token(val="expand"), [op, *args]]:
+                return self._eval_expand(op, args, env)
+            case [op, *args]:
+                return self._eval_op(op, args, env)
             case unexpected:
                 report_error("Unexpected expression", unexpected, 0)
+
+    def _eval_quasiquote(self, expr, env):
+        def qqelems(elems):
+            quoted = []
+            for elem in elems:
+                match elem:
+                    case [Token(val="!!"), e]:
+                        vals = self.eval(e, env)
+                        assert isinstance(vals, list), f"Cannot splice in quasiquote: {e}"
+                        quoted += vals
+                    case _: quoted.append(self._eval_quasiquote(elem, env))
+            return quoted
+
+        match expr:
+            case [Token(val="!"), elem]: return self.eval(elem, env)
+            case [*elems]: return qqelems(elems)
+            case _: return expr
 
     def _eval_seq(self, exprs, env):
         val = None
@@ -290,15 +318,40 @@ class Evaluator:
         else:
             return self.eval(els, env)
 
+    def _eval_expand(self, op, args, env):
+        match self.eval(op, env):
+            case ["macro", params, body, menv]:
+                return self._expand(body, params, args, menv)
+            case unexpected:
+                report_error("Macro expected", unexpected, 0)
+
+    def _eval_op(self, op, args, env):
+        match self.eval(op, env):
+            case ["macro", params, body, menv]:
+                return self.eval(self._expand(body, params, args, menv), env)
+            case f_val:
+                return self._apply(
+                    f_val,
+                    [self.eval(arg, env) for arg in args])
+
+    def _expand(self, body, params, args, menv):
+        new_menv = self._extend(menv, params, args)
+        return self.eval(body, new_menv)
+
     def _apply(self, f_val, args_val):
         if callable(f_val):
             return f_val(*args_val)
 
         _, params, body, env = f_val
+        new_env = self._extend(env, params, args_val)
+        return self.eval(body, new_env)
+
+    def _extend(self, env, params, args_val):
         new_env = Environment(env)
         for param, arg in zip(params, args_val):
             new_env.define(param.val, arg)
-        return self.eval(body, new_env)
+        return new_env
+
 
     def _report_error(self, msg, token):
         report_error(msg, token.text, token.line)
@@ -313,6 +366,9 @@ class Interpreter:
             "add": lambda a, b: a + b,
             "sub": lambda a, b: a - b,
             "equal": lambda a, b: a == b,
+
+            "arr": lambda *args: list(args),
+
             "print": print
         }
 
@@ -321,11 +377,21 @@ class Interpreter:
 
         self._env = Environment(self._env)
 
+    def parse(self, src):
+        return Parser(src).parse()
+
     def go(self, src):
         return Evaluator().eval(Parser(src).parse(), self._env)
 
 if __name__ == "__main__":
     i = Interpreter()
+
+    i.go("""
+        myif := macro(cnd, thn, els) do qq(if !(cnd) then !(thn) else !(els) end) end;
+        print(expand(myif(5 == 5, 7 + 8, 9 + 10)));
+        print(myif(5 == 5, 7 + 8, 9 + 10));
+        print(myif(5 == 6, 7 + 8, 9 + 10))
+    """)
 
     i.go("""
         fib := func (n) do
