@@ -222,6 +222,8 @@ class Parser:
 
 # Evaluator
 
+Nothing = object()
+
 class Environment:
     def __init__(self, parent=None):
         self._parent = parent
@@ -238,7 +240,7 @@ class Environment:
         elif self._parent is not None:
             return self._parent.assign(name, val)
         else:
-            assert False, f"Undefined variable: `{name}` @ assign."
+            return Nothing
 
     def get(self, name):
         if name in self._vals:
@@ -246,19 +248,30 @@ class Environment:
         elif self._parent is not None:
             return self._parent.get(name)
         else:
-            assert False, f"Undefined variable: `{name}` @ get"
+            return Nothing
 
 class Evaluator:
     def eval(self, expr, env):
         match expr:
             case Token(val=v):
-                return env.get(v) if isinstance(v, str) else v
+                if isinstance(v, str) :
+                    if (var_val := env.get(v)) is not Nothing:
+                        return var_val
+                    else:
+                        self._report_error(f"Variable not found", expr)
+                else:
+                    return v
             case [Token(val="func"), params, body]:
                 return ["func", params, body, env]
-            case [Token(val="define"), name, val]:
-                return env.define(name.val, self.eval(val, env))
-            case [Token(val="assign"), name, val]:
-                return env.assign(name.val, self.eval(val, env))
+            case [Token(val="define"), name, val_expr]:
+                val = self.eval(val_expr, env)
+                return env.define(name.val, val)
+            case [Token(val="assign"), name, val_expr]:
+                val = self.eval(val_expr, env)
+                if env.assign(name.val, val) is not Nothing:
+                    return val
+                else:
+                    self._report_error(f"Variable not found", name)
             case [Token(val="seq"), *exprs]:
                 return self._eval_seq(exprs, env)
             case [Token(val="if"), cnd, thn, els]:
@@ -291,6 +304,9 @@ class Evaluator:
         for param, arg in zip(params, args_val):
             new_env.define(param.val, arg)
         return self.eval(body, new_env)
+
+    def _report_error(self, msg, token):
+        report_error(msg, token.text, token.line)
 
 class Interpreter:
     def __init__(self):
