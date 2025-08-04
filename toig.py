@@ -287,16 +287,17 @@ class Evaluator:
             case [op, *args]:
                 return self._eval_op(op, args, env)
             case unexpected:
-                report_error("Unexpected expression", unexpected, 0)
+                self._report_error("Unexpected expression", expr)
 
     def _eval_quasiquote(self, expr, env):
         def qqelems(elems):
             quoted = []
             for elem in elems:
                 match elem:
-                    case [Token(val="!!"), e]:
+                    case [Token(val="!!") as op, e]:
                         vals = self.eval(e, env)
-                        assert isinstance(vals, list), f"Cannot splice in quasiquote: {e}"
+                        if not isinstance(vals, list):
+                            self._report_error("Cannot splice", op)
                         quoted += vals
                     case _: quoted.append(self._eval_quasiquote(elem, env))
             return quoted
@@ -323,16 +324,19 @@ class Evaluator:
             case ["macro", params, body, menv]:
                 return self._expand(body, params, args, menv)
             case unexpected:
-                report_error("Macro expected", unexpected, 0)
+                self._report_error("Macro expected", op)
 
     def _eval_op(self, op, args, env):
         match self.eval(op, env):
             case ["macro", params, body, menv]:
                 return self.eval(self._expand(body, params, args, menv), env)
             case f_val:
-                return self._apply(
-                    f_val,
-                    [self.eval(arg, env) for arg in args])
+                try:
+                    return self._apply(
+                        f_val,
+                        [self.eval(arg, env) for arg in args])
+                except TypeError:
+                    self._report_error("Type error", op)
 
     def _expand(self, body, params, args, menv):
         new_menv = self._extend(menv, params, args)
@@ -352,8 +356,17 @@ class Evaluator:
             new_env.define(param.val, arg)
         return new_env
 
+    def _report_error(self, msg, expr):
+        def first_token(expr):
+            match expr:
+                case Token():
+                    return expr
+                case [first, *_rest]:
+                    return first_token(first)
+                case _:
+                    return Token("Unknown", "Unknown", 0)
 
-    def _report_error(self, msg, token):
+        token = first_token(expr)
         report_error(msg, token.text, token.line)
 
 class Interpreter:
