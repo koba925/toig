@@ -6,13 +6,23 @@ def is_name_rest(c): return c.isalnum() or c == "_"
 import dataclasses
 
 @dataclasses.dataclass(frozen=True)
+class Name:
+    name: str
+
+    def __repr__(self):
+        return f"Name({self.name})"
+
+@dataclasses.dataclass(frozen=True)
 class Token:
-    val: None | bool | int | str | list
+    val: None | bool | int | str | list | Name
     text: str
     line: int
 
     def with_val(self, val):
         return dataclasses.replace(self, val=val)
+
+    def __repr__(self):
+        return f"Token({self.val!r}, {self.text!r}, {self.line})"
 
 from typing import NoReturn
 
@@ -53,10 +63,10 @@ class Scanner():
             case c if c in "=:":
                 self._append_char()
                 if self._current_char() == "=": self._append_char()
-                return self._token(self._text)
+                return self._token(Name(self._text))
             case c if c in "+-(),;":
                 self._append_char()
-                return self._token(self._text)
+                return self._token(Name(self._text))
             case c:
                 report_error("Unexpected character", c, self._line)
 
@@ -66,7 +76,7 @@ class Scanner():
             case "None": return self._token(None)
             case "True": return self._token(True)
             case "False": return self._token(False)
-            case text : return self._token(text)
+            case text : return self._token(Name(text))
 
     def _word(self, is_rest):
         self._append_char()
@@ -115,12 +125,12 @@ class Parser:
 
     def _sequence(self):
         expr = self._define_assign()
-        if self._current_token.val != ";":
+        if self._current_token.val != Name(";"):
             return expr
         else:
-            op = self._current_token.with_val("seq")
+            op = self._current_token.with_val(Name("seq"))
             seq = [op, expr]
-            while self._current_token.val == ";":
+            while self._current_token.val == Name(";"):
                 self._advance()
                 seq.append(self._define_assign())
             return seq
@@ -142,38 +152,38 @@ class Parser:
 
     def _call(self):
         target = self._primary()
-        while self._current_token.val == "(":
+        while self._current_token.val == Name("("):
             self._advance()
             target = [target] + self._comma_separated_exprs(")")
         return target
 
     def _primary(self):
         match self._current_token.val:
-            case "(":
+            case Name("("):
                 self._advance()
                 expr = self._expression()
                 self._consume(")")
                 return expr
-            case "func" | "macro":
+            case Name("func") | Name("macro"):
                 return self._func_macro()
-            case "if":
+            case Name("if"):
                 return self._if()
         return self._advance()
 
     def _if(self):
-        op = self._advance().with_val("if")
+        op = self._advance().with_val(Name("if"))
         cnd = self._expression()
         self._consume("then")
         thn = self._expression()
-        if self._current_token.val == "elif":
+        if self._current_token.val == Name("elif"):
             return [op, cnd, thn, self._if()]
-        if self._current_token.val == "else":
+        if self._current_token.val == Name("else"):
             self._advance()
             els = self._expression()
             self._consume("end")
             return [op, cnd, thn, els]
         self._consume("end")
-        return [op, cnd, thn, Token(None, "", op.line)]
+        return [op, cnd, thn, Token(None, "None", op.line)]
 
     def _func_macro(self):
         op = self._advance()
@@ -190,30 +200,30 @@ class Parser:
         left = sub_elem()
         while (op := self._current_token).text in ops:
             self._advance()
-            left = [op.with_val(ops[op.text]), left, sub_elem()]
+            left = [op.with_val(Name(ops[op.text])), left, sub_elem()]
         return left
 
     def _binary_right(self, ops, sub_elem):
         left = sub_elem()
         if (op := self._current_token).text in ops:
             self._advance()
-            return [op.with_val(ops[op.text]),
+            return [op.with_val(Name(ops[op.text])),
                 left, self._binary_right(ops, sub_elem)]
         return left
 
     def _comma_separated_exprs(self, closing_token):
         cse = []
-        if self._current_token.val != closing_token:
+        if self._current_token.val != Name(closing_token):
             cse.append(self._expression())
-            while self._current_token.val == ",":
+            while self._current_token.val == Name(","):
                 self._advance()
                 cse.append(self._expression())
         self._consume(closing_token)
         return cse
 
     def _consume(self, expected):
-        if not isinstance(self._current_token.val, str) or \
-                self._current_token.val not in expected:
+        if not isinstance(self._current_token.val, Name) or \
+                self._current_token.val.name not in expected:
             self._report_error(f"`{expected}` expected")
         return self._advance()
 
@@ -258,31 +268,33 @@ class Environment:
 class Evaluator:
     def eval(self, expr, env):
         match expr:
-            case Token(val=v):
+            case Token(Name(name)):
                 try:
-                    return env.get(v) if isinstance(v, str) else v
+                    return env.get(name)
                 except VariableNotFoundError:
                     self._report_error(f"Variable not found", expr)
-            case [Token(val="q"), elem]:
+            case Token(val=v):
+                return v
+            case [Token(val=Name("q")), elem]:
                 return elem
-            case [Token(val="qq"), elem]:
+            case [Token(val=Name("qq")), elem]:
                 return self._eval_quasiquote(elem, env)
-            case [Token(val="func"), params, body]:
+            case [Token(val=Name("func")), params, body]:
                 return ["func", params, body, env]
-            case [Token(val="macro"), params, body]:
+            case [Token(val=Name("macro")), params, body]:
                 return ["macro", params, body, env]
-            case [Token(val="define"), name, val]:
-                return env.define(name.val, self.eval(val, env))
-            case [Token(val="assign"), name, val]:
+            case [Token(val=Name("define")), name, val]:
+                return env.define(name.val.name, self.eval(val, env))
+            case [Token(val=Name("assign")), name, val]:
                 try:
-                    return env.assign(name.val, self.eval(val, env))
+                    return env.assign(name.val.name, self.eval(val, env))
                 except VariableNotFoundError:
                     self._report_error(f"Variable not found", name)
-            case [Token(val="seq"), *exprs]:
+            case [Token(val=Name("seq")), *exprs]:
                 return self._eval_seq(exprs, env)
-            case [Token(val="if"), cnd, thn, els]:
+            case [Token(val=Name("if")), cnd, thn, els]:
                 return self._eval_if(cnd, thn, els, env)
-            case [Token(val="expand"), [op, *args]]:
+            case [Token(val=Name("expand")), [op, *args]]:
                 return self._eval_expand(op, args, env)
             case [op, *args]:
                 return self._eval_op(op, args, env)
@@ -353,7 +365,7 @@ class Evaluator:
     def _extend(self, env, params, args_val):
         new_env = Environment(env)
         for param, arg in zip(params, args_val):
-            new_env.define(param.val, arg)
+            new_env.define(param.val.name, arg)
         return new_env
 
     def _report_error(self, msg, expr):
@@ -379,8 +391,6 @@ class Interpreter:
             "add": lambda a, b: a + b,
             "sub": lambda a, b: a - b,
             "equal": lambda a, b: a == b,
-
-            "arr": lambda *args: list(args),
 
             "print": print
         }
