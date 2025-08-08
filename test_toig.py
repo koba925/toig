@@ -22,6 +22,9 @@ class TestToig(unittest.TestCase):
             val = self.i.go(src)
             return (val, mock_stdout.getvalue())
 
+    def expanded(self, src):
+        return self.i.go(f"expand({src})").__repr__()
+
     def test_primitives(self):
         self.assertEqual(self.go("None"), None)
         self.assertEqual(self.go("5"), 5)
@@ -120,6 +123,22 @@ class TestToig(unittest.TestCase):
         self.assertEqual(self.go("counter2()"), 2)
         self.assertEqual(self.go("counter1()"), 3)
         self.assertEqual(self.go("counter2()"), 3)
+
+    def test_macro(self):
+        self.go("""
+            myif := macro(cnd, thn, els) do qq(
+                if !(cnd) then !(thn) else !(els) end
+            ) end
+        """)
+        self.assertEqual(
+            self.expanded("myif(5 == 5, 6, 7)"),
+            "[Token(Name(if), 'if', 3), [Token(Name(equal), '==', 1), Token(5, '5', 1), Token(5, '5', 1)], Token(6, '6', 1), Token(7, '7', 1)]")
+        self.assertEqual(self.go("myif(5 == 5, 6, a)"), 6)
+        self.assertEqual(self.go("myif(5 == 6, a, 7)"), 7)
+
+    def test_str(self):
+        self.assertEqual(self.go("'hello, world'"), "hello, world")
+        self.assertEqual(self.go("'hello, ' + 'world'"), "hello, world")
 
 if __name__ == "__main__":
     unittest.main()

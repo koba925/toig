@@ -55,6 +55,14 @@ class Scanner():
             case c if c.isnumeric():
                 self._word(str.isnumeric)
                 return self._token(int(self._text))
+            case c if c == "'":
+                self._advance()
+                while (c := self._current_char()) != "'":
+                    if c == "$EOF":
+                        report_error("Unterminated string", self._text, self._line)
+                    self._append_char()
+                self._advance()
+                return self._token(self._text)
             case c if c in "!":
                 self._append_char()
                 if self._current_char() == "!":
@@ -409,11 +417,15 @@ class Interpreter:
 if __name__ == "__main__":
     i = Interpreter()
 
+    print(i.go("'hello, world'"))
+    i.go("print('hello, world')")
+    i.go("print('hello, ' + 'world')")
+
     i.go("""
         myif := macro(cnd, thn, els) do qq(if !(cnd) then !(thn) else !(els) end) end;
-        print(expand(myif(5 == 5, 7 + 8, 9 + 10)));
-        print(myif(5 == 5, 7 + 8, 9 + 10));
-        print(myif(5 == 6, 7 + 8, 9 + 10))
+        print(expand(myif(5 == 5, 6, 7)));
+        print(myif(5 == 5, 6, a));
+        print(myif(5 == 6, a, 8))
     """)
 
     i.go("""
