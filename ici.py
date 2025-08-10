@@ -1,3 +1,33 @@
+class VariableNotFoundError(Exception):
+    def __init__(self, name):
+        self._name = name
+
+class Environment:
+    def __init__(self, parent=None):
+        self._parent = parent
+        self._vals = {}
+
+    def define(self, name, val):
+        self._vals[name] = val
+        return val
+
+    def assign(self, name, val):
+        if name in self._vals:
+            self._vals[name] = val
+            return val
+        elif self._parent is not None:
+            return self._parent.assign(name, val)
+        else:
+            raise VariableNotFoundError(name)
+
+    def get(self, name):
+        if name in self._vals:
+            return self._vals[name]
+        elif self._parent is not None:
+            return self._parent.get(name)
+        else:
+            raise VariableNotFoundError(name)
+
 class Compiler:
     def __init__(self):
         self._code = []
@@ -11,6 +41,14 @@ class Compiler:
         match expr:
             case None | bool(_) |int(_):
                 self._code.append(["const", expr])
+            case str(name):
+                self._code.append(["get", name])
+            case ["define", name, val]:
+                self._expr(val)
+                self._code.append(["def", name])
+            case ["assign", name, val]:
+                self._expr(val)
+                self._code.append(["set", name])
             case ["if", cnd, thn, els]:
                 self._if(cnd, thn, els)
             case [op, *args]:
@@ -50,12 +88,21 @@ class VM:
     def __init__(self):
         self._stack = []
         self._ip = 0
+        self._env = Environment()
 
     def execute(self, code):
+        self._stack = []
+        self._ip = 0
         while (inst := code[self._ip]) != ["halt"]:
             match inst:
                 case ["const", val]:
                     self._stack.append(val)
+                case ["def", name]:
+                    self._env.define(name, self._stack[-1])
+                case ["set", name]:
+                    self._env.assign(name, self._stack[-1])
+                case ["get", name]:
+                    self._stack.append(self._env.get(name))
                 case ["jump", addr]:
                     self._ip = addr
                     continue
@@ -71,8 +118,7 @@ class VM:
         assert len(self._stack) == 1, "Unused stack left: {self.stack}"
         return self._stack[0]
 
-def test_run(expr, expected):
-    vm = VM()
+def test_run(vm, expr, expected):
     print(f"Source:\n{expr}")
     code = Compiler().compile(expr)
     print("Code:")
@@ -83,19 +129,25 @@ def test_run(expr, expected):
     print(f"Actual Result  : {result}\n")
     assert expected == result
 
-test_run(None, None)
-test_run(True, True)
-test_run(False, False)
-test_run(5, 5)
+vm = VM()
 
-test_run(["add", 5, 6], 11)
-test_run(["sub", 11, 5], 6)
-test_run(["equal", 5, 5], True)
-test_run(["equal", 5, 6], False)
+test_run(vm, None, None)
+test_run(vm, True, True)
+test_run(vm, False, False)
+test_run(vm, 5, 5)
 
-test_run(["add", 5, ["add", 6, 7]], 18)
+test_run(vm, ["add", 5, 6], 11)
+test_run(vm, ["sub", 11, 5], 6)
+test_run(vm, ["equal", 5, 5], True)
+test_run(vm, ["equal", 5, 6], False)
 
-test_run(["if", ["equal", 5, 5], 6, 7], 6)
-test_run(["if", ["equal", 5, 6], 7, 8], 8)
-test_run(["if", ["equal", 5, 6], 7, ["if", ["equal", 8, 8], 9, 10]], 9)
+test_run(vm, ["add", 5, ["add", 6, 7]], 18)
 
+test_run(vm, ["if", ["equal", 5, 5], 6, 7], 6)
+test_run(vm, ["if", ["equal", 5, 6], 7, 8], 8)
+test_run(vm, ["if", ["equal", 5, 6], 7, ["if", ["equal", 8, 8], 9, 10]], 9)
+
+test_run(vm, ["define", "a", ["add", 5, 6]], 11)
+test_run(vm, "a", 11)
+test_run(vm, ["assign", "a", ["sub", "a", 5]], 6)
+test_run(vm, "a", 6)
