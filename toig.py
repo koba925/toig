@@ -178,6 +178,10 @@ class Parser:
 
 # Evaluator
 
+class VariableNotFoundError(Exception):
+    def __init__(self, name):
+        self._name = name
+
 class Environment:
     def __init__(self, parent=None):
         self._parent = parent
@@ -194,7 +198,7 @@ class Environment:
         elif self._parent is not None:
             return self._parent.assign(name, val)
         else:
-            assert False, f"Undefined variable: `{name}` @ assign."
+            raise VariableNotFoundError(name)
 
     def get(self, name):
         if name in self._vals:
@@ -202,74 +206,167 @@ class Environment:
         elif self._parent is not None:
             return self._parent.get(name)
         else:
-            assert False, f"Undefined variable: `{name}` @ get"
+            raise VariableNotFoundError(name)
 
-class Evaluator:
-    def eval(self, expr, env):
-        match expr:
-            case None | bool(_) | int(_):
-                return expr
-            case str(name):
-                return env.get(name)
-            case ["func", params, body]:
-                return ["func", params, body, env]
-            case ["define", name, val]:
-                return env.define(name, self.eval(val, env))
-            case ["assign", name, val]:
-                return env.assign(name, self.eval(val, env))
-            case ["seq", *exprs]:
-                return self._eval_seq(exprs, env)
-            case ["if", cnd, thn, els]:
-                return self._eval_if(cnd, thn, els, env)
-            case [func, *args]:
-                return self._apply(
-                    self.eval(func, env),
-                    [self.eval(arg, env) for arg in args])
-            case unexpected:
-                assert False, f"Unexpected expression: {unexpected} @ eval"
-
-    def _eval_seq(self, exprs, env):
-        val = None
-        for expr in exprs:
-            val = self.eval(expr, env)
-        return val
-
-    def _eval_if(self, cnd, thn, els, env):
-        if self.eval(cnd, env):
-            return self.eval(thn, env)
-        else:
-            return self.eval(els, env)
-
-    def _apply(self, f_val, args_val):
-        if callable(f_val):
-            return f_val(*args_val)
-
-        _, params, body, env = f_val
-        new_env = Environment(env)
-        for param, arg in zip(params, args_val):
-            new_env.define(param, arg)
-        return self.eval(body, new_env)
-
-class Interpreter:
+class Compiler:
     def __init__(self):
-        self._env = Environment()
-        self.init_builtins()
+        self._code = []
 
-    def init_builtins(self):
-        _builtins = {
-            "add": lambda a, b: a + b,
-            "sub": lambda a, b: a - b,
-            "equal": lambda a, b: a == b,
-            "print": print
+    def compile(self, expr):
+        self._expr(expr)
+        self._code.append(["halt"])
+        return self._code
+
+    def _expr(self, expr):
+        match expr:
+            case None | bool(_) |int(_):
+                self._code.append(["const", expr])
+            case ["func", params, body]:
+                self._func(params, body)
+            case str(name):
+                self._code.append(["get", name])
+            case ["define", name, val]:
+                self._expr(val)
+                self._code.append(["def", name])
+            case ["assign", name, val]:
+                self._expr(val)
+                self._code.append(["set", name])
+            case ["seq", *exprs]:
+                self._seq(exprs)
+            case ["if", cnd, thn, els]:
+                self._if(cnd, thn, els)
+            case [op, *args]:
+                self._op(op, args)
+            case unexpected:
+                assert False, f"Unexpected expression: {unexpected}"
+
+    def _func(self, params, body):
+        skip_jump = self._current_addr()
+        self._code.append(["jump", None])
+        func_addr = self._current_addr()
+        self._expr(body)
+        self._code.append(["ret"])
+        self._set_operand(skip_jump, self._current_addr())
+        self._code.append(["func", func_addr, params])
+
+    def _seq(self, exprs):
+        for expr in exprs:
+            self._expr(expr)
+            if expr is not exprs[-1]:
+                self._code.append(["pop"])
+
+    def _if(self, cnd, thn, els):
+            self._expr(cnd)
+            els_jump = self._current_addr()
+            self._code.append(["jump_if_false", None])
+            self._expr(thn)
+            end_jump = self._current_addr()
+            self._code.append(["jump", None])
+            self._set_operand(els_jump, self._current_addr())
+            self._expr(els)
+            self._set_operand(end_jump, self._current_addr())
+
+    def _op(self, op, args):
+        for arg in args[-1::-1]:
+            self._expr(arg)
+        self._expr(op)
+        self._code.append(["call"])
+
+    def _set_operand(self, ip, operand):
+        self._code[ip][1] = operand
+
+    def _current_addr(self):
+        return len(self._code)
+
+class VM:
+    def __init__(self):
+        self._codes = []
+        self._stack = []
+        self._call_stack = []
+        self._ncode = 0
+        self._ip = 0
+        self._env = Environment()
+        self._load_builtins()
+
+    def load(self, code):
+        self._codes.append(code)
+
+    def execute(self):
+        self._stack = []
+        self._call_stack = []
+        self._ncode = len(self._codes) - 1
+        self._ip = 0
+        while (inst := self._codes[self._ncode][self._ip]) != ["halt"]:
+            match inst:
+                case ["const", val]:
+                    self._stack.append(val)
+                case ["func", addr, params]:
+                    self._stack.append(["closure", [self._ncode, addr], params, self._env])
+                case ["pop"]:
+                    self._stack.pop()
+                case ["def", name]:
+                    self._env.define(name, self._stack[-1])
+                case ["set", name]:
+                    self._env.assign(name, self._stack[-1])
+                case ["get", name]:
+                    self._stack.append(self._env.get(name))
+                case ["jump", addr]:
+                    self._ip = addr
+                    continue
+                case ["jump_if_false", addr]:
+                    if not self._stack.pop():
+                        self._ip = addr
+                        continue
+                case ["call"]:
+                    self._call()
+                    continue
+                case ["ret"]:
+                    [self._ncode, self._ip], self._env = self._call_stack.pop()
+                    continue
+                case unexpected:
+                    assert False, f"Unexpected instruction: {unexpected}"
+            self._ip += 1
+        assert len(self._stack) == 1, f"Unused stack left: {self._stack}"
+        return self._stack[0]
+
+    def _call(self):
+        match self._stack.pop():
+            case f if callable(f):
+                f(self._stack)
+                self._ip += 1
+            case ["closure", [ncodes, addr], params, env]:
+                args = [self._stack.pop() for _ in params]
+                self._call_stack.append([[self._ncode, self._ip + 1], self._env])
+                self._env = Environment(env)
+                for param, val in zip(params, args):
+                    self._env.define(param, val)
+                self._ncode, self._ip = [ncodes, addr]
+            case unexpected:
+                assert False, f"Unexpected call: {unexpected}"
+
+    def _load_builtins(self):
+        builtins = {
+            "add": lambda s: s.append(s.pop() + s.pop()),
+            "sub": lambda s: s.append(s.pop() - s.pop()),
+            "equal": lambda s: s.append(s.pop() == s.pop()),
+
+            "print": lambda s: [print(s.pop()), s.append(None)]
         }
 
-        for name, func in _builtins.items():
+        for name, func in builtins.items():
             self._env.define(name, func)
 
         self._env = Environment(self._env)
 
+class Interpreter:
+    def __init__(self):
+        self._vm = VM()
+
     def go(self, src):
-        return Evaluator().eval(Parser(src).parse(), self._env)
+        ast = Parser(src).parse()
+        code = Compiler().compile(ast)
+        self._vm.load(code)
+        return self._vm.execute()
 
 if __name__ == "__main__":
     i = Interpreter()
