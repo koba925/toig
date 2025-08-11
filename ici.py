@@ -89,11 +89,8 @@ class Compiler:
     def _op(self, op, args):
         for arg in args[-1::-1]:
             self._expr(arg)
-        if isinstance(op, str) and op in VM.ops:
-            self._code.append(["op", op])
-        else:
-            self._expr(op)
-            self._code.append(["call"])
+        self._expr(op)
+        self._code.append(["call"])
 
     def _set_operand(self, ip, operand):
         self._code[ip][1] = operand
@@ -102,14 +99,6 @@ class Compiler:
         return len(self._code)
 
 class VM:
-    ops = {
-        "add": lambda s: s.append(s.pop() + s.pop()),
-        "sub": lambda s: s.append(s.pop() - s.pop()),
-        "equal": lambda s: s.append(s.pop() == s.pop()),
-
-        "print": lambda s: [print(s.pop()), s.append(None)]
-    }
-
     def __init__(self):
         self._codes = []
         self._stack = []
@@ -117,6 +106,7 @@ class VM:
         self._ncode = 0
         self._ip = 0
         self._env = Environment()
+        self._load_builtins()
 
     def load(self, code):
         self._codes.append(code)
@@ -153,8 +143,6 @@ class VM:
                 case ["ret"]:
                     [self._ncode, self._ip], self._env = self._call_stack.pop()
                     continue
-                case ["op", op]:
-                    VM.ops[op](self._stack)
                 case unexpected:
                     assert False, f"Unexpected instruction: {unexpected}"
             self._ip += 1
@@ -163,6 +151,9 @@ class VM:
 
     def _call(self):
         match self._stack.pop():
+            case f if callable(f):
+                f(self._stack)
+                self._ip += 1
             case ["closure", [ncodes, addr], params, env]:
                 args = [self._stack.pop() for _ in params]
                 self._call_stack.append([[self._ncode, self._ip + 1], self._env])
@@ -172,6 +163,20 @@ class VM:
                 self._ncode, self._ip = [ncodes, addr]
             case unexpected:
                 assert False, f"Unexpected call: {unexpected}"
+
+    def _load_builtins(self):
+        builtins = {
+            "add": lambda s: s.append(s.pop() + s.pop()),
+            "sub": lambda s: s.append(s.pop() - s.pop()),
+            "equal": lambda s: s.append(s.pop() == s.pop()),
+
+            "print": lambda s: [print(s.pop()), s.append(None)]
+        }
+
+        for name, func in builtins.items():
+            self._env.define(name, func)
+
+        self._env = Environment(self._env)
 
 def run(vm, expr):
     print(f"\nSource:\n{expr}")
