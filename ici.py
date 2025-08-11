@@ -111,21 +111,27 @@ class VM:
     }
 
     def __init__(self):
+        self._codes = []
         self._stack = []
         self._call_stack = []
+        self._ncode = 0
         self._ip = 0
         self._env = Environment()
 
-    def execute(self, code):
+    def load(self, code):
+        self._codes.append(code)
+
+    def execute(self):
         self._stack = []
         self._call_stack = []
+        self._ncode = len(self._codes) - 1
         self._ip = 0
-        while (inst := code[self._ip]) != ["halt"]:
+        while (inst := self._codes[self._ncode][self._ip]) != ["halt"]:
             match inst:
                 case ["const", val]:
                     self._stack.append(val)
                 case ["func", addr, params]:
-                    self._stack.append(["closure", addr, params, self._env])
+                    self._stack.append(["closure", [self._ncode, addr], params, self._env])
                 case ["pop"]:
                     self._stack.pop()
                 case ["def", name]:
@@ -145,7 +151,7 @@ class VM:
                     self._call()
                     continue
                 case ["ret"]:
-                    self._ip, self._env = self._call_stack.pop()
+                    [self._ncode, self._ip], self._env = self._call_stack.pop()
                     continue
                 case ["op", op]:
                     VM.ops[op](self._stack)
@@ -157,26 +163,30 @@ class VM:
 
     def _call(self):
         match self._stack.pop():
-            case ["closure", addr, params, env]:
+            case ["closure", [ncodes, addr], params, env]:
                 args = [self._stack.pop() for _ in params]
-                self._call_stack.append([self._ip + 1, self._env])
+                self._call_stack.append([[self._ncode, self._ip + 1], self._env])
                 self._env = Environment(env)
                 for param, val in zip(params, args):
                     self._env.define(param, val)
-                self._ip = addr
+                self._ncode, self._ip = [ncodes, addr]
             case unexpected:
                 assert False, f"Unexpected call: {unexpected}"
 
-def test_run(vm, expr, expected):
-    print(f"Source:\n{expr}")
+def run(vm, expr):
+    print(f"\nSource:\n{expr}")
     code = Compiler().compile(expr)
     print("Code:")
     for i, inst in enumerate(code):
         print(f"{i:3}: {inst}")
     print("Output:")
-    result = vm.execute(code)
+    vm.load(code)
+    return vm.execute()
+
+def test_run(vm, expr, expected):
+    result = run(vm, expr)
     print(f"Expected Result: {expected}")
-    print(f"Actual Result  : {result}\n")
+    print(f"Actual Result  : {result}")
     assert expected == result
 
 vm = VM()
@@ -202,35 +212,33 @@ test_run(vm, "a", 11)
 test_run(vm, ["assign", "a", ["sub", "a", 5]], 6)
 test_run(vm, "a", 6)
 
-test_run(vm, ["print", 5], None)
+run(vm, ["print", 5])
 
-test_run(vm, ["seq", ["print", 5], ["print", 6]], None)
+run(vm, ["seq", ["print", 5], ["print", 6]])
 test_run(vm, ["seq", ["define", "x", 5], ["define", "y", 6], ["add", "x", "y"]], 11)
 
-test_run(vm, ["seq",
-    ["define", "myadd", ["func", ["a", "b"], ["add", "a", "b"]]],
-    ["myadd", 5, 6]
-], 11)
+run(vm, ["define", "myadd", ["func", ["a", "b"], ["add", "a", "b"]]])
+test_run(vm, ["myadd", 5, 6], 11)
 
-test_run(vm, ["seq",
-    ["define", "fib", ["func", ["n"],
-        ["if", ["equal", "n", 0], 0,
-        ["if", ["equal", "n", 1], 1,
-        ["add", ["fib", ["sub", "n", 1]], ["fib", ["sub", "n", 2]]]]]]],
-    ["fib", 10]
-], 55)
+run(vm, ["define", "fib", ["func", ["n"],
+    ["if", ["equal", "n", 0], 0,
+    ["if", ["equal", "n", 1], 1,
+    ["add", ["fib", ["sub", "n", 1]], ["fib", ["sub", "n", 2]]]]]]])
+test_run(vm, ["fib", 10], 55)
 
-test_run(vm, ["seq",
+run(vm, ["seq",
     ["define", "make_counter", ["func", [], ["seq",
                 ["define", "c", 0],
                 ["func", [], ["assign", "c", ["add", "c", 1]]]]]],
     ["define", "counter1", ["make_counter"]],
-    ["define", "counter2", ["make_counter"]],
+    ["define", "counter2", ["make_counter"]]
+])
+run(vm, ["seq",
     ["print", ["counter1"]],
     ["print", ["counter1"]],
     ["print", ["counter2"]],
     ["print", ["counter2"]],
     ["print", ["counter1"]],
     ["print", ["counter2"]]
-], None)
+])
 
