@@ -41,6 +41,8 @@ class Compiler:
         match expr:
             case None | bool(_) |int(_):
                 self._code.append(["const", expr])
+            case ["func", params, body]:
+                self._func(params, body)
             case str(name):
                 self._code.append(["get", name])
             case ["define", name, val]:
@@ -57,6 +59,15 @@ class Compiler:
                 self._op(op, args)
             case unexpected:
                 assert False, f"Unexpected expression: {unexpected}"
+
+    def _func(self, params, body):
+        skip_jump = self._current_addr()
+        self._code.append(["jump", None])
+        func_addr = self._current_addr()
+        self._expr(body)
+        self._code.append(["ret"])
+        self._set_operand(skip_jump, self._current_addr())
+        self._code.append(["func", func_addr, params])
 
     def _seq(self, exprs):
         for expr in exprs:
@@ -75,16 +86,20 @@ class Compiler:
             self._expr(els)
             self._set_operand(end_jump, self._current_addr())
 
+    def _op(self, op, args):
+        for arg in args[-1::-1]:
+            self._expr(arg)
+        if isinstance(op, str) and op in VM.ops:
+            self._code.append(["op", op])
+        else:
+            self._expr(op)
+            self._code.append(["call"])
+
     def _set_operand(self, ip, operand):
         self._code[ip][1] = operand
 
     def _current_addr(self):
         return len(self._code)
-
-    def _op(self, op, args):
-        for arg in args[-1::-1]:
-            self._expr(arg)
-        self._code.append(["op", op])
 
 class VM:
     ops = {
@@ -97,16 +112,20 @@ class VM:
 
     def __init__(self):
         self._stack = []
+        self._call_stack = []
         self._ip = 0
         self._env = Environment()
 
     def execute(self, code):
         self._stack = []
+        self._call_stack = []
         self._ip = 0
         while (inst := code[self._ip]) != ["halt"]:
             match inst:
                 case ["const", val]:
                     self._stack.append(val)
+                case ["func", addr, params]:
+                    self._stack.append(["closure", addr, params, self._env])
                 case ["pop"]:
                     self._stack.pop()
                 case ["def", name]:
@@ -122,6 +141,12 @@ class VM:
                     if not self._stack.pop():
                         self._ip = addr
                         continue
+                case ["call"]:
+                    self._call()
+                    continue
+                case ["ret"]:
+                    self._ip, self._env = self._call_stack.pop()
+                    continue
                 case ["op", op]:
                     VM.ops[op](self._stack)
                 case unexpected:
@@ -129,6 +154,18 @@ class VM:
             self._ip += 1
         assert len(self._stack) == 1, f"Unused stack left: {self._stack}"
         return self._stack[0]
+
+    def _call(self):
+        match self._stack.pop():
+            case ["closure", addr, params, env]:
+                args = [self._stack.pop() for _ in params]
+                self._call_stack.append([self._ip + 1, self._env])
+                self._env = Environment(env)
+                for param, val in zip(params, args):
+                    self._env.define(param, val)
+                self._ip = addr
+            case unexpected:
+                assert False, f"Unexpected call: {unexpected}"
 
 def test_run(vm, expr, expected):
     print(f"Source:\n{expr}")
@@ -169,3 +206,31 @@ test_run(vm, ["print", 5], None)
 
 test_run(vm, ["seq", ["print", 5], ["print", 6]], None)
 test_run(vm, ["seq", ["define", "x", 5], ["define", "y", 6], ["add", "x", "y"]], 11)
+
+test_run(vm, ["seq",
+    ["define", "myadd", ["func", ["a", "b"], ["add", "a", "b"]]],
+    ["myadd", 5, 6]
+], 11)
+
+test_run(vm, ["seq",
+    ["define", "fib", ["func", ["n"],
+        ["if", ["equal", "n", 0], 0,
+        ["if", ["equal", "n", 1], 1,
+        ["add", ["fib", ["sub", "n", 1]], ["fib", ["sub", "n", 2]]]]]]],
+    ["fib", 10]
+], 55)
+
+test_run(vm, ["seq",
+    ["define", "make_counter", ["func", [], ["seq",
+                ["define", "c", 0],
+                ["func", [], ["assign", "c", ["add", "c", 1]]]]]],
+    ["define", "counter1", ["make_counter"]],
+    ["define", "counter2", ["make_counter"]],
+    ["print", ["counter1"]],
+    ["print", ["counter1"]],
+    ["print", ["counter2"]],
+    ["print", ["counter2"]],
+    ["print", ["counter1"]],
+    ["print", ["counter2"]]
+], None)
+
