@@ -33,11 +33,11 @@ class Compiler:
         self._code = []
 
     def compile(self, expr):
-        self._expr(expr)
+        self._expr(expr, False)
         self._code.append(["halt"])
         return self._code
 
-    def _expr(self, expr):
+    def _expr(self, expr, is_tail):
         match expr:
             case None | bool(_) |int(_):
                 self._code.append(["const", expr])
@@ -46,17 +46,17 @@ class Compiler:
             case str(name):
                 self._code.append(["get", name])
             case ["define", name, val]:
-                self._expr(val)
+                self._expr(val, False)
                 self._code.append(["def", name])
             case ["assign", name, val]:
-                self._expr(val)
+                self._expr(val, False)
                 self._code.append(["set", name])
             case ["seq", *exprs]:
-                self._seq(exprs)
+                self._seq(exprs, is_tail)
             case ["if", cnd, thn, els]:
-                self._if(cnd, thn, els)
+                self._if(cnd, thn, els, is_tail)
             case [op, *args]:
-                self._op(op, args)
+                self._op(op, args, is_tail)
             case unexpected:
                 assert False, f"Unexpected expression: {unexpected}"
 
@@ -64,33 +64,37 @@ class Compiler:
         skip_jump = self._current_addr()
         self._code.append(["jump", None])
         func_addr = self._current_addr()
-        self._expr(body)
+        self._expr(body, True)
         self._code.append(["ret"])
         self._set_operand(skip_jump, self._current_addr())
         self._code.append(["func", func_addr, params])
 
-    def _seq(self, exprs):
-        for expr in exprs:
-            self._expr(expr)
-            if expr is not exprs[-1]:
-                self._code.append(["pop"])
+    def _seq(self, exprs, is_tail):
+        if len(exprs) == 0: return
+        for expr in exprs[:-1]:
+            self._expr(expr, False)
+            self._code.append(["pop"])
+        self._expr(exprs[-1], is_tail)
 
-    def _if(self, cnd, thn, els):
-            self._expr(cnd)
+    def _if(self, cnd, thn, els, is_tail):
+            self._expr(cnd, False)
             els_jump = self._current_addr()
             self._code.append(["jump_if_false", None])
-            self._expr(thn)
+            self._expr(thn, is_tail)
             end_jump = self._current_addr()
             self._code.append(["jump", None])
             self._set_operand(els_jump, self._current_addr())
-            self._expr(els)
+            self._expr(els, is_tail)
             self._set_operand(end_jump, self._current_addr())
 
-    def _op(self, op, args):
+    def _op(self, op, args, is_tail):
         for arg in args[-1::-1]:
-            self._expr(arg)
-        self._expr(op)
-        self._code.append(["call"])
+            self._expr(arg, False)
+        self._expr(op, False)
+        if is_tail:
+            self._code.append(["call_tail"])
+        else:
+            self._code.append(["call"])
 
     def _set_operand(self, ip, operand):
         self._code[ip][1] = operand
@@ -138,7 +142,10 @@ class VM:
                         self._ip = addr
                         continue
                 case ["call"]:
-                    self._call()
+                    self._call(False)
+                    continue
+                case ["call_tail"]:
+                    self._call(True)
                     continue
                 case ["ret"]:
                     [self._ncode, self._ip], self._env = self._call_stack.pop()
@@ -149,14 +156,17 @@ class VM:
         assert len(self._stack) == 1, f"Unused stack left: {self._stack}"
         return self._stack[0]
 
-    def _call(self):
+    def _call(self, is_tail):
         match self._stack.pop():
             case f if callable(f):
                 f(self._stack)
                 self._ip += 1
             case ["closure", [ncodes, addr], params, env]:
                 args = [self._stack.pop() for _ in params]
-                self._call_stack.append([[self._ncode, self._ip + 1], self._env])
+                if not is_tail:
+                    self._call_stack.append([[self._ncode, self._ip + 1], self._env])
+                    if len(self._call_stack) > 1000:
+                        assert False, "Call stack overflow"
                 self._env = Environment(env)
                 for param, val in zip(params, args):
                     self._env.define(param, val)
@@ -169,6 +179,7 @@ class VM:
             "add": lambda s: s.append(s.pop() + s.pop()),
             "sub": lambda s: s.append(s.pop() - s.pop()),
             "equal": lambda s: s.append(s.pop() == s.pop()),
+            "not_equal": lambda s: s.append(s.pop() != s.pop()),
 
             "print": lambda s: [print(s.pop()), s.append(None)]
         }
@@ -205,6 +216,8 @@ test_run(vm, ["add", 5, 6], 11)
 test_run(vm, ["sub", 11, 5], 6)
 test_run(vm, ["equal", 5, 5], True)
 test_run(vm, ["equal", 5, 6], False)
+test_run(vm, ["not_equal", 5, 5], False)
+test_run(vm, ["not_equal", 5, 6], True)
 
 test_run(vm, ["add", 5, ["add", 6, 7]], 18)
 
@@ -247,3 +260,52 @@ run(vm, ["seq",
     ["print", ["counter2"]]
 ])
 
+run(vm, ["define", "loop_els", ["func", ["n"],
+    ["if", ["equal", "n", 0], 0, ["loop_els", ["sub", "n", 1]]]
+]])
+test_run(vm, ["loop_els", 10000], 0)
+
+run(vm, ["define", "loop_thn", ["func", ["n"],
+    ["if", ["not_equal", "n", 0], ["loop_thn", ["sub", "n", 1]], 0]
+]])
+test_run(vm, ["loop_thn", 10000], 0)
+
+run(vm, ["define", "loop_seq", ["func", ["n"],
+    ["seq",
+        ["add", 1, 1],
+        ["if", ["equal", "n", 0], 0, ["loop_seq", ["sub", "n", 1]]]
+    ]
+]])
+test_run(vm, ["loop_seq", 10000], 0)
+
+run(vm, ["define", "loop_not_tail", ["func", ["n"],
+    ["if", ["equal", "n", 0], 0, ["add", ["loop_not_tail", ["sub", "n", 1]], 1]]
+]])
+try:
+    run(vm, ["loop_not_tail", 10000])
+    assert False, "Should fail"
+except AssertionError:
+    print("AssertionError as expected")
+
+run(vm, ["define", "even", ["func", ["n"],
+    ["if", ["equal", "n", 0], True, ["odd", ["sub", "n", 1]]]
+]])
+run(vm, ["define", "odd", ["func", ["n"],
+    ["if", ["equal", "n", 0], False, ["even", ["sub", "n", 1]]]
+]])
+test_run(vm, ["even", 10000], True)
+test_run(vm, ["even", 10001], False)
+test_run(vm, ["odd", 10000], False)
+test_run(vm, ["odd", 10001], True)
+
+run(vm, ["define", "fib_tail", ["func", ["n"], ["seq",
+    ["define", "rec", ["func", ["k", "a", "b"],
+        ["if", ["equal", "k", "n"],
+            "a",
+            ["rec", ["add", "k", 1], "b", ["add", "a", "b"]]]
+    ]],
+    ["rec", 0, 0, 1]
+]]])
+
+test_run(vm, ["fib_tail", 10], 55)
+run(vm, ["print", ["fib_tail", 10000]])
