@@ -55,6 +55,8 @@ class Compiler:
                 self._seq(exprs, is_tail)
             case ["if", cnd, thn, els]:
                 self._if(cnd, thn, els, is_tail)
+            case ["letcc", name, body]:
+                self._letcc(name, body, is_tail)
             case [op, *args]:
                 self._op(op, args, is_tail)
             case unexpected:
@@ -77,15 +79,25 @@ class Compiler:
         self._expr(exprs[-1], is_tail)
 
     def _if(self, cnd, thn, els, is_tail):
-            self._expr(cnd, False)
-            els_jump = self._current_addr()
-            self._code.append(["jump_if_false", None])
-            self._expr(thn, is_tail)
-            end_jump = self._current_addr()
-            self._code.append(["jump", None])
-            self._set_operand(els_jump, self._current_addr())
-            self._expr(els, is_tail)
-            self._set_operand(end_jump, self._current_addr())
+        self._expr(cnd, False)
+        els_jump = self._current_addr()
+        self._code.append(["jump_if_false", None])
+        self._expr(thn, is_tail)
+        end_jump = self._current_addr()
+        self._code.append(["jump", None])
+        self._set_operand(els_jump, self._current_addr())
+        self._expr(els, is_tail)
+        self._set_operand(end_jump, self._current_addr())
+
+    def _letcc(self, name, body, is_tail):
+        cont_jump = self._current_addr()
+        self._code.append(["cc", None])
+        self._func([name], body)
+        if is_tail:
+            self._code.append(["call_tail"])
+        else:
+            self._code.append(["call"])
+        self._set_operand(cont_jump, self._current_addr())
 
     def _op(self, op, args, is_tail):
         for arg in args[-1::-1]:
@@ -126,6 +138,9 @@ class VM:
                     self._stack.append(val)
                 case ["func", addr, params]:
                     self._stack.append(["closure", [self._ncode, addr], params, self._env])
+                case ["cc", addr]:
+                    self._stack.append(["cont",
+                        [self._ncode, addr], self._env, self._stack[:], self._call_stack[:]])
                 case ["pop"]:
                     self._stack.pop()
                 case ["def", name]:
@@ -171,6 +186,13 @@ class VM:
                 for param, val in zip(params, args):
                     self._env.define(param, val)
                 self._ncode, self._ip = [ncodes, addr]
+            case ["cont", [ncodes, addr], env, stack, call_stack]:
+                val = self._stack.pop()
+                self._ncode, self._ip = [ncodes, addr]
+                self._env = env
+                self._stack = stack[:]
+                self._stack.append(val)
+                self._call_stack = call_stack[:]
             case unexpected:
                 assert False, f"Unexpected call: {unexpected}"
 
@@ -309,3 +331,18 @@ run(vm, ["define", "fib_tail", ["func", ["n"], ["seq",
 
 test_run(vm, ["fib_tail", 10], 55)
 run(vm, ["print", ["fib_tail", 10000]])
+
+test_run(vm, ["letcc", "skip-to", ["add", 5, 6]], 11)
+test_run(vm, ["letcc", "skip-to", ["add", ["skip-to", 5], 6]], 5)
+test_run(vm, ["add", 5, ["letcc", "skip-to", ["skip-to", 6]]], 11)
+test_run(vm, ["letcc", "skip1", ["add", ["skip1", ["letcc", "skip2", ["add", ["skip2", 5], 6]]], 7]], 5)
+
+run(vm, ["define", "inner", ["func", ["raise"], ["raise", 5]]])
+run(vm, ["define", "outer", ["func", [],
+        [ "letcc", "raise", ["add", ["inner", "raise"], 6]]]])
+test_run(vm, ["outer"], 5)
+
+run(vm, ["define", "add5", None])
+test_run(vm, ["add", 5, ["letcc", "cc", ["seq", ["assign", "add5", "cc"], 6]]], 11)
+test_run(vm, ["add5", 7], 12)
+test_run(vm, ["add5", 8], 13)
