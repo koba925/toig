@@ -7,6 +7,18 @@ class Environment:
         self._parent = parent
         self._vals = {}
 
+    def __repr__(self):
+        def keys():
+            if "__builtins__" in self._vals:
+                return "builtins"
+            else:
+                return ", ".join([str(k) for k  in self._vals.keys()])
+
+        if self._parent is None:
+            return f"{keys()}"
+        else:
+            return f"{keys()} < {self._parent}"
+
     def define(self, name, val):
         self._vals[name] = val
         return val
@@ -31,6 +43,9 @@ class Environment:
 class Compiler:
     def __init__(self):
         self._code = []
+
+    def __repr__(self):
+        return f"Compiler({self._code})"
 
     def compile(self, expr):
         self._expr(expr, False)
@@ -124,6 +139,9 @@ class VM:
         self._env = Environment()
         self._load_builtins()
 
+    def __repr__(self):
+        return f"VM({self._ncode}:{self._ip})"
+
     def load(self, code):
         self._codes.append(code)
 
@@ -198,12 +216,13 @@ class VM:
 
     def _load_builtins(self):
         builtins = {
+            "__builtins__": None,
             "add": lambda s: s.append(s.pop() + s.pop()),
             "sub": lambda s: s.append(s.pop() - s.pop()),
             "equal": lambda s: s.append(s.pop() == s.pop()),
             "not_equal": lambda s: s.append(s.pop() != s.pop()),
 
-            "print": lambda s: [print(s.pop()), s.append(None)]
+            "print": lambda s: s.append(print(s.pop()))
         }
 
         for name, func in builtins.items():
