@@ -7,6 +7,18 @@ class Environment:
         self._parent = parent
         self._vals = {}
 
+    def __repr__(self):
+        def keys():
+            if "__builtins__" in self._vals:
+                return "builtins"
+            else:
+                return ", ".join([str(k) for k  in self._vals.keys()])
+
+        if self._parent is None:
+            return f"{keys()}"
+        else:
+            return f"{keys()} < {self._parent}"
+
     def define(self, name, val):
         self._vals[name] = val
         return val
@@ -114,11 +126,60 @@ class Compiler:
     def _current_addr(self):
         return len(self._code)
 
+class Stack:
+    class Node:
+        def __init__(self, val, prev):
+            self._val = val
+            self._prev = prev
+
+        def __repr__(self) -> str:
+            return f"Node({self._val!r})"
+
+    def __init__(self):
+        self._top = None
+        self._len = 0
+
+    def __len__(self):
+        return self._len
+
+    def __iter__(self):
+        node = self._top
+        while node is not None:
+            yield node._val
+            node = node._prev
+
+    def __repr__(self) -> str:
+        return f"Stack({", ".join(map(str, self))})"
+
+    def clone(self):
+        new_stack = Stack()
+        new_stack._top = self._top
+        new_stack._len = self._len
+        return new_stack
+
+    def is_empty(self):
+        return self._top is None
+
+    def push(self, val):
+        self._top = Stack.Node(val, self._top)
+        self._len += 1
+
+    def peek(self):
+        assert self._top is not None, "Peeking from empty stack"
+        return self._top._val
+
+    def pop(self):
+        assert self._top is not None, "Poping from empty stack"
+        val = self._top._val
+        self._top = self._top._prev
+        self._len -= 1
+        return val
+
 class VM:
     def __init__(self):
         self._codes = []
-        self._stack = []
-        self._call_stack = []
+        self._stack = Stack()
+        self._call_stack = Stack()
         self._ncode = 0
         self._ip = 0
         self._env = Environment()
@@ -128,27 +189,33 @@ class VM:
         self._codes.append(code)
 
     def execute(self):
-        self._stack = []
-        self._call_stack = []
+        self._stack = Stack()
+        self._call_stack = Stack()
         self._ncode = len(self._codes) - 1
         self._ip = 0
         while (inst := self._codes[self._ncode][self._ip]) != ["halt"]:
             match inst:
                 case ["const", val]:
-                    self._stack.append(val)
+                    self._stack.push(val)
                 case ["func", addr, params]:
-                    self._stack.append(["closure", [self._ncode, addr], params, self._env])
+                    self._stack.push(["closure",
+                        [self._ncode, addr],
+                        params,
+                        self._env])
                 case ["cc", addr]:
-                    self._stack.append(["cont",
-                        [self._ncode, addr], self._env, self._stack[:], self._call_stack[:]])
+                    self._stack.push(["cont",
+                        [self._ncode, addr],
+                        self._env,
+                        self._stack.clone(),
+                        self._call_stack.clone()])
                 case ["pop"]:
                     self._stack.pop()
                 case ["def", name]:
-                    self._env.define(name, self._stack[-1])
+                    self._env.define(name, self._stack.peek())
                 case ["set", name]:
-                    self._env.assign(name, self._stack[-1])
+                    self._env.assign(name, self._stack.peek())
                 case ["get", name]:
-                    self._stack.append(self._env.get(name))
+                    self._stack.push(self._env.get(name))
                 case ["jump", addr]:
                     self._ip = addr
                     continue
@@ -168,8 +235,9 @@ class VM:
                 case unexpected:
                     assert False, f"Unexpected instruction: {unexpected}"
             self._ip += 1
-        assert len(self._stack) == 1, f"Unused stack left: {self._stack}"
-        return self._stack[0]
+        val = self._stack.pop()
+        assert self._stack.is_empty(), f"Unused stack left: {self._stack}"
+        return val
 
     def _call(self, is_tail):
         match self._stack.pop():
@@ -179,7 +247,7 @@ class VM:
             case ["closure", [ncodes, addr], params, env]:
                 args = [self._stack.pop() for _ in params]
                 if not is_tail:
-                    self._call_stack.append([[self._ncode, self._ip + 1], self._env])
+                    self._call_stack.push([[self._ncode, self._ip + 1], self._env])
                     if len(self._call_stack) > 1000:
                         assert False, "Call stack overflow"
                 self._env = Environment(env)
@@ -190,20 +258,21 @@ class VM:
                 val = self._stack.pop()
                 self._ncode, self._ip = [ncodes, addr]
                 self._env = env
-                self._stack = stack[:]
-                self._stack.append(val)
-                self._call_stack = call_stack[:]
+                self._stack = stack.clone()
+                self._call_stack = call_stack.clone()
+                self._stack.push(val)
             case unexpected:
                 assert False, f"Unexpected call: {unexpected}"
 
     def _load_builtins(self):
         builtins = {
-            "add": lambda s: s.append(s.pop() + s.pop()),
-            "sub": lambda s: s.append(s.pop() - s.pop()),
-            "equal": lambda s: s.append(s.pop() == s.pop()),
-            "not_equal": lambda s: s.append(s.pop() != s.pop()),
+            "__builtins__": None,
+            "add": lambda s: s.push(s.pop() + s.pop()),
+            "sub": lambda s: s.push(s.pop() - s.pop()),
+            "equal": lambda s: s.push(s.pop() == s.pop()),
+            "not_equal": lambda s: s.push(s.pop() != s.pop()),
 
-            "print": lambda s: [print(s.pop()), s.append(None)]
+            "print": lambda s: s.push(print(s.pop()))
         }
 
         for name, func in builtins.items():
