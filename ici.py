@@ -67,6 +67,8 @@ class Expander:
                 return ["func", params, self._expr(body)]
             case str(name):
                 return expr
+            case ["q", elem]:
+                return expr
             case ["define", name, val]:
                 return ["define", name, self._expr(val)]
             case ["assign", name, val]:
@@ -106,6 +108,8 @@ class Compiler:
                 self._func(params, body)
             case str(name):
                 self._code.append(["get", name])
+            case ["q", elem]:
+                self._code.append(["const", elem])
             case ["define", name, val]:
                 self._expr(val, False)
                 self._code.append(["def", name])
@@ -426,3 +430,5 @@ test_run(vm, ["add", 7, ["when", ["equal", 5, 5], 6]], 13)
 test_run(vm, ["when2", ["equal", 5, 5], 6], 6)
 test_run(vm, ["when2", ["equal", 5, 6], "notdefinedvar"], None)
 
+test_run(vm, ["q", 5], 5)
+test_run(vm, ["q", ["add", 5, 6]], ["add", 5, 6])
