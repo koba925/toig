@@ -19,6 +19,13 @@ class Environment:
         else:
             return f"{keys()} < {self._parent}"
 
+    def __contains__(self, name):
+        try:
+            self.get(name)
+            return True
+        except VariableNotFoundError:
+            return False
+
     def define(self, name, val):
         self._vals[name] = val
         return val
@@ -39,6 +46,45 @@ class Environment:
             return self._parent.get(name)
         else:
             raise VariableNotFoundError(name)
+
+class Expander:
+    def __init__(self):
+        self._menv = Environment()
+        self._menv.define("when", lambda cnd, body: ["if", cnd, body, None])
+        self._menv.define("when2", lambda cnd, body: ["when", cnd, body])
+
+    def __repr__(self):
+        return f"Expander()"
+
+    def expand(self, expr):
+        return self._expr(expr)
+
+    def _expr(self, expr):
+        match expr:
+            case None | bool(_) |int(_):
+                return expr
+            case ["func", params, body]:
+                return ["func", params, self._expr(body)]
+            case str(name):
+                return expr
+            case ["define", name, val]:
+                return ["define", name, self._expr(val)]
+            case ["assign", name, val]:
+                return ["assign", name, self._expr(val)]
+            case ["seq", *exprs]:
+                return ["seq"] + [self._expr(expr) for expr in exprs]
+            case ["if", cnd, thn, els]:
+                return ["if", self._expr(cnd), self._expr(thn), self._expr(els)]
+            case ["letcc", name, body]:
+                return ["letcc", name, self._expr(body)]
+            case [op, *args] :
+                if isinstance(op, str) and op in self._menv:
+                    macro = self._menv.get(op)
+                    return self._expr(macro(*args))
+                else:
+                    return [op] + [self._expr(arg) for arg in args]
+            case unexpected:
+                assert False, f"Unexpected expression: {unexpected}"
 
 class Compiler:
     def __init__(self):
@@ -232,7 +278,9 @@ class VM:
 
 def run(vm, expr):
     print(f"\nSource:\n{expr}")
-    code = Compiler().compile(expr)
+    expanded = Expander().expand(expr)
+    print(f"Expanded:\n{expanded}")
+    code = Compiler().compile(expanded)
     print("Code:")
     for i, inst in enumerate(code):
         print(f"{i:3}: {inst}")
@@ -301,6 +349,8 @@ run(vm, ["seq",
     ["print", ["counter2"]]
 ])
 
+# tail call optimization test
+
 run(vm, ["define", "loop_els", ["func", ["n"],
     ["if", ["equal", "n", 0], 0, ["loop_els", ["sub", "n", 1]]]
 ]])
@@ -351,6 +401,8 @@ run(vm, ["define", "fib_tail", ["func", ["n"], ["seq",
 test_run(vm, ["fib_tail", 10], 55)
 run(vm, ["print", ["fib_tail", 10000]])
 
+# letcc test
+
 test_run(vm, ["letcc", "skip-to", ["add", 5, 6]], 11)
 test_run(vm, ["letcc", "skip-to", ["add", ["skip-to", 5], 6]], 5)
 test_run(vm, ["add", 5, ["letcc", "skip-to", ["skip-to", 6]]], 11)
@@ -365,3 +417,12 @@ run(vm, ["define", "add5", None])
 test_run(vm, ["add", 5, ["letcc", "cc", ["seq", ["assign", "add5", "cc"], 6]]], 11)
 test_run(vm, ["add5", 7], 12)
 test_run(vm, ["add5", 8], 13)
+
+# macro test
+
+test_run(vm, ["when", ["equal", 5, 5], 6], 6)
+test_run(vm, ["when", ["equal", 5, 6], "notdefinedvar"], None)
+test_run(vm, ["add", 7, ["when", ["equal", 5, 5], 6]], 13)
+test_run(vm, ["when2", ["equal", 5, 5], 6], 6)
+test_run(vm, ["when2", ["equal", 5, 6], "notdefinedvar"], None)
+
