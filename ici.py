@@ -69,6 +69,9 @@ class Expander:
                 return expr
             case ["q", elem]:
                 return expr
+            case ["defmacro", name, params, body]:
+                self._menv.define(name, ["macro", params, self._expr(body)])
+                return None
             case ["define", name, val]:
                 return ["define", name, self._expr(val)]
             case ["assign", name, val]:
@@ -82,11 +85,24 @@ class Expander:
             case [op, *args] :
                 if isinstance(op, str) and op in self._menv:
                     macro = self._menv.get(op)
-                    return self._expr(macro(*args))
+                    return self._expr(self._macro(macro, args))
                 else:
                     return [op] + [self._expr(arg) for arg in args]
             case unexpected:
                 assert False, f"Unexpected expression: {unexpected}"
+
+    def _macro(self, macro, args):
+        match macro:
+            case m if callable(m):
+                return self._expr(m(*args))
+            case ["macro", params, body]:
+                vm = VM()
+                for param, arg in zip(params, args):
+                    vm._env.define(param, arg)
+                code = Compiler().compile(body)
+                vm.load(code)
+                expanded = vm.execute()
+                return expanded
 
 class Compiler:
     def __init__(self):
@@ -432,3 +448,8 @@ test_run(vm, ["when2", ["equal", 5, 6], "notdefinedvar"], None)
 
 test_run(vm, ["q", 5], 5)
 test_run(vm, ["q", ["add", 5, 6]], ["add", 5, 6])
+
+test_run(vm, ["seq",
+    ["defmacro", "foo", [], ["q", ["add", 5, 6]]],
+    ["foo"]
+], 11)
