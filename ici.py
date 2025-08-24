@@ -63,12 +63,16 @@ class Expander:
         match expr:
             case None | bool(_) |int(_):
                 return expr
+            case ["array", *elems]:
+                return ["array"] + [self._expr(elem) for elem in elems]
             case ["func", params, body]:
                 return ["func", params, self._expr(body)]
             case str(name):
                 return expr
-            case ["q", elem]:
-                return expr
+            case ["quote", elem]:
+                return ["quote", elem]
+            case ["quasiquote", elem]:
+                return self._quasiquote(elem)
             case ["defmacro", name, params, body]:
                 self._menv.define(name, ["macro", params, self._expr(body)])
                 return None
@@ -90,6 +94,25 @@ class Expander:
                     return [op] + [self._expr(arg) for arg in args]
             case unexpected:
                 assert False, f"Unexpected expression: {unexpected}"
+
+    def _quasiquote(self, expr):
+        def _quote_elements(elems):
+            arr = ["array"]
+            for elem in elems:
+                match elem:
+                    case ["unquote_splicing", e]:
+                        expanded = self._expr(e)
+                        assert isinstance(expanded, list) and len(expanded) > 0, \
+                            f"Cannot splice: {expanded}"
+                        arr += expanded[1:]
+                    case e:
+                        arr += [self._quasiquote(e)]
+            return arr
+
+        match expr:
+            case ["unquote", elem]: return elem
+            case [*elems]: return _quote_elements(elems)
+            case elem: return ["quote", elem]
 
     def _macro(self, macro, args):
         match macro:
@@ -120,11 +143,13 @@ class Compiler:
         match expr:
             case None | bool(_) |int(_):
                 self._code.append(["const", expr])
+            case ["array", *elems]:
+                self._array(elems)
             case ["func", params, body]:
                 self._func(params, body)
             case str(name):
                 self._code.append(["get", name])
-            case ["q", elem]:
+            case ["quote", elem]:
                 self._code.append(["const", elem])
             case ["define", name, val]:
                 self._expr(val, False)
@@ -142,6 +167,10 @@ class Compiler:
                 self._op(op, args, is_tail)
             case unexpected:
                 assert False, f"Unexpected expression: {unexpected}"
+
+    def _array(self, elems):
+        for elem in elems: self._expr(elem, False)
+        self._code.append(["array", len(elems)])
 
     def _func(self, params, body):
         skip_jump = self._current_addr()
@@ -220,6 +249,9 @@ class VM:
             match inst:
                 case ["const", val]:
                     self._stack.append(val)
+                case ["array", size]:
+                    arr = [self._stack.pop() for _ in range(size)]
+                    self._stack.append(list(reversed(arr)))
                 case ["func", addr, params]:
                     self._stack.append(["closure", [self._ncode, addr], params, self._env])
                 case ["cc", addr]:
@@ -438,6 +470,12 @@ test_run(vm, ["add", 5, ["letcc", "cc", ["seq", ["assign", "add5", "cc"], 6]]], 
 test_run(vm, ["add5", 7], 12)
 test_run(vm, ["add5", 8], 13)
 
+# array test
+
+test_run(vm, ["array"], [])
+test_run(vm, ["array", 5], [5])
+test_run(vm, ["array", ["add", 5, 6], ["add", 7, 8]], [11, 15])
+
 # macro test
 
 test_run(vm, ["when", ["equal", 5, 5], 6], 6)
@@ -446,10 +484,32 @@ test_run(vm, ["add", 7, ["when", ["equal", 5, 5], 6]], 13)
 test_run(vm, ["when2", ["equal", 5, 5], 6], 6)
 test_run(vm, ["when2", ["equal", 5, 6], "notdefinedvar"], None)
 
-test_run(vm, ["q", 5], 5)
-test_run(vm, ["q", ["add", 5, 6]], ["add", 5, 6])
+test_run(vm, ["quote", 5], 5)
+test_run(vm, ["quote", ["add", 5, 6]], ["add", 5, 6])
 
 test_run(vm, ["seq",
-    ["defmacro", "foo", [], ["q", ["add", 5, 6]]],
+    ["defmacro", "foo", [], ["array", ["quote", "add"], 5, 6]],
     ["foo"]
 ], 11)
+
+test_run(vm, ["quasiquote", 5], 5)
+test_run(vm, ["quasiquote", ["add", 5, 6]], ["add", 5, 6])
+
+test_run(vm, ["seq",
+    ["defmacro", "foo", ["a", "b"], ["quasiquote",
+            ["add", ["unquote", "a"], ["unquote", "b"]]]],
+    ["foo", ["sub", 8, 5], ["sub", 7, 6]]
+], 4)
+
+test_run(vm, ["seq",
+    ["defmacro", "foo", [], ["quasiquote",
+            ["add", ["unquote_splicing", ["array", 5, 6]]]]],
+    ["foo"]
+], 11)
+
+test_run(vm, ["seq",
+    ["defmacro", "foo", ["a", "b"], ["quasiquote",
+            ["add", ["unquote_splicing", ["quasiquote",
+                [["unquote", "a"], ["unquote", "b"]]]]]]],
+    ["foo", ["sub", 8, 5], ["sub", 7, 6]]
+], 4)
