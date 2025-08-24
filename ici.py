@@ -67,8 +67,8 @@ class Expander:
                 return ["func", params, self._expr(body)]
             case str(name):
                 return expr
-            case ["q", elem]:
-                return expr
+            case ["quote", elem]:
+                return ["quote", self._quote(elem)]
             case ["defmacro", name, params, body]:
                 self._menv.define(name, ["macro", params, self._expr(body)])
                 return None
@@ -90,6 +90,14 @@ class Expander:
                     return [op] + [self._expr(arg) for arg in args]
             case unexpected:
                 assert False, f"Unexpected expression: {unexpected}"
+
+    def _quote(self, expr):
+        match expr:
+            case ["unquote", elem]:
+                return ["unquote", self._expr(elem)]
+            case ["unquote_splicing", elem]:
+                return ["unquote_splicing", self._expr(elem)]
+            case _: return expr
 
     def _macro(self, macro, args):
         match macro:
@@ -124,8 +132,8 @@ class Compiler:
                 self._func(params, body)
             case str(name):
                 self._code.append(["get", name])
-            case ["q", elem]:
-                self._code.append(["const", elem])
+            case ["quote", elem]:
+                self._quote(elem)
             case ["define", name, val]:
                 self._expr(val, False)
                 self._code.append(["def", name])
@@ -151,6 +159,29 @@ class Compiler:
         self._code.append(["ret"])
         self._set_operand(skip_jump, self._current_addr())
         self._code.append(["func", func_addr, params])
+
+    def _quote(self, expr):
+        def _quote_elements(elems):
+            self._code.append(["const", []])
+            for elem in elems:
+                match elem:
+                    case ["unquote_splicing", e]:
+                        self._expr(e, False)
+                        self._code.append(["get", "swap"])
+                        self._code.append(["call"])
+                        self._code.append(["get", "add"])
+                        self._code.append(["call"])
+                    case e:
+                        self._quote(e)
+                        self._code.append(["get", "swap"])
+                        self._code.append(["call"])
+                        self._code.append(["get", "append"])
+                        self._code.append(["call"])
+
+        match expr:
+            case ["unquote", elem]: return self._expr(elem, False)
+            case [*elems]: return _quote_elements(elems)
+            case elem: self._code.append(["const", elem])
 
     def _seq(self, exprs, is_tail):
         if len(exprs) == 0: return
@@ -281,12 +312,19 @@ class VM:
                 assert False, f"Unexpected call: {unexpected}"
 
     def _load_builtins(self):
+        def swap(s): s[-1], s[-2] = s[-2], s[-1]
+
         builtins = {
             "__builtins__": None,
+
+            "swap": swap,
+
             "add": lambda s: s.append(s.pop() + s.pop()),
             "sub": lambda s: s.append(s.pop() - s.pop()),
             "equal": lambda s: s.append(s.pop() == s.pop()),
             "not_equal": lambda s: s.append(s.pop() != s.pop()),
+
+            "append": lambda s: s.append(s.pop() + [s.pop()]),
 
             "print": lambda s: s.append(print(s.pop()))
         }
@@ -446,10 +484,30 @@ test_run(vm, ["add", 7, ["when", ["equal", 5, 5], 6]], 13)
 test_run(vm, ["when2", ["equal", 5, 5], 6], 6)
 test_run(vm, ["when2", ["equal", 5, 6], "notdefinedvar"], None)
 
-test_run(vm, ["q", 5], 5)
-test_run(vm, ["q", ["add", 5, 6]], ["add", 5, 6])
+test_run(vm, ["quote", 5], 5)
+test_run(vm, ["quote", ["add", 5, 6]], ["add", 5, 6])
 
 test_run(vm, ["seq",
-    ["defmacro", "foo", [], ["q", ["add", 5, 6]]],
+    ["defmacro", "foo", [], ["quote", ["add", 5, 6]]],
     ["foo"]
 ], 11)
+
+test_run(vm, ["seq",
+    ["defmacro", "foo", ["a", "b"], ["quote",
+            ["add", ["unquote", "a"], ["unquote", "b"]]]],
+    ["foo", ["sub", 8, 5], ["sub", 7, 6]]
+], 4)
+
+test_run(vm, ["seq",
+    ["defmacro", "foo", ["a", "b"], ["quote",
+            ["add", ["unquote_splicing", ["quote", [5, 6]]]]]],
+    ["foo"]
+], 11)
+
+test_run(vm, ["seq",
+    ["defmacro", "foo", ["a", "b"], ["quote",
+            ["add", ["unquote_splicing", ["quote",
+                [["unquote", "a"], ["unquote", "b"]]]]]]],
+    ["foo", ["sub", 8, 5], ["sub", 7, 6]]
+], 4)
+
