@@ -10,14 +10,14 @@ class Environment:
     def __repr__(self):
         def keys():
             if "__builtins__" in self._vals:
-                return "builtins"
+                return "__builtins__"
             else:
                 return ", ".join([str(k) for k  in self._vals.keys()])
 
         if self._parent is None:
-            return f"{keys()}"
+            return f"[{keys()}]"
         else:
-            return f"{keys()} < {self._parent}"
+            return f"[{keys()}] < {self._parent}"
 
     def __contains__(self, name):
         try:
@@ -48,13 +48,15 @@ class Environment:
             raise VariableNotFoundError(name)
 
 class Expander:
-    def __init__(self):
+    def __init__(self, vm):
+        self._vm = vm
+
         self._menv = Environment()
         self._menv.define("when", lambda cnd, body: ["if", cnd, body, None])
         self._menv.define("when2", lambda cnd, body: ["when", cnd, body])
 
     def __repr__(self):
-        return f"Expander()"
+        return f"Expander({self._menv})"
 
     def expand(self, expr):
         return self._expr(expr)
@@ -105,8 +107,8 @@ class Expander:
                         assert isinstance(expanded, list) and len(expanded) > 0, \
                             f"Cannot splice: {expanded}"
                         arr += expanded[1:]
-                    case e:
-                        arr += [self._quasiquote(e)]
+                    case _:
+                        arr += [self._quasiquote(elem)]
             return arr
 
         match expr:
@@ -119,12 +121,12 @@ class Expander:
             case m if callable(m):
                 return self._expr(m(*args))
             case ["macro", params, body]:
-                vm = VM()
+                self._vm._env = Environment(self._vm.env())
                 for param, arg in zip(params, args):
-                    vm._env.define(param, arg)
+                    self._vm._env.define(param, arg)
                 code = Compiler().compile(body)
-                vm.load(code)
-                expanded = vm.execute()
+                self._vm.load(code)
+                expanded = self._vm.execute()
                 return expanded
 
 class Compiler:
@@ -235,7 +237,10 @@ class VM:
         self._load_builtins()
 
     def __repr__(self):
-        return f"VM({self._ncode}:{self._ip})"
+        return f"VM({self._ncode}:{self._ip}, {self._env})"
+
+    def env(self):
+        return self._env
 
     def load(self, code):
         self._codes.append(code)
@@ -328,71 +333,84 @@ class VM:
 
         self._env = Environment(self._env)
 
-def run(vm, expr):
-    print(f"\nSource:\n{expr}")
-    expanded = Expander().expand(expr)
-    print(f"Expanded:\n{expanded}")
-    code = Compiler().compile(expanded)
-    print("Code:")
-    for i, inst in enumerate(code):
-        print(f"{i:3}: {inst}")
-    print("Output:")
-    vm.load(code)
-    return vm.execute()
+class Interpreter:
+    def __init__(self):
+        self._vm = VM()
 
-def test_run(vm, expr, expected):
-    result = run(vm, expr)
-    print(f"Expected Result: {expected}")
-    print(f"Actual Result  : {result}")
-    assert expected == result
+    def __repr__(self) -> str:
+        return f"Interpreter({self._vm})"
 
-vm = VM()
+    def go(self, expr):
+        expanded = Expander(self._vm).expand(expr)
+        code = Compiler().compile(expanded)
+        self._vm.load(code)
+        return self._vm.execute()
 
-test_run(vm, None, None)
-test_run(vm, True, True)
-test_run(vm, False, False)
-test_run(vm, 5, 5)
+    def go_verbose(self, expr):
+        print(f"\nSource:\n{expr}")
+        expanded = Expander(self._vm).expand(expr)
+        print(f"Expanded:\n{expanded}")
+        code = Compiler().compile(expanded)
+        print("Code:")
+        for i, inst in enumerate(code):
+            print(f"{i:3}: {inst}")
+        print("Output:")
+        self._vm.load(code)
+        return self._vm.execute()
 
-test_run(vm, ["add", 5, 6], 11)
-test_run(vm, ["sub", 11, 5], 6)
-test_run(vm, ["equal", 5, 5], True)
-test_run(vm, ["equal", 5, 6], False)
-test_run(vm, ["not_equal", 5, 5], False)
-test_run(vm, ["not_equal", 5, 6], True)
+    def go_test(self, expr, expected):
+        result = self.go_verbose(expr)
+        print(f"Expected Result: {expected}")
+        print(f"Actual Result  : {result}")
+        assert expected == result
 
-test_run(vm, ["add", 5, ["add", 6, 7]], 18)
+i = Interpreter()
 
-test_run(vm, ["if", ["equal", 5, 5], 6, 7], 6)
-test_run(vm, ["if", ["equal", 5, 6], 7, 8], 8)
-test_run(vm, ["if", ["equal", 5, 6], 7, ["if", ["equal", 8, 8], 9, 10]], 9)
+i.go_test(None, None)
+i.go_test(True, True)
+i.go_test(False, False)
+i.go_test(5, 5)
 
-test_run(vm, ["define", "a", ["add", 5, 6]], 11)
-test_run(vm, "a", 11)
-test_run(vm, ["assign", "a", ["sub", "a", 5]], 6)
-test_run(vm, "a", 6)
+i.go_test(["add", 5, 6], 11)
+i.go_test(["sub", 11, 5], 6)
+i.go_test(["equal", 5, 5], True)
+i.go_test(["equal", 5, 6], False)
+i.go_test(["not_equal", 5, 5], False)
+i.go_test(["not_equal", 5, 6], True)
 
-run(vm, ["print", 5])
+i.go_test(["add", 5, ["add", 6, 7]], 18)
 
-run(vm, ["seq", ["print", 5], ["print", 6]])
-test_run(vm, ["seq", ["define", "x", 5], ["define", "y", 6], ["add", "x", "y"]], 11)
+i.go_test(["if", ["equal", 5, 5], 6, 7], 6)
+i.go_test(["if", ["equal", 5, 6], 7, 8], 8)
+i.go_test(["if", ["equal", 5, 6], 7, ["if", ["equal", 8, 8], 9, 10]], 9)
 
-run(vm, ["define", "myadd", ["func", ["a", "b"], ["add", "a", "b"]]])
-test_run(vm, ["myadd", 5, 6], 11)
+i.go_test(["define", "a", ["add", 5, 6]], 11)
+i.go_test("a", 11)
+i.go_test(["assign", "a", ["sub", "a", 5]], 6)
+i.go_test("a", 6)
 
-run(vm, ["define", "fib", ["func", ["n"],
+i.go_verbose(["print", 5])
+
+i.go_verbose(["seq", ["print", 5], ["print", 6]])
+i.go_test(["seq", ["define", "x", 5], ["define", "y", 6], ["add", "x", "y"]], 11)
+
+i.go_verbose(["define", "myadd", ["func", ["a", "b"], ["add", "a", "b"]]])
+i.go_test(["myadd", 5, 6], 11)
+
+i.go_verbose(["define", "fib", ["func", ["n"],
     ["if", ["equal", "n", 0], 0,
     ["if", ["equal", "n", 1], 1,
     ["add", ["fib", ["sub", "n", 1]], ["fib", ["sub", "n", 2]]]]]]])
-test_run(vm, ["fib", 10], 55)
+i.go_test(["fib", 10], 55)
 
-run(vm, ["seq",
+i.go_verbose(["seq",
     ["define", "make_counter", ["func", [], ["seq",
                 ["define", "c", 0],
                 ["func", [], ["assign", "c", ["add", "c", 1]]]]]],
     ["define", "counter1", ["make_counter"]],
     ["define", "counter2", ["make_counter"]]
 ])
-run(vm, ["seq",
+i.go_verbose(["seq",
     ["print", ["counter1"]],
     ["print", ["counter1"]],
     ["print", ["counter2"]],
@@ -403,45 +421,46 @@ run(vm, ["seq",
 
 # tail call optimization test
 
-run(vm, ["define", "loop_els", ["func", ["n"],
+i.go_verbose(["define", "loop_els", ["func", ["n"],
     ["if", ["equal", "n", 0], 0, ["loop_els", ["sub", "n", 1]]]
 ]])
-test_run(vm, ["loop_els", 10000], 0)
+i.go_test(["loop_els", 10000], 0)
 
-run(vm, ["define", "loop_thn", ["func", ["n"],
+i.go_verbose(["define", "loop_thn", ["func", ["n"],
     ["if", ["not_equal", "n", 0], ["loop_thn", ["sub", "n", 1]], 0]
 ]])
-test_run(vm, ["loop_thn", 10000], 0)
+i.go_test(["loop_thn", 10000], 0)
 
-run(vm, ["define", "loop_seq", ["func", ["n"],
+i.go_verbose(["define", "loop_seq", ["func", ["n"],
     ["seq",
         ["add", 1, 1],
         ["if", ["equal", "n", 0], 0, ["loop_seq", ["sub", "n", 1]]]
     ]
 ]])
-test_run(vm, ["loop_seq", 10000], 0)
+i.go_test(["loop_seq", 10000], 0)
 
-run(vm, ["define", "loop_not_tail", ["func", ["n"],
+i.go_verbose(["define", "loop_not_tail", ["func", ["n"],
     ["if", ["equal", "n", 0], 0, ["add", ["loop_not_tail", ["sub", "n", 1]], 1]]
 ]])
 try:
-    run(vm, ["loop_not_tail", 10000])
+    i.go_verbose(["loop_not_tail", 10000])
     assert False, "Should fail"
 except AssertionError:
     print("AssertionError as expected")
+i = Interpreter() # エラーが起きたのでInterpreterを初期化する
 
-run(vm, ["define", "even", ["func", ["n"],
+i.go_verbose(["define", "even", ["func", ["n"],
     ["if", ["equal", "n", 0], True, ["odd", ["sub", "n", 1]]]
 ]])
-run(vm, ["define", "odd", ["func", ["n"],
+i.go_verbose(["define", "odd", ["func", ["n"],
     ["if", ["equal", "n", 0], False, ["even", ["sub", "n", 1]]]
 ]])
-test_run(vm, ["even", 10000], True)
-test_run(vm, ["even", 10001], False)
-test_run(vm, ["odd", 10000], False)
-test_run(vm, ["odd", 10001], True)
+i.go_test(["even", 10000], True)
+i.go_test(["even", 10001], False)
+i.go_test(["odd", 10000], False)
+i.go_test(["odd", 10001], True)
 
-run(vm, ["define", "fib_tail", ["func", ["n"], ["seq",
+i.go_verbose(["define", "fib_tail", ["func", ["n"], ["seq",
     ["define", "rec", ["func", ["k", "a", "b"],
         ["if", ["equal", "k", "n"],
             "a",
@@ -450,66 +469,77 @@ run(vm, ["define", "fib_tail", ["func", ["n"], ["seq",
     ["rec", 0, 0, 1]
 ]]])
 
-test_run(vm, ["fib_tail", 10], 55)
-run(vm, ["print", ["fib_tail", 10000]])
+i.go_test(["fib_tail", 10], 55)
+i.go_verbose(["print", ["fib_tail", 10000]])
 
 # letcc test
 
-test_run(vm, ["letcc", "skip-to", ["add", 5, 6]], 11)
-test_run(vm, ["letcc", "skip-to", ["add", ["skip-to", 5], 6]], 5)
-test_run(vm, ["add", 5, ["letcc", "skip-to", ["skip-to", 6]]], 11)
-test_run(vm, ["letcc", "skip1", ["add", ["skip1", ["letcc", "skip2", ["add", ["skip2", 5], 6]]], 7]], 5)
+i.go_test(["letcc", "skip-to", ["add", 5, 6]], 11)
+i.go_test(["letcc", "skip-to", ["add", ["skip-to", 5], 6]], 5)
+i.go_test(["add", 5, ["letcc", "skip-to", ["skip-to", 6]]], 11)
+i.go_test(["letcc", "skip1", ["add", ["skip1", ["letcc", "skip2", ["add", ["skip2", 5], 6]]], 7]], 5)
 
-run(vm, ["define", "inner", ["func", ["raise"], ["raise", 5]]])
-run(vm, ["define", "outer", ["func", [],
+i.go_verbose(["define", "inner", ["func", ["raise"], ["raise", 5]]])
+i.go_verbose(["define", "outer", ["func", [],
         [ "letcc", "raise", ["add", ["inner", "raise"], 6]]]])
-test_run(vm, ["outer"], 5)
+i.go_test(["outer"], 5)
 
-run(vm, ["define", "add5", None])
-test_run(vm, ["add", 5, ["letcc", "cc", ["seq", ["assign", "add5", "cc"], 6]]], 11)
-test_run(vm, ["add5", 7], 12)
-test_run(vm, ["add5", 8], 13)
+i.go_verbose(["define", "add5", None])
+i.go_test(["add", 5, ["letcc", "cc", ["seq", ["assign", "add5", "cc"], 6]]], 11)
+i.go_test(["add5", 7], 12)
+i.go_test(["add5", 8], 13)
 
 # array test
 
-test_run(vm, ["array"], [])
-test_run(vm, ["array", 5], [5])
-test_run(vm, ["array", ["add", 5, 6], ["add", 7, 8]], [11, 15])
+i.go_test(["array"], [])
+i.go_test(["array", 5], [5])
+i.go_test(["array", ["add", 5, 6], ["add", 7, 8]], [11, 15])
+
+# quote test
+
+i.go_test(["quote", 5], 5)
+i.go_test(["quote", ["add", 5, 6]], ["add", 5, 6])
+
+i.go_test(["quasiquote", 5], 5)
+i.go_test(["quasiquote", ["add", 5, 6]], ["add", 5, 6])
+i.go_test(["quasiquote", ["add", ["unquote", ["add", 5, 6]], 7]], ["add", 11, 7])
+i.go_test(["quasiquote", ["add", ["unquote_splicing", ["array", 5, 6]]]], ["add", 5, 6])
 
 # macro test
 
-test_run(vm, ["when", ["equal", 5, 5], 6], 6)
-test_run(vm, ["when", ["equal", 5, 6], "notdefinedvar"], None)
-test_run(vm, ["add", 7, ["when", ["equal", 5, 5], 6]], 13)
-test_run(vm, ["when2", ["equal", 5, 5], 6], 6)
-test_run(vm, ["when2", ["equal", 5, 6], "notdefinedvar"], None)
+i.go_test(["when", ["equal", 5, 5], 6], 6)
+i.go_test(["when", ["equal", 5, 6], "notdefinedvar"], None)
+i.go_test(["add", 7, ["when", ["equal", 5, 5], 6]], 13)
+i.go_test(["when2", ["equal", 5, 5], 6], 6)
+i.go_test(["when2", ["equal", 5, 6], "notdefinedvar"], None)
 
-test_run(vm, ["quote", 5], 5)
-test_run(vm, ["quote", ["add", 5, 6]], ["add", 5, 6])
-
-test_run(vm, ["seq",
+i.go_test(["seq",
     ["defmacro", "foo", [], ["array", ["quote", "add"], 5, 6]],
     ["foo"]
 ], 11)
 
-test_run(vm, ["quasiquote", 5], 5)
-test_run(vm, ["quasiquote", ["add", 5, 6]], ["add", 5, 6])
-
-test_run(vm, ["seq",
+i.go_test(["seq",
     ["defmacro", "foo", ["a", "b"], ["quasiquote",
             ["add", ["unquote", "a"], ["unquote", "b"]]]],
     ["foo", ["sub", 8, 5], ["sub", 7, 6]]
 ], 4)
 
-test_run(vm, ["seq",
+i.go_test(["seq",
     ["defmacro", "foo", [], ["quasiquote",
             ["add", ["unquote_splicing", ["array", 5, 6]]]]],
     ["foo"]
 ], 11)
 
-test_run(vm, ["seq",
+i.go_test(["seq",
     ["defmacro", "foo", ["a", "b"], ["quasiquote",
             ["add", ["unquote_splicing", ["quasiquote",
                 [["unquote", "a"], ["unquote", "b"]]]]]]],
     ["foo", ["sub", 8, 5], ["sub", 7, 6]]
 ], 4)
+
+i.go_verbose(["define", "my_add", ["func", ["a", "b"], ["add", "a", "b"]]])
+i.go_test(["seq",
+    ["defmacro", "bar", ["a", "b"], ["my_add", "a", "b"]],
+    ["bar", ["sub"], [7, 6]]
+], 1)
+
