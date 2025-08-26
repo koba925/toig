@@ -51,12 +51,8 @@ class Expander:
     def __init__(self, vm):
         self._vm = vm
 
-        self._menv = Environment()
-        self._menv.define("when", lambda cnd, body: ["if", cnd, body, None])
-        self._menv.define("when2", lambda cnd, body: ["when", cnd, body])
-
     def __repr__(self):
-        return f"Expander({self._menv})"
+        return f"Expander({self._vm})"
 
     def expand(self, expr):
         return self._expr(expr)
@@ -76,7 +72,7 @@ class Expander:
             case ["quasiquote", elem]:
                 return self._quasiquote(elem)
             case ["defmacro", name, params, body]:
-                self._menv.define(name, ["macro", params, self._expr(body)])
+                self._vm.menv().define(name, ["macro", params, self._expr(body)])
                 return None
             case ["define", name, val]:
                 return ["define", name, self._expr(val)]
@@ -89,8 +85,8 @@ class Expander:
             case ["letcc", name, body]:
                 return ["letcc", name, self._expr(body)]
             case [op, *args] :
-                if isinstance(op, str) and op in self._menv:
-                    macro = self._menv.get(op)
+                if isinstance(op, str) and op in self._vm.menv():
+                    macro = self._vm.menv().get(op)
                     return self._expr(self._macro(macro, args))
                 else:
                     return [op] + [self._expr(arg) for arg in args]
@@ -235,12 +231,16 @@ class VM:
         self._ip = 0
         self._env = Environment()
         self._load_builtins()
+        self._menv = Environment()
 
     def __repr__(self):
-        return f"VM({self._ncode}:{self._ip}, {self._env})"
+        return f"VM({self._ncode}:{self._ip}, {self._env}, {self._menv})"
 
     def env(self):
         return self._env
+
+    def menv(self):
+        return self._menv
 
     def load(self, code):
         self._codes.append(code)
@@ -507,39 +507,39 @@ i.go_test(["quasiquote", ["add", ["unquote_splicing", ["array", 5, 6]]]], ["add"
 
 # macro test
 
+i.go_verbose(["defmacro", "when", ["cnd", "body"], ["quasiquote",
+    ["if", ["unquote", "cnd"], ["unquote", "body"], None]
+]])
+i.go_verbose(["defmacro", "when2", ["cnd", "body"], ["quasiquote",
+    ["when", ["unquote", "cnd"], ["unquote", "body"]]
+]])
+
 i.go_test(["when", ["equal", 5, 5], 6], 6)
 i.go_test(["when", ["equal", 5, 6], "notdefinedvar"], None)
 i.go_test(["add", 7, ["when", ["equal", 5, 5], 6]], 13)
 i.go_test(["when2", ["equal", 5, 5], 6], 6)
 i.go_test(["when2", ["equal", 5, 6], "notdefinedvar"], None)
 
-i.go_test(["seq",
-    ["defmacro", "foo", [], ["array", ["quote", "add"], 5, 6]],
-    ["foo"]
-], 11)
+i.go_verbose(["defmacro", "foo", [], ["array", ["quote", "add"], 5, 6]])
+i.go_test(["foo"], 11)
 
-i.go_test(["seq",
-    ["defmacro", "foo", ["a", "b"], ["quasiquote",
-            ["add", ["unquote", "a"], ["unquote", "b"]]]],
-    ["foo", ["sub", 8, 5], ["sub", 7, 6]]
-], 4)
+i.go_verbose(["defmacro", "foo", ["a", "b"], ["quasiquote",
+    ["add", ["unquote", "a"], ["unquote", "b"]]
+]])
+i.go_test(["foo", ["sub", 8, 5], ["sub", 7, 6]], 4)
 
-i.go_test(["seq",
-    ["defmacro", "foo", [], ["quasiquote",
-            ["add", ["unquote_splicing", ["array", 5, 6]]]]],
-    ["foo"]
-], 11)
+i.go_verbose(["defmacro", "foo", [], ["quasiquote",
+    ["add", ["unquote_splicing", ["array", 5, 6]]]
+]])
+i.go_test(["foo"], 11)
 
-i.go_test(["seq",
-    ["defmacro", "foo", ["a", "b"], ["quasiquote",
-            ["add", ["unquote_splicing", ["quasiquote",
-                [["unquote", "a"], ["unquote", "b"]]]]]]],
-    ["foo", ["sub", 8, 5], ["sub", 7, 6]]
-], 4)
+i.go_verbose(["defmacro", "foo", ["a", "b"], ["quasiquote",
+    ["add", ["unquote_splicing", ["quasiquote",
+        [["unquote", "a"], ["unquote", "b"]]
+    ]]]
+]])
+i.go_test(["foo", ["sub", 8, 5], ["sub", 7, 6]], 4)
 
 i.go_verbose(["define", "my_add", ["func", ["a", "b"], ["add", "a", "b"]]])
-i.go_test(["seq",
-    ["defmacro", "bar", ["a", "b"], ["my_add", "a", "b"]],
-    ["bar", ["sub"], [7, 6]]
-], 1)
-
+i.go_verbose(["defmacro", "bar", ["a", "b"], ["my_add", "a", "b"]])
+i.go_test(["bar", ["sub"], [7, 6]], 1)
