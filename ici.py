@@ -104,12 +104,9 @@ class Expander:
             for elem in elems:
                 match elem:
                     case ["unquote_splicing", e]:
-                        expanded = self._expr(e)
-                        assert isinstance(expanded, list) and len(expanded) > 0, \
-                            f"Cannot splice: {expanded}"
-                        arr += expanded[1:]
+                        arr = ["add", arr, self._expr(e)]
                     case _:
-                        arr += [self._quasiquote(elem)]
+                        arr = ["add", arr, ["array", self._quasiquote(elem)]]
             return arr
 
         match expr:
@@ -508,6 +505,9 @@ i.go_test(["quasiquote", 5], 5)
 i.go_test(["quasiquote", ["add", 5, 6]], ["add", 5, 6])
 i.go_test(["quasiquote", ["add", ["unquote", ["add", 5, 6]], 7]], ["add", 11, 7])
 i.go_test(["quasiquote", ["add", ["unquote_splicing", ["array", 5, 6]]]], ["add", 5, 6])
+
+i.go_verbose(["define", "my_array", ["func", [], ["array", 5, 6]]])
+i.go_test(["quasiquote", ["add", ["unquote_splicing", ["my_array"]]]], ["add", 5, 6])
 
 # macro test
 
