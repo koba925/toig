@@ -72,8 +72,7 @@ class Expander:
             case ["quasiquote", elem]:
                 return self._quasiquote(elem)
             case ["defmacro", name, params, body]:
-                self._vm.menv().define(name, ["macro", params, self._expr(body)])
-                return None
+                return self._defmacro(name, params, self._expr(body))
             case ["define", name, val]:
                 return ["define", name, self._expr(val)]
             case ["assign", name, val]:
@@ -92,6 +91,12 @@ class Expander:
                     return [op] + [self._expr(arg) for arg in args]
             case unexpected:
                 assert False, f"Unexpected expression: {unexpected}"
+
+    def _defmacro(self, name, params, body):
+        code = Compiler().compile(body)
+        ncode = self._vm.load(code)
+        self._vm.menv().define(name, ["macro", ncode, params])
+        return None
 
     def _quasiquote(self, expr):
         def _quote_elements(elems):
@@ -116,13 +121,11 @@ class Expander:
         match macro:
             case m if callable(m):
                 return self._expr(m(*args))
-            case ["macro", params, body]:
+            case ["macro", ncode, params]:
                 self._vm._env = Environment(self._vm.env())
                 for param, arg in zip(params, args):
                     self._vm._env.define(param, arg)
-                code = Compiler().compile(body)
-                self._vm.load(code)
-                expanded = self._vm.execute()
+                expanded = self._vm.execute(ncode)
                 return expanded
 
 class Compiler:
@@ -244,11 +247,12 @@ class VM:
 
     def load(self, code):
         self._codes.append(code)
+        return len(self._codes) - 1
 
-    def execute(self):
+    def execute(self, ncode=None):
         self._stack = []
         self._call_stack = []
-        self._ncode = len(self._codes) - 1
+        self._ncode = len(self._codes) - 1 if ncode is None else ncode
         self._ip = 0
         while (inst := self._codes[self._ncode][self._ip]) != ["halt"]:
             match inst:
