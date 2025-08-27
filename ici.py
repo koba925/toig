@@ -319,12 +319,22 @@ class VM:
                 assert False, f"Unexpected call: {unexpected}"
 
     def _load_builtins(self):
+        def get_at(s):
+            arr = s.pop(); index = s.pop(); s.append(arr[index])
+
+        def slice_(s):
+            arr = s.pop(); start = s.pop(); end = s.pop(); step = s.pop()
+            s.append(arr[slice(start, end, step)])
+
         builtins = {
             "__builtins__": None,
             "add": lambda s: s.append(s.pop() + s.pop()),
             "sub": lambda s: s.append(s.pop() - s.pop()),
             "equal": lambda s: s.append(s.pop() == s.pop()),
             "not_equal": lambda s: s.append(s.pop() != s.pop()),
+
+            "get_at": get_at,
+            "slice": slice_,
 
             "print": lambda s: s.append(print(s.pop()))
         }
@@ -366,6 +376,12 @@ class Interpreter:
         assert expected == result
 
 i = Interpreter()
+
+# temporal test
+
+# exit()
+
+# basic test
 
 i.go_test(None, None)
 i.go_test(True, True)
@@ -547,3 +563,34 @@ i.go_test(["foo", ["sub", 8, 5], ["sub", 7, 6]], 4)
 i.go_verbose(["define", "my_add", ["func", ["a", "b"], ["add", "a", "b"]]])
 i.go_verbose(["defmacro", "bar", ["a", "b"], ["my_add", "a", "b"]])
 i.go_test(["bar", ["sub"], [7, 6]], 1)
+
+# macro test (let)
+
+i.go_verbose(["define", "first", ["func", ["l"], ["get_at", "l", 0]]])
+i.go_verbose(["define", "rest", ["func", ["l"], ["slice", "l", 1, None, None]]])
+i.go_verbose(["define", "last", ["func", ["l"], ["get_at", "l", -1]]])
+
+i.go_verbose(["define", "append", ["func", ["l", "a"], ["add", "l", ["array", "a"]]]])
+
+i.go_verbose(["define", "foldl", ["func", ["l", "f", "init"],
+    ["if", ["equal", "l", ["array"]],
+        "init",
+        ["foldl", ["rest", "l"], "f", ["f", "init", ["first", "l"]]]]]])
+
+i.go_verbose(["define", "map", ["func", ["l", "f"],
+    ["foldl", "l", ["func", ["acc", "e"], ["append", "acc", ["f", "e"]]], ["array"]]]])
+
+i.go_verbose(["defmacro", "scope", ["body"],
+    ["quasiquote", [["func", [], ["unquote", "body"]]]]])
+
+i.go_verbose(["defmacro", "let", ["bindings", "body"], ["seq",
+    ["define", "defines", ["func", ["bindings"],
+        ["map", "bindings", ["func", ["b"], ["quasiquote",
+            ["define",
+                ["unquote", ["first", "b"]],
+                ["unquote", ["last", "b"]]]]]]]],
+    ["quasiquote", ["scope", ["seq",
+        ["unquote_splicing", ["defines", "bindings"]],
+        ["unquote","body"]]]]]])
+
+i.go_test(["let", [["a", 5], ["b", 6]], ["add", "a", "b"]], 11)
