@@ -296,7 +296,7 @@ class VM:
     def _call(self, nargs, is_tail):
         match self._stack.pop():
             case f if callable(f):
-                f(self._stack)
+                f(nargs, self._stack)
                 self._ip += 1
             case ["closure", [ncodes, addr], params, env]:
                 args = [self._stack.pop() for _ in range(nargs)]
@@ -337,24 +337,26 @@ class VM:
                 assert False, f"Unexpected param: {unexpected}"
 
     def _load_builtins(self):
-        def get_at(s):
+        def get_at(_, s):
             arr = s.pop(); index = s.pop(); s.append(arr[index])
 
-        def slice_(s):
+        def slice_(_, s):
             arr = s.pop(); start = s.pop(); end = s.pop(); step = s.pop()
             s.append(arr[slice(start, end, step)])
 
         builtins = {
             "__builtins__": None,
-            "add": lambda s: s.append(s.pop() + s.pop()),
-            "sub": lambda s: s.append(s.pop() - s.pop()),
-            "equal": lambda s: s.append(s.pop() == s.pop()),
-            "not_equal": lambda s: s.append(s.pop() != s.pop()),
+            "add": lambda _, s: s.append(s.pop() + s.pop()),
+            "sub": lambda _, s: s.append(s.pop() - s.pop()),
+            "equal": lambda _, s: s.append(s.pop() == s.pop()),
+            "not_equal": lambda _, s: s.append(s.pop() != s.pop()),
+
+            "array": lambda n, s: s.append([s.pop() for _ in range(n)]),
 
             "get_at": get_at,
             "slice": slice_,
 
-            "print": lambda s: s.append(print(s.pop()))
+            "print": lambda _, s: s.append(print(s.pop()))
         }
 
         for name, func in builtins.items():
