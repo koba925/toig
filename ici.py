@@ -222,6 +222,37 @@ class Compiler:
     def _current_addr(self):
         return len(self._code)
 
+class Builtins:
+    @staticmethod
+    def get_at(_, s):
+        arr = s.pop(); index = s.pop(); s.append(arr[index])
+
+    @staticmethod
+    def slice_(_, s):
+        arr = s.pop(); start = s.pop(); end = s.pop(); step = s.pop()
+        s.append(arr[slice(start, end, step)])
+
+    builtins = {}
+
+    @staticmethod
+    def load(env):
+        for name, func in Builtins.builtins.items():
+            env.define(name, func)
+
+Builtins.builtins = {
+    "__builtins__": None,
+    "add": lambda _, s: s.append(s.pop() + s.pop()),
+    "sub": lambda _, s: s.append(s.pop() - s.pop()),
+    "equal": lambda _, s: s.append(s.pop() == s.pop()),
+    "not_equal": lambda _, s: s.append(s.pop() != s.pop()),
+
+    "array": lambda n, s: s.append([s.pop() for _ in range(n)]),
+    "get_at": Builtins.get_at,
+    "slice": Builtins.slice_,
+
+    "print": lambda _, s: s.append(print(s.pop()))
+}
+
 class VM:
     def __init__(self):
         self._codes = []
@@ -230,7 +261,8 @@ class VM:
         self._ncode = 0
         self._ip = 0
         self._env = Environment()
-        self._load_builtins()
+        Builtins.load(self._env)
+        self._env = Environment(self._env)
         self._menv = Environment()
 
     def __repr__(self):
@@ -335,34 +367,6 @@ class VM:
                 self._extend(params[1:], args[rest_len:])
             case unexpected:
                 assert False, f"Unexpected param: {unexpected}"
-
-    def _load_builtins(self):
-        def get_at(_, s):
-            arr = s.pop(); index = s.pop(); s.append(arr[index])
-
-        def slice_(_, s):
-            arr = s.pop(); start = s.pop(); end = s.pop(); step = s.pop()
-            s.append(arr[slice(start, end, step)])
-
-        builtins = {
-            "__builtins__": None,
-            "add": lambda _, s: s.append(s.pop() + s.pop()),
-            "sub": lambda _, s: s.append(s.pop() - s.pop()),
-            "equal": lambda _, s: s.append(s.pop() == s.pop()),
-            "not_equal": lambda _, s: s.append(s.pop() != s.pop()),
-
-            "array": lambda n, s: s.append([s.pop() for _ in range(n)]),
-
-            "get_at": get_at,
-            "slice": slice_,
-
-            "print": lambda _, s: s.append(print(s.pop()))
-        }
-
-        for name, func in builtins.items():
-            self._env.define(name, func)
-
-        self._env = Environment(self._env)
 
 class Interpreter:
     def __init__(self):
