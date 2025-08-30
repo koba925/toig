@@ -202,9 +202,9 @@ class Compiler:
         self._code.append(["cc", None])
         self._func([name], body)
         if is_tail:
-            self._code.append(["call_tail"])
+            self._code.append(["call_tail", 1])
         else:
-            self._code.append(["call"])
+            self._code.append(["call", 1])
         self._set_operand(cont_jump, self._current_addr())
 
     def _op(self, op, args, is_tail):
@@ -212,9 +212,9 @@ class Compiler:
             self._expr(arg, False)
         self._expr(op, False)
         if is_tail:
-            self._code.append(["call_tail"])
+            self._code.append(["call_tail", len(args)])
         else:
-            self._code.append(["call"])
+            self._code.append(["call", len(args)])
 
     def _set_operand(self, ip, operand):
         self._code[ip][1] = operand
@@ -278,11 +278,11 @@ class VM:
                     if not self._stack.pop():
                         self._ip = addr
                         continue
-                case ["call"]:
-                    self._call(False)
+                case ["call", nargs]:
+                    self._call(nargs, False)
                     continue
-                case ["call_tail"]:
-                    self._call(True)
+                case ["call_tail", nargs]:
+                    self._call(nargs, True)
                     continue
                 case ["ret"]:
                     [self._ncode, self._ip], self._env = self._call_stack.pop()
@@ -293,20 +293,19 @@ class VM:
         assert len(self._stack) == 1, f"Unused stack left: {self._stack}"
         return self._stack[0]
 
-    def _call(self, is_tail):
+    def _call(self, nargs, is_tail):
         match self._stack.pop():
             case f if callable(f):
                 f(self._stack)
                 self._ip += 1
             case ["closure", [ncodes, addr], params, env]:
-                args = [self._stack.pop() for _ in params]
+                args = [self._stack.pop() for _ in range(nargs)]
                 if not is_tail:
                     self._call_stack.append([[self._ncode, self._ip + 1], self._env])
                     if len(self._call_stack) > 1000:
                         assert False, "Call stack overflow"
                 self._env = Environment(env)
-                for param, val in zip(params, args):
-                    self._env.define(param, val)
+                self._extend(params, args)
                 self._ncode, self._ip = [ncodes, addr]
             case ["cont", [ncodes, addr], env, stack, call_stack]:
                 val = self._stack.pop()
@@ -317,6 +316,25 @@ class VM:
                 self._call_stack = call_stack[:]
             case unexpected:
                 assert False, f"Unexpected call: {unexpected}"
+
+    def _extend(self, params, args):
+        if params == [] and args == []: return
+        assert len(params) > 0, \
+            f"Argument count doesn't match: `{params}, {args}`"
+        match params[0]:
+            case str(param):
+                assert len(args) > 0, \
+                    f"Argument count doesn't match: `{params}, {args}`"
+                self._env.define(param, args[0])
+                self._extend(params[1:], args[1:])
+            case ["*", rest]:
+                rest_len = len(args) - len(params) + 1
+                assert rest_len >= 0, \
+                    f"Argument count doesn't match: `{params}, {args}`"
+                self._env.define(rest, args[:rest_len])
+                self._extend(params[1:], args[rest_len:])
+            case unexpected:
+                assert False, f"Unexpected param: {unexpected}"
 
     def _load_builtins(self):
         def get_at(s):
@@ -594,3 +612,17 @@ i.go_verbose(["defmacro", "let", ["bindings", "body"], ["seq",
         ["unquote","body"]]]]]])
 
 i.go_test(["let", [["a", 5], ["b", 6]], ["add", "a", "b"]], 11)
+
+# rest parameter test
+
+i.go_test([["func", [["*", "rest"]], "rest"]], [])
+i.go_test([["func", ["a", ["*", "rest"]], ["array", "a", "rest"]], 5], [5, []])
+i.go_test([["func", ["a", ["*", "rest"]], ["array", "a", "rest"]], 5, 6], [5, [6]])
+i.go_test([["func", ["a", ["*", "rest"]], ["array", "a", "rest"]], 5, 6, 7], [5, [6, 7]])
+
+i.go_test([["func", [["*", "args"], "a"], ["array", "args", "a"]], 5], [[], 5])
+i.go_test([["func", [["*", "args"], "a"], ["array", "args", "a"]], 5, 6], [[5], 6])
+i.go_test([["func", [["*", "args"], "a"], ["array", "args", "a"]], 5, 6, 7], [[5, 6], 7])
+i.go_test([["func", [["*", "args"], "a", "b"], ["array", "args", "a", "b"]], 5, 6, 7], [[5], 6, 7])
+i.go_test([["func", ["a", ["*", "args"], "b"], ["array", "a", "args", "b"]], 5, 6, 7], [5, [6], 7])
+i.go_test([["func", ["a", "b", ["*", "args"]], ["array", "a", "b", "args"]], 5, 6, 7], [5, 6, [7]])
