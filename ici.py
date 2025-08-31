@@ -116,14 +116,14 @@ class Expander:
 
     def _macro(self, macro, args):
         match macro:
-            case m if callable(m):
-                return self._expr(m(*args))
             case ["macro", ncode, params]:
-                self._vm._env = Environment(self._vm.env())
-                for param, arg in zip(params, args):
-                    self._vm._env.define(param, arg)
+                self._vm.new_scope()
+                self._vm.extend(params, args)
                 expanded = self._vm.execute(ncode)
+                self._vm.drop_scope()
                 return expanded
+            case unexpected:
+                assert False, f"Unexpected macro: {unexpected}"
 
 class Compiler:
     def __init__(self):
@@ -262,14 +262,11 @@ class VM:
         self._ip = 0
         self._env = Environment()
         Builtins.load(self._env)
-        self._env = Environment(self._env)
+        self.new_scope()
         self._menv = Environment()
 
     def __repr__(self):
         return f"VM({self._ncode}:{self._ip}, {self._env}, {self._menv})"
-
-    def env(self):
-        return self._env
 
     def menv(self):
         return self._menv
@@ -337,7 +334,7 @@ class VM:
                     if len(self._call_stack) > 1000:
                         assert False, "Call stack overflow"
                 self._env = Environment(env)
-                self._extend(params, args)
+                self.extend(params, args)
                 self._ncode, self._ip = [ncodes, addr]
             case ["cont", [ncodes, addr], env, stack, call_stack]:
                 val = self._stack.pop()
@@ -349,7 +346,15 @@ class VM:
             case unexpected:
                 assert False, f"Unexpected call: {unexpected}"
 
-    def _extend(self, params, args):
+    def new_scope(self):
+        self._env = Environment(self._env)
+
+    def drop_scope(self):
+        assert isinstance(self._env, Environment)
+        assert self._env._parent is not None
+        self._env = self._env._parent
+
+    def extend(self, params, args):
         if params == [] and args == []: return
         assert len(params) > 0, \
             f"Argument count doesn't match: `{params}, {args}`"
@@ -358,13 +363,13 @@ class VM:
                 assert len(args) > 0, \
                     f"Argument count doesn't match: `{params}, {args}`"
                 self._env.define(param, args[0])
-                self._extend(params[1:], args[1:])
+                self.extend(params[1:], args[1:])
             case ["*", rest]:
                 rest_len = len(args) - len(params) + 1
                 assert rest_len >= 0, \
                     f"Argument count doesn't match: `{params}, {args}`"
                 self._env.define(rest, args[:rest_len])
-                self._extend(params[1:], args[rest_len:])
+                self.extend(params[1:], args[rest_len:])
             case unexpected:
                 assert False, f"Unexpected param: {unexpected}"
 
@@ -619,7 +624,7 @@ i.go_verbose(["defmacro", "let", ["bindings", "body"], ["seq",
 
 i.go_test(["let", [["a", 5], ["b", 6]], ["add", "a", "b"]], 11)
 
-# rest parameter test
+# variable lenghth parameters test
 
 i.go_test([["func", [["*", "rest"]], "rest"]], [])
 i.go_test([["func", ["a", ["*", "rest"]], ["array", "a", "rest"]], 5], [5, []])
@@ -632,3 +637,11 @@ i.go_test([["func", [["*", "args"], "a"], ["array", "args", "a"]], 5, 6, 7], [[5
 i.go_test([["func", [["*", "args"], "a", "b"], ["array", "args", "a", "b"]], 5, 6, 7], [[5], 6, 7])
 i.go_test([["func", ["a", ["*", "args"], "b"], ["array", "a", "args", "b"]], 5, 6, 7], [5, [6], 7])
 i.go_test([["func", ["a", "b", ["*", "args"]], ["array", "a", "b", "args"]], 5, 6, 7], [5, 6, [7]])
+
+i.go(["defmacro", "rest_param", ["a", ["*", "rest"]], ["quasiquote",
+    ["array", ["quote", ["unquote", "a"]], ["quote", ["unquote", "rest"]]]
+]])
+i.go_test(["rest_param", ["add", 5, 1]],
+          [["add", 5, 1], []])
+i.go_test(["rest_param", ["add", 5, 1], ["add", 6, 1], ["add", 7, 1]],
+          [["add", 5, 1], [["add", 6, 1], ["add", 7, 1]]])
