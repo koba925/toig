@@ -35,7 +35,7 @@ _builtins = {
     "greater_equal": lambda args: args[0] >= args[1],
     "not": lambda args: not args[0],
 
-    "arr": lambda args: args,
+    "array": lambda args: args,
     "is_arr": lambda args: isinstance(args[0], list),
     "len": lambda args: len(args[0]),
     "get_at": lambda args: args[0][args[1]],
@@ -68,7 +68,7 @@ class StdLib:
         self._run("__stdlib__ := None")
 
         self._run("None #rule [scope, scope, EXPR, end]")
-        self._run("None #rule [qq, qq, EXPR, end]")
+        self._run("None #rule [quasiquote, quasiquote, EXPR, end]")
 
         self._run("id := func (x) do x end")
 
@@ -101,8 +101,8 @@ class StdLib:
         self._run("range := func (s, e) do unfoldl(s, func (x) do x >= e end, id, inc) end")
 
         self._run("""
-            __stdlib_when := macro (cnd, thn) do qq
-                if !(cnd) then !(thn) end
+            __stdlib_when := macro (cnd, thn) do quasiquote
+                if unquote(cnd) then unquote(thn) end
             end end
 
             #rule [when, __stdlib_when, EXPR, do, EXPR, end]
@@ -110,28 +110,28 @@ class StdLib:
 
         self._run("""
             _aif := macro (cnd, thn, *rest) do
-                if len(rest) == 0 then qq scope
-                    it := !(cnd); if it then !(thn) else None end
-                end end elif len(rest) == 1 then qq scope
-                    it := !(cnd); if it then !(thn) else !(rest[0]) end
-                end end else qq scope
-                    it := !(cnd); if it then !(thn) else _aif(!!(rest)) end
+                if len(rest) == 0 then quasiquote scope
+                    it := unquote(cnd); if it then unquote(thn) else None end
+                end end elif len(rest) == 1 then quasiquote scope
+                    it := unquote(cnd); if it then unquote(thn) else unquote(rest[0]) end
+                end end else quasiquote scope
+                    it := unquote(cnd); if it then unquote(thn) else _aif(unquote_splicing(rest)) end
                 end end end
             end
 
             #rule [aif, _aif, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], ?[else, EXPR], end]
             """)
 
-        self._run("and := macro (a, b) do qq aif !(a) then !(b) else it end end end")
-        self._run("or := macro (a, b) do qq aif !(a) then it else !(b) end end end")
+        self._run("and := macro (a, b) do quasiquote aif unquote(a) then unquote(b) else it end end end")
+        self._run("or := macro (a, b) do quasiquote aif unquote(a) then it else unquote(b) end end end")
 
         self._run("""
-            __stdlib_while := macro (cnd, body) do qq scope
+            __stdlib_while := macro (cnd, body) do quasiquote scope
                 continue := val := None;
                 letcc break do
                     loop := func() do
                         letcc cc do continue = cc end;
-                        if !(cnd) then val = !(body); loop() else val end
+                        if unquote(cnd) then val = unquote(body); loop() else val end
                     end;
                     loop()
                 end
@@ -141,13 +141,13 @@ class StdLib:
         """)
 
         self._run("""
-            __stdlib_awhile := macro (cnd, body) do qq scope
+            __stdlib_awhile := macro (cnd, body) do quasiquote scope
                 continue := val := None;
                 letcc break do
                     loop := func() do
                         letcc cc do continue = cc end;
-                        it := !(cnd);
-                        if it then val = !(body); loop() else val end
+                        it := unquote(cnd);
+                        if it then val = unquote(body); loop() else val end
                     end;
                     loop()
                 end
@@ -158,21 +158,21 @@ class StdLib:
 
         self._run("""
             __stdlib_is_name_before := is_name;
-            is_name := macro (e) do qq __stdlib_is_name_before(q(!(e))) end end
+            is_name := macro (e) do quasiquote __stdlib_is_name_before(quote(unquote(e))) end end
         """)
 
         self._run("""
-            __stdlib_for := macro (e, l, body) do qq scope
+            __stdlib_for := macro (e, l, body) do quasiquote scope
                 __stdlib_for_index := -1;
-                __stdlib_for_l := !(l);
-                continue := __stdlib_for_val := !(e) := None;
+                __stdlib_for_l := unquote(l);
+                continue := __stdlib_for_val := unquote(e) := None;
                 letcc break do
                     loop := func () do
                         letcc cc do continue = cc end;
                         __stdlib_for_index = __stdlib_for_index + 1;
                         if __stdlib_for_index < len(__stdlib_for_l) then
-                            !(e) = __stdlib_for_l[__stdlib_for_index];
-                            __stdlib_for_val = !(body);
+                            unquote(e) = __stdlib_for_l[__stdlib_for_index];
+                            __stdlib_for_val = unquote(body);
                             loop()
                         else __stdlib_for_val end
                     end;
@@ -184,12 +184,12 @@ class StdLib:
         """)
 
         self._run("""
-            __stdlib_gfunc := macro (params, body) do qq
-                func (!!(params[1:])) do
+            __stdlib_gfunc := macro (params, body) do quasiquote
+                func (unquote_splicing(params[1:])) do
                     yd := nx := None;
                     yield := func (x) do letcc cc do nx = cc; yd(x) end end;
                     next := func () do letcc cc do yd = cc; nx(None) end end;
-                    nx := func (_) do !(body); yield(None) end;
+                    nx := func (_) do unquote(body); yield(None) end;
                     next
                 end
             end end
@@ -200,10 +200,10 @@ class StdLib:
         self._run("agen := gfunc (a) do for e in a do yield(e) end end")
 
         self._run("""
-            __stdlib_gfor := macro(e, gen, body) do qq scope
-                __stdlib_gfor_gen := !(gen);
-                !(e) := None;
-                while (!(e) = __stdlib_gfor_gen()) != None do !(body) end
+            __stdlib_gfor := macro(e, gen, body) do quasiquote scope
+                __stdlib_gfor_gen := unquote(gen);
+                unquote(e) := None;
+                while (unquote(e) = __stdlib_gfor_gen()) != None do unquote(body) end
             end end end
 
             #rule [gfor, __stdlib_gfor, NAME, in, EXPR, do, EXPR, end]

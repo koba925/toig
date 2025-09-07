@@ -22,12 +22,12 @@ try-catch ぽいものを実装したところ
 ```
     # try-catchの実装
 
-    raise := func (e) do error(q(raised_outside_of_try), e) end;
-    _try := macro (try_expr, exc_var, exc_expr) do qq scope
+    raise := func (e) do error(quote(raised_outside_of_try), e) end;
+    _try := macro (try_expr, exc_var, exc_expr) do quasiquote scope
         prev_raise := raise;
         letcc escape do
-            raise = func (!(exc_var)) do escape(!(exc_expr)) end;
-            !(try_expr)
+            raise = func (unquote(exc_var)) do escape(unquote(exc_expr)) end;
+            unquote(try_expr)
         end;
         raise = prev_raise
     end end end;
@@ -61,12 +61,12 @@ try-catch ぽいものを実装したところ
 ```
     # ジェネレータ生成マクロの実装
 
-    __stdlib_gfunc := macro (params, body) do qq
-        func (!!(params[1:])) do
+    __stdlib_gfunc := macro (params, body) do quasiquote
+        func (unquote_splicing(params[1:])) do
             yd := nx := None;
             yield := func (x) do letcc cc do nx = cc; yd(x) end end;
             next := func () do letcc cc do yd = cc; nx(None) end end;
-            nx := func (_) do !(body); yield(None) end;
+            nx := func (_) do unquote(body); yield(None) end;
             next
         end
     end end
@@ -106,6 +106,7 @@ Zennのスクラップブックに進捗（というか落書き）を書いて�
 * [トイ言語実験日記２（構文解析とカスタム文法）](https://zenn.dev/kb84tkhr/scraps/344aa65443b4f3)
 * [トイ言語実験日記３（ステートマシンでマクロと継続）](https://zenn.dev/kb84tkhr/scraps/446dd0e90c3fc3)
 * [トイ言語実験日記４（テーマ未定)](https://zenn.dev/kb84tkhr/scraps/6f94737d864eef)
+* [トイ言語実験日記５（中間コードインタプリタ）](https://zenn.dev/kb84tkhr/scraps/6903a2797fee46)
 
 よろしかったらこちらもご覧ください。こちらは実験っぽいことはせず普通に？書いています。
 

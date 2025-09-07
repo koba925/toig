@@ -153,15 +153,15 @@ class TestCore(TestToig):
         self.assertTrue(self.fails("(5"))
 
     def test_array_by_builtins(self):
-        self.assertEqual(self.go("arr()"), [])
-        self.assertEqual(self.go("arr(5; 6)"), [6])
-        self.assertEqual(self.go("arr(5; 6, 7; 8)"), [6, 8])
-        self.assertTrue(self.go("is_arr(arr())"))
+        self.assertEqual(self.go("array()"), [])
+        self.assertEqual(self.go("array(5; 6)"), [6])
+        self.assertEqual(self.go("array(5; 6, 7; 8)"), [6, 8])
+        self.assertTrue(self.go("is_arr(array())"))
         self.assertFalse(self.go("is_arr(1)"))
-        self.assertEqual(self.go("len(arr(5, 6, 7))"), 3)
-        self.assertEqual(self.go("get_at(arr(5, 6, 7), 1)"), 6)
-        self.assertEqual(self.go("set_at(arr(5, 6, 7), 1, 8)"), 8)
-        self.assertEqual(self.go("slice(arr(5, 6, 7), 1, 2, None)"), [6])
+        self.assertEqual(self.go("len(array(5, 6, 7))"), 3)
+        self.assertEqual(self.go("get_at(array(5, 6, 7), 1)"), 6)
+        self.assertEqual(self.go("set_at(array(5, 6, 7), 1, 8)"), 8)
+        self.assertEqual(self.go("slice(array(5, 6, 7), 1, 2, None)"), [6])
 
     def test_array_literal(self):
         self.assertEqual(self.go("[]"), [])
@@ -267,51 +267,51 @@ class TestCore(TestToig):
         self.assertEqual(self.go("counter2()"), 3)
 
     def test_q(self):
-        self.assertEqual(self.go("q(5)"), 5)
-        self.assertEqual(self.go("q(None)"), None)
-        self.assertEqual(self.go("q(foo)"), "foo")
-        self.assertEqual(self.go("q([5, 6])"), ["arr", 5, 6])
-        self.assertEqual(self.go("q(add(5, 6))"), ["add", 5, 6])
-        self.assertEqual(self.go("q(5 + 6)"), ["add", 5, 6])
+        self.assertEqual(self.go("quote(5)"), 5)
+        self.assertEqual(self.go("quote(None)"), None)
+        self.assertEqual(self.go("quote(foo)"), "foo")
+        self.assertEqual(self.go("quote([5, 6])"), ["array", 5, 6])
+        self.assertEqual(self.go("quote(add(5, 6))"), ["add", 5, 6])
+        self.assertEqual(self.go("quote(5 + 6)"), ["add", 5, 6])
 
     def test_qq(self):
-        self.assertEqual(self.go("qq 5 end"), 5)
-        self.assertEqual(self.go("qq None end"), None)
-        self.assertEqual(self.go("qq foo end"), "foo")
-        self.assertEqual(self.go("qq [5, 6] end"), ["arr", 5, 6])
-        self.assertEqual(self.go("qq add(5, 6) end"), ["add", 5, 6])
-        self.assertEqual(self.go("qq 5 + 6 end"), ["add", 5, 6])
+        self.assertEqual(self.go("quasiquote 5 end"), 5)
+        self.assertEqual(self.go("quasiquote None end"), None)
+        self.assertEqual(self.go("quasiquote foo end"), "foo")
+        self.assertEqual(self.go("quasiquote [5, 6] end"), ["array", 5, 6])
+        self.assertEqual(self.go("quasiquote add(5, 6) end"), ["add", 5, 6])
+        self.assertEqual(self.go("quasiquote 5 + 6 end"), ["add", 5, 6])
 
-        self.assertEqual(self.go("qq !(add(5, 6)) end"), 11)
-        self.assertEqual(self.go("qq add(5, !(6 ; 7)) end"), ["add", 5, 7])
-        self.assertEqual(self.go("qq !(5 + 6) end"), 11)
-        self.assertEqual(self.go("qq 5 + !(6; 7) end"), ["add", 5, 7])
-        self.assertEqual(self.go("qq add(!!([5, 6])) end"), ["add", 5, 6])
-        self.assertEqual(self.go("qq add(5, !!([6])) end"), ["add", 5, 6])
+        self.assertEqual(self.go("quasiquote unquote(add(5, 6)) end"), 11)
+        self.assertEqual(self.go("quasiquote add(5, unquote(6 ; 7)) end"), ["add", 5, 7])
+        self.assertEqual(self.go("quasiquote unquote(5 + 6) end"), 11)
+        self.assertEqual(self.go("quasiquote 5 + unquote(6; 7) end"), ["add", 5, 7])
+        self.assertEqual(self.go("quasiquote add(unquote_splicing([5, 6])) end"), ["add", 5, 6])
+        self.assertEqual(self.go("quasiquote add(5, unquote_splicing([6])) end"), ["add", 5, 6])
 
-        self.assertEqual(self.go("qq if a == 5 then 6; 7 else !(8; 9) end end"),
+        self.assertEqual(self.go("quasiquote if a == 5 then 6; 7 else unquote(8; 9) end end"),
                          ["if", ["equal", "a", 5], ["scope", ["seq", 6, 7]], ["scope", 9]])
 
     def test_macro(self):
-        self.assertEqual(self.expanded("macro () do q(abc) end ()"), "abc")
+        self.assertEqual(self.expanded("macro () do quote(abc) end ()"), "abc")
 
         self.assertEqual(
-            self.expanded("macro (a) do qq !(a) * !(a) end end (5 + 6)"),
+            self.expanded("macro (a) do quasiquote unquote(a) * unquote(a) end end (5 + 6)"),
             ["mul", ["add", 5, 6], ["add", 5, 6]])
 
-        self.go("build_exp := macro (op, *r) do qq !(op)(!!(r)) end end")
+        self.go("build_exp := macro (op, *r) do quasiquote unquote(op)(unquote_splicing(r)) end end")
         self.assertEqual(self.expanded("build_exp(add)"), ["add"])
         self.assertEqual(self.expanded("build_exp(add, 5)"), ["add", 5])
         self.assertEqual(self.expanded("build_exp(add, 5, 6)"), ["add", 5, 6])
 
-        self.assertEqual(self.go("macro (*a, b) do qq [q(!(a)), q(!(b))] end end (5)"), [[], 5])
-        self.assertEqual(self.go("macro (*a, b) do qq [q(!(a)), q(!(b))] end end (5, 6)"), [[5], 6])
-        self.assertEqual(self.go("macro (*a, b) do qq [q(!(a)), q(!(b))] end end (5, 6, 7)"), [[5, 6], 7])
-        self.assertEqual(self.go("macro (a, *b, c) do qq [q(!(a)), q(!(b)), q(!(c))] end end (5, 6, 7)"), [5, [6], 7])
+        self.assertEqual(self.go("macro (*a, b) do quasiquote [quote(unquote(a)), quote(unquote(b))] end end (5)"), [[], 5])
+        self.assertEqual(self.go("macro (*a, b) do quasiquote [quote(unquote(a)), quote(unquote(b))] end end (5, 6)"), [[5], 6])
+        self.assertEqual(self.go("macro (*a, b) do quasiquote [quote(unquote(a)), quote(unquote(b))] end end (5, 6, 7)"), [[5, 6], 7])
+        self.assertEqual(self.go("macro (a, *b, c) do quasiquote [quote(unquote(a)), quote(unquote(b)), quote(unquote(c))] end end (5, 6, 7)"), [5, [6], 7])
 
     def test_custom(self):
         self.assertTrue(self.fails("""
-            foo := macro (a) do qq print(!(a)) end end;
+            foo := macro (a) do quasiquote print(unquote(a)) end end;
             #rule [foo, foo, 5, EXPR, end]
             foo 6 end
         """))

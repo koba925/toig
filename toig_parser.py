@@ -233,7 +233,7 @@ class Parser:
             case "[":
                 self._advance()
                 elems = self._comma_separated_exprs("]")
-                return ["arr"] + elems
+                return ["array"] + elems
             case "func":
                 self._advance(); return self._func()
             case "macro":
@@ -298,7 +298,7 @@ class Parser:
                     return [name] + _custom(r[1:])
                 case "PARAMS":
                     self._consume("(")
-                    return  [["arr"] + self._comma_separated_exprs(")")] + _custom(r[1:])
+                    return  [["array"] + self._comma_separated_exprs(")")] + _custom(r[1:])
                 case keyword if is_name(keyword):
                     self._consume(keyword); return _custom(r[1:])
                 case ["*", subrule]:
