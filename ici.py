@@ -1,36 +1,64 @@
 from toig_environment import Environment
 from ici_evaluator import Expander, Compiler, VM
 
-class Builtins:
-    @staticmethod
-    def get_at(_, s):
-        arr = s.pop(); index = s.pop(); s.append(arr[index])
+# Builtins
 
-    @staticmethod
-    def slice_(_, s):
-        arr = s.pop(); start = s.pop(); end = s.pop(); step = s.pop()
-        s.append(arr[slice(start, end, step)])
+def _get_at(_, s):
+    arr = s.pop(); index = s.pop(); s.append(arr[index])
 
-    builtins = {}
+def _set_at(_, s):
+    arr = s.pop(); index = s.pop(); val = s.pop()
+    arr[index] = val
+    s.append(val)
 
-    @staticmethod
-    def load(env):
-        for name, func in Builtins.builtins.items():
-            env.define(name, func)
+def _slice(_, s):
+    arr = s.pop(); start = s.pop(); end = s.pop(); step = s.pop()
+    s.append(arr[slice(start, end, step)])
 
-Builtins.builtins = {
+def _set_slice(_, s):
+    arr = s.pop(); start = s.pop(); end = s.pop(); step = s.pop(); val = s.pop()
+    arr[start:end:step] = val
+    s.append(val)
+
+def _error(n, s):
+    assert False, f"{' '.join(map(str, [s.pop() for _ in range(n)]))}"
+
+_builtins = {
     "__builtins__": None,
     "add": lambda _, s: s.append(s.pop() + s.pop()),
     "sub": lambda _, s: s.append(s.pop() - s.pop()),
+    "mul": lambda _, s: s.append(s.pop() * s.pop()),
+    "div": lambda _, s: s.append(s.pop() // s.pop()),
+    "mod": lambda _, s: s.append(s.pop() % s.pop()),
+    "neg": lambda _, s: s.append(-s.pop()),
+
     "equal": lambda _, s: s.append(s.pop() == s.pop()),
     "not_equal": lambda _, s: s.append(s.pop() != s.pop()),
+    "less": lambda _, s: s.append(s.pop() < s.pop()),
+    "greater": lambda _, s: s.append(s.pop() > s.pop()),
+    "less_equal": lambda _, s: s.append(s.pop() <= s.pop()),
+    "greater_equal": lambda _, s: s.append(s.pop() >= s.pop()),
+    "not": lambda _, s: s.append(not s.pop()),
 
     "array": lambda n, s: s.append([s.pop() for _ in range(n)]),
-    "get_at": Builtins.get_at,
-    "slice": Builtins.slice_,
+    "is_array": lambda _, s: s.append(isinstance(s.pop(), list)),
+    "len": lambda _, s: s.append(len(s.pop())),
+    "get_at": _get_at,
+    "set_at": _set_at,
+    "slice": _slice,
+    "set_slice": _set_slice,
 
-    "print": lambda _, s: s.append(print(s.pop()))
+    "is_name": lambda _, s: s.append(isinstance(s.pop(), str)),
+
+    "print": lambda n, s: s.append(print(*[s.pop() for _ in range(n)])),
+    "error": _error
 }
+
+class Builtins:
+    @staticmethod
+    def load(env):
+        for name, func in _builtins.items():
+            env.define(name, func)
 
 class Interpreter:
     def __init__(self):
