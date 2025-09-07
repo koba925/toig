@@ -58,7 +58,7 @@ class TestProblems(TestToig):
 
     def test_let(self):
         self.go("""
-            _let := macro(bindings, body) do
+            defmacro _let (bindings, body) do
                 defines := func (bindings) do
                     map(bindings[1:], func (b) do
                         quasiquote unquote(b[1]) := unquote(b[2]) end
@@ -82,7 +82,7 @@ class TestProblems(TestToig):
 
     def test_let3(self):
         self.go("""
-            _let3 := macro(*bindings, body) do
+            defmacro _let3 (*bindings, body) do
                 defines := func (bindings) do
                     map(bindings, func (b) do
                         quasiquote unquote(b[1]) := unquote(b[2]) end
@@ -108,7 +108,7 @@ class TestProblems(TestToig):
 
     def test_let4(self):
         self.go("""
-            _let4 := macro(*bindings, body) do
+            defmacro _let4 (*bindings, body) do
                 i := 0; defines := array();
                 while i < len(bindings) do
                     defines = defines + array(
@@ -136,7 +136,7 @@ class TestProblems(TestToig):
 
     def test_cond(self):
         self.go("""
-            cond := macro(*clauses) do
+            defmacro cond (*clauses) do
                 _cond := func (clauses) do
                     if clauses == [] then None else
                         clause := first(clauses);
@@ -167,7 +167,7 @@ class TestProblems(TestToig):
 
     def test_cond2(self):
         self.go("""
-            _cond := macro(*clauses) do
+            defmacro _cond (*clauses) do
                 __cond := func (clauses) do
                     if clauses == [] then None else
                         cnd := first(clauses); clauses := rest(clauses);
@@ -202,7 +202,7 @@ class TestProblems(TestToig):
 
     def test_my_if(self):
         self.go("""
-            _my_if := macro(cnd, thn, *rest) do
+            defmacro _my_if (cnd, thn, *rest) do
                 if len(rest) == 0 then
                     quasiquote if unquote(cnd) then unquote(thn) else None end end
                 elif len(rest) == 1 then
@@ -256,7 +256,7 @@ class TestProblems(TestToig):
         self.assertEqual(self.go("early_return(2)"), 7)
 
         self.go("""
-            _runc := macro (params, body) do quasiquote
+            defmacro _runc (params, body) do quasiquote
                 func (unquote_splicing(rest(params))) do letcc return do unquote(body) end end
             end end;
 
@@ -309,7 +309,7 @@ class TestProblems(TestToig):
     def test_letcc_try(self):
         self.go("""
             raise := func (e) do error(quote(raised_outside_of_try), e) end;
-            _try := macro (try_expr, exc_var, exc_expr) do quasiquote scope
+            defmacro _try (try_expr, exc_var, exc_expr) do quasiquote scope
                 prev_raise := raise;
                 letcc escape do
                     raise = func (unquote(exc_var)) do escape(unquote(exc_expr)) end;
@@ -390,7 +390,7 @@ class TestProblems(TestToig):
 
     def test_replace_AST_element(self):
         self.go("""
-            force_minus := macro(expr) do
+            defmacro force_minus (expr) do
                 expr[0] = quote(sub); expr
             end
         """)

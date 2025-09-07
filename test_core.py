@@ -309,9 +309,33 @@ class TestCore(TestToig):
         self.assertEqual(self.go("macro (*a, b) do quasiquote [quote(unquote(a)), quote(unquote(b))] end end (5, 6, 7)"), [[5, 6], 7])
         self.assertEqual(self.go("macro (a, *b, c) do quasiquote [quote(unquote(a)), quote(unquote(b)), quote(unquote(c))] end end (5, 6, 7)"), [5, [6], 7])
 
+    def test_defmacro(self):
+        self.go("defmacro foo () do quote(abc) end")
+        self.assertEqual(self.expanded("foo()"), "abc")
+
+        self.go("""
+            defmacro sq (a) do quasiquote unquote(a) * unquote(a) end end
+        """)
+        self.assertEqual(
+            self.expanded("sq(5 + 6)"),
+            ["mul", ["add", 5, 6], ["add", 5, 6]])
+
+        self.go("defmacro build_exp (op, *r) do quasiquote unquote(op)(unquote_splicing(r)) end end")
+        self.assertEqual(self.expanded("build_exp(add)"), ["add"])
+        self.assertEqual(self.expanded("build_exp(add, 5)"), ["add", 5])
+        self.assertEqual(self.expanded("build_exp(add, 5, 6)"), ["add", 5, 6])
+
+        self.go("defmacro rest2 (*a, b) do quasiquote [quote(unquote(a)), quote(unquote(b))] end end")
+        self.assertEqual(self.go("rest2(5)"), [[], 5])
+        self.assertEqual(self.go("rest2(5, 6)"), [[5], 6])
+        self.assertEqual(self.go("rest2(5, 6, 7)"), [[5, 6], 7])
+
+        self.go("defmacro rest3 (a, *b, c) do quasiquote [quote(unquote(a)), quote(unquote(b)), quote(unquote(c))] end end")
+        self.assertEqual(self.go("rest3(5, 6, 7)"), [5, [6], 7])
+
     def test_custom(self):
         self.assertTrue(self.fails("""
-            foo := macro (a) do quasiquote print(unquote(a)) end end;
+            defmacro foo (a) do quasiquote print(unquote(a)) end end;
             #rule [foo, foo, 5, EXPR, end]
             foo 6 end
         """))

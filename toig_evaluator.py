@@ -37,6 +37,8 @@ class Evaluator:
                 assert is_name(name), f"Invalid name: `{name}`"
                 self._expr, self._cont = Expr(val_expr), \
                     ["$define", name, self._cont]
+            case ["defmacro", name, params, body]:
+                self._expr = Expr(["define", name, ["macro", params, body]])
             case ["assign", left, val_expr]:
                 self._eval_assign(left, val_expr)
             case ["scope", expr]:

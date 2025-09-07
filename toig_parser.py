@@ -133,11 +133,23 @@ class Parser:
         return self._sequence()
 
     def _sequence(self):
-        exprs = [self._define_assign()]
+        exprs = [self._defmacro()]
         while self._current_token == ";":
             self._advance()
-            exprs.append(self._define_assign())
+            exprs.append(self._defmacro())
         return exprs[0] if len(exprs) == 1 else ["seq"] + exprs
+
+    def _defmacro(self):
+        if self._current_token != "defmacro":
+            return self._define_assign()
+        self._advance()
+        name = self._advance()
+        self._consume("(")
+        params = self._comma_separated_exprs(")")
+        self._consume("do")
+        body = self._expression()
+        self._consume("end")
+        return ["defmacro", name, params, body]
 
     def _define_assign(self):
         return self._binary_right({
