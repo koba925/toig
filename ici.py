@@ -1,4 +1,4 @@
-from ici_environment import Environment
+from toig_environment import Environment
 from ici_evaluator import Expander, Compiler, VM
 
 class Builtins:

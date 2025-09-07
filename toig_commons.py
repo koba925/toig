@@ -3,6 +3,10 @@ from dataclasses import dataclass
 
 ValueType = None | bool | int | Callable | list
 
+class VariableNotFoundError(AssertionError):
+    def __init__(self, name):
+        self._name = name
+
 class CustomRules(dict):
     pass
 

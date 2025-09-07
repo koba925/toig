@@ -1,4 +1,4 @@
-from ici_environment import Environment
+from toig_environment import Environment
 
 class Expander:
     def __init__(self, vm):

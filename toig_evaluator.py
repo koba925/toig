@@ -83,13 +83,13 @@ class Evaluator:
             case f if callable(f):
                 self._expr = op_val(args_val)
             case ["closure", params, body_expr, closure_env]:
-                closure_env = closure_env.extend(params, args_val)
+                closure_env = self.extend(closure_env, params, args_val)
                 if not isinstance(self._cont, list) or \
                         self._cont[0] != "$restore_env":
                     self._cont = ["$restore_env", self._env, self._cont]
                 self._expr, self._env = Expr(body_expr), closure_env
             case ["mclosure", params, body_expr, mclosure_env]:
-                mclosure_env = mclosure_env.extend(params, args_val)
+                mclosure_env = self.extend(mclosure_env, params, args_val)
                 self._expr, self._env, self._cont = Expr(body_expr), mclosure_env, \
                     ["$meval", self._env, self._cont]
             case ["cont", env, cont]:
@@ -211,7 +211,7 @@ class Evaluator:
     def _apply_expand(self, args_expr, call_env, next_cont):
         match self._expr:
             case ["mclosure", params, body_expr, mclosure_env]:
-                mclosure_env = mclosure_env.extend(params, args_expr)
+                mclosure_env = self.extend(mclosure_env, params, args_expr)
                 if not isinstance(self._cont, list) or \
                         self._cont[0] != "$restore_env":
                     self._cont = ["$restore_env", call_env, next_cont]
@@ -220,3 +220,27 @@ class Evaluator:
                 )
             case unexpected:
                 assert False, f"Cannot expand: {unexpected}"
+
+    def extend(self, env, params, args):
+        def _extend(params, args):
+            if params == [] and args == []: return {}
+            assert len(params) > 0, \
+                f"Argument count doesn't match: `{params}, {args}` @ extend"
+            match params[0]:
+                case str(param):
+                    assert len(args) > 0, \
+                        f"Argument count doesn't match: `{params}, {args}` @ extend"
+                    env.define(param, args[0])
+                    _extend(params[1:], args[1:])
+                case ["*", rest]:
+                    rest_len = len(args) - len(params) + 1
+                    assert rest_len >= 0, \
+                        f"Argument count doesn't match: `{params}, {args}` @ extend"
+                    env.define(rest, args[:rest_len])
+                    _extend(params[1:], args[rest_len:])
+                case unexpected:
+                    assert False, f"Unexpected param at extend: {unexpected}"
+
+        env = Environment(env)
+        _extend(params, args)
+        return env

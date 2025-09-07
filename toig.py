@@ -230,7 +230,7 @@ if __name__ == "__main__":
     i = Interpreter()
 
     src = """
-        5 + 6
+        a
     """
 
     print(i.parse(src))
