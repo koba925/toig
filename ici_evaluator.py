@@ -14,8 +14,6 @@ class Expander:
         match expr:
             case None | bool(_) |int(_):
                 return expr
-            case ["array", *elems]:
-                return ["array"] + [self._expr(elem) for elem in elems]
             case ["func", params, body]:
                 return ["func", params, self._expr(body)]
             case str(name):
@@ -94,8 +92,6 @@ class Compiler:
         match expr:
             case None | bool(_) |int(_):
                 self._code.append(["const", expr])
-            case ["array", *elems]:
-                self._array(elems)
             case ["func", params, body]:
                 self._func(params, body)
             case str(name):
@@ -118,10 +114,6 @@ class Compiler:
                 self._op(op, args, is_tail)
             case unexpected:
                 assert False, f"Unexpected expression: {unexpected}"
-
-    def _array(self, elems):
-        for elem in elems: self._expr(elem, False)
-        self._code.append(["array", len(elems)])
 
     def _func(self, params, body):
         skip_jump = self._current_addr()
@@ -204,9 +196,6 @@ class VM:
             match inst:
                 case ["const", val]:
                     self._stack.append(val)
-                case ["array", size]:
-                    arr = [self._stack.pop() for _ in range(size)]
-                    self._stack.append(list(reversed(arr)))
                 case ["func", addr, params]:
                     self._stack.append(["closure", [self._ncode, addr], params, self._env])
                 case ["cc", addr]:
