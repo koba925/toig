@@ -230,6 +230,11 @@ i.go_test(["add5", 8], 13)
 i.go_test(["array"], [])
 i.go_test(["array", 5], [5])
 i.go_test(["array", ["add", 5, 6], ["add", 7, 8]], [11, 15])
+i.go_test(["define", "a", ["array", 5, 6, 7]], [5, 6, 7])
+i.go_test(["assign", ["get_at","a", 1], 8], 8)
+i.go_test("a", [5, 8, 7])
+i.go_test(["assign", ["slice","a", 1, 3, None], ["array", 2, 3, 4]], [2, 3, 4])
+i.go_test("a", [5, 2, 3, 4])
 
 # quote test
 

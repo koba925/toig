@@ -1,3 +1,4 @@
+from toig_commons import is_name
 from toig_environment import Environment
 
 class Expander:
@@ -101,9 +102,8 @@ class Compiler:
             case ["define", name, val]:
                 self._expr(val, False)
                 self._code.append(["def", name])
-            case ["assign", name, val]:
-                self._expr(val, False)
-                self._code.append(["set", name])
+            case ["assign", left, right]:
+                self._assign(left, right)
             case ["seq", *exprs]:
                 self._seq(exprs, is_tail)
             case ["if", cnd, thn, els]:
@@ -123,6 +123,18 @@ class Compiler:
         self._code.append(["ret"])
         self._set_operand(skip_jump, self._current_addr())
         self._code.append(["func", func_addr, params])
+
+    def _assign(self, left, right):
+        match left:
+            case name if is_name(name):
+                self._expr(right, False)
+                self._code.append(["set", name])
+            case ["get_at", arr, idx]:
+                self._op("set_at", [arr, idx, right], False)
+            case ["slice", arr, start, end, step]:
+                self._op("set_slice", [arr, start, end, step, right], False)
+            case _:
+                assert False, f"Invalid assign target: {left}"
 
     def _seq(self, exprs, is_tail):
         if len(exprs) == 0: return
