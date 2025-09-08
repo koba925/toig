@@ -1,4 +1,6 @@
-from toig_commons import VariableNotFoundError
+class VariableNotFoundError(AssertionError):
+    def __init__(self, name):
+        self._name = name
 
 class Environment:
     def __init__(self, parent=None):

@@ -1,4 +1,4 @@
-from toig_commons import CustomRules, Expr, is_name, is_name_first, is_name_rest
+from toig_commons import CustomRules, is_name, is_name_first, is_name_rest
 
 class Scanner():
     def __init__(self, src, custom_rules):
@@ -65,7 +65,7 @@ class Scanner():
             self._advance()
         line = "".join(line)
         if line.startswith("rule "):
-            rule = Parser(line[5:], CustomRules()).parse().elems
+            rule = Parser(line[5:], CustomRules()).parse()
             assert isinstance(rule, list) and len(rule) >= 2, \
                 f"Invalid rule: {rule} @ comment"
             self._custom_rules[rule[1]] = rule[2:]
@@ -82,7 +82,7 @@ class Parser:
         expr = self._expression()
         assert self._current_token == "$EOF", \
             f"Unexpected token at end: `{self._current_token}` @ parse"
-        return Expr(expr)
+        return expr
 
     # Helpers
 

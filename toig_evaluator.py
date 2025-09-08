@@ -1,9 +1,15 @@
-from toig_commons import ValueType, Expr, is_name
+from toig_commons import ValueType, is_name
 from toig_environment import Environment
+
+from dataclasses import dataclass
+
+@dataclass
+class Expr:
+    elems: ValueType
 
 class Evaluator:
     def __init__(self, expr, env, cont):
-        self._expr: Expr | ValueType = expr
+        self._expr: Expr | ValueType = Expr(expr)
         self._env = env
         self._cont = cont
 

@@ -1,8 +1,6 @@
-import unittest
-from test_toig import TestToig
+from test_commons import Testable
 
-class TestStdlib(TestToig):
-
+class TestStdlibBase(Testable):
     def test_id(self):
         self.assertEqual(self.go("id(5 + 6)"), 11)
 
@@ -226,7 +224,3 @@ class TestStdlib(TestToig):
                 print(n)
             end
         """), (None, "5\n6\n7\n9\n"))
-
-
-if __name__ == "__main__":
-    unittest.main()

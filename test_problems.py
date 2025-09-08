@@ -1,7 +1,6 @@
-import unittest
-from test_toig import TestToig
+from test_commons import Testable
 
-class TestProblems(TestToig):
+class TestProblemsBase(Testable):
     def test_factorial(self):
         self.go("""
             factorial := func (n) do
@@ -395,6 +394,3 @@ class TestProblems(TestToig):
             end
         """)
         self.assertEqual(self.go("force_minus(5 + 6)"), -1)
-
-if __name__ == "__main__":
-    unittest.main()

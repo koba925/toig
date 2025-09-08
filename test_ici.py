@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 from io import StringIO
 
-from toig import Interpreter
+from ici import Interpreter
 from test_core import TestCoreBase
 from test_stdlib import TestStdlibBase
 from test_problems import TestProblemsBase
@@ -20,7 +20,7 @@ class TestBase(unittest.TestCase):
         else: return False
 
     def expanded(self, src):
-        return self.i.go(f"expand({src})")
+        return self.i.expand(self.i.parse(src))
 
     def printed(self, src):
         with patch("sys.stdout", new_callable=StringIO) as mock_stdout:

@@ -1,7 +1,6 @@
-import unittest
-from test_toig import TestToig
+from test_commons import Testable
 
-class TestCore(TestToig):
+class TestCoreBase(Testable):
     def test_comment(self):
         self.assertEqual(self.go("5 # 6"), 5)
         self.assertEqual(self.go("""
@@ -371,6 +370,3 @@ class TestCore(TestToig):
         self.assertEqual(self.go("5 + letcc cc do add5 = cc; 6 end"), 11)
         self.assertEqual(self.go("add5(7)"), 12)
         self.assertEqual(self.go("add5(8)"), 13)
-
-if __name__ == "__main__":
-    unittest.main()
