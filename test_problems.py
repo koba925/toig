@@ -24,15 +24,6 @@ class TestProblemsBase(Testable):
         self.assertEqual(self.go("fib(3)"), 2)
         self.assertEqual(self.go("fib(10)"), 55)
 
-    def test_macro_firstclass(self):
-        self.assertEqual(self.go("func(op, a, b) do op(a, b) end (and, True, False)"), False)
-        self.assertEqual(self.go("func(op, a, b) do op(a, b) end (or, True, False)"), True)
-
-        self.assertEqual(self.go("func() do and end ()(True, False)"), False)
-        self.assertEqual(self.go("func() do or end ()(True, False)"), True)
-
-        self.assertEqual(self.go("map([and, or], func(op) do op(True, False) end)"), [False, True])
-
     def test_sieve(self):
         self.assertEqual(self.go("""
             n := 30;

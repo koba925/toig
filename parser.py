@@ -1,4 +1,4 @@
-from toig_commons import CustomRules, is_name, is_name_first, is_name_rest
+from commons import CustomRules, is_name, is_name_first, is_name_rest
 
 class Scanner():
     def __init__(self, src, custom_rules):
@@ -265,14 +265,14 @@ class Parser:
         thn = self._expression()
         if self._current_token == "elif":
             self._advance()
-            return ["if", cnd, ["scope", thn], self._if()]
+            return ["if", cnd, thn, self._if()]
         if self._current_token == "else":
             self._advance()
             els = self._expression()
             self._consume("end")
-            return ["if", cnd, ["scope", thn], ["scope", els]]
+            return ["if", cnd, thn, els]
         self._consume("end")
-        return ["if", cnd, ["scope", thn], None]
+        return ["if", cnd, thn, None]
 
     def _letcc(self):
         name = self._advance()

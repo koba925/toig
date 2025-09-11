@@ -1,6 +1,6 @@
-from toig_parser import CustomRules, Parser
+from parser import CustomRules, Parser
 from stdlib import StdLib
-from toig_evaluator import Environment, Evaluator
+from stm_evaluator import Environment, Evaluator
 
 # Builtin Functions
 
@@ -38,7 +38,7 @@ _builtins = {
     "not": lambda args: not args[0],
 
     "array": lambda args: args,
-    "is_arr": lambda args: isinstance(args[0], list),
+    "is_array": lambda args: isinstance(args[0], list),
     "len": lambda args: len(args[0]),
     "get_at": lambda args: args[0][args[1]],
     "set_at": _set_at,

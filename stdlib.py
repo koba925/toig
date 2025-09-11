@@ -8,8 +8,15 @@ class StdLib:
     def load(self):
         self._go("__stdlib__ := None")
 
-        self._go("None #rule [scope, scope, EXPR, end]")
         self._go("None #rule [quasiquote, quasiquote, EXPR, end]")
+
+        self._go("""
+            defmacro scope (body) do quasiquote
+                func () do unquote(body) end ()
+            end end
+
+            #rule [scope, scope, EXPR, end]
+        """)
 
         self._go("id := func (x) do x end")
 
@@ -61,7 +68,7 @@ class StdLib:
             end
 
             #rule [aif, _aif, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], ?[else, EXPR], end]
-            """)
+        """)
 
         self._go("defmacro and (a, b) do quasiquote aif unquote(a) then unquote(b) else it end end end")
         self._go("defmacro or (a, b) do quasiquote aif unquote(a) then it else unquote(b) end end end")

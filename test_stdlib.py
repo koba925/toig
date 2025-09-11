@@ -184,8 +184,8 @@ class TestStdlibBase(Testable):
         self.go("""
             walk := gfunc (tree) do
                 _walk := func (t) do
-                    if is_arr(first(t)) then _walk(first(t)) else yield(first(t)) end;
-                    if is_arr(last(t)) then _walk(last(t)) else yield(last(t)) end
+                    if is_array(first(t)) then _walk(first(t)) else yield(first(t)) end;
+                    if is_array(last(t)) then _walk(last(t)) else yield(last(t)) end
                 end;
                 _walk(tree)
             end;

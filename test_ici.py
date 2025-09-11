@@ -3,9 +3,6 @@ from unittest.mock import patch
 from io import StringIO
 
 from ici import Interpreter
-from test_core import TestCoreBase
-from test_stdlib import TestStdlibBase
-from test_problems import TestProblemsBase
 
 class TestBase(unittest.TestCase):
     def setUp(self):
@@ -27,13 +24,20 @@ class TestBase(unittest.TestCase):
             val = self.i.go(src)
             return (val, mock_stdout.getvalue())
 
+from test_core import TestCoreBase
 class TestCore(TestBase, TestCoreBase):
     pass
 
+from test_stdlib import TestStdlibBase
 class TestStdlib(TestBase, TestStdlibBase):
     pass
 
+from test_problems import TestProblemsBase
 class TestProblems(TestBase, TestProblemsBase):
+    pass
+
+from test_tail_call_optimization import TestTailCallOptimizationBase
+class TestTailCallOptimization(TestBase, TestTailCallOptimizationBase):
     pass
 
 if __name__ == "__main__":

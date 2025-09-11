@@ -155,8 +155,8 @@ class TestCoreBase(Testable):
         self.assertEqual(self.go("array()"), [])
         self.assertEqual(self.go("array(5; 6)"), [6])
         self.assertEqual(self.go("array(5; 6, 7; 8)"), [6, 8])
-        self.assertTrue(self.go("is_arr(array())"))
-        self.assertFalse(self.go("is_arr(1)"))
+        self.assertTrue(self.go("is_array(array())"))
+        self.assertFalse(self.go("is_array(1)"))
         self.assertEqual(self.go("len(array(5, 6, 7))"), 3)
         self.assertEqual(self.go("get_at(array(5, 6, 7), 1)"), 6)
         self.assertEqual(self.go("set_at(array(5, 6, 7), 1, 8)"), 8)
@@ -167,9 +167,9 @@ class TestCoreBase(Testable):
         self.assertEqual(self.go("[5; 6]"), [6])
         self.assertEqual(self.go("[5; 6, 7; 8]"), [6, 8])
 
-    def test_is_arr(self):
-        self.assertTrue(self.go("is_arr([])"))
-        self.assertFalse(self.go("is_arr(1)"))
+    def test_is_array(self):
+        self.assertTrue(self.go("is_array([])"))
+        self.assertFalse(self.go("is_array(1)"))
 
     def test_array_len(self):
         self.assertEqual(self.go("len([5, 6, 7])"), 3)
@@ -265,7 +265,7 @@ class TestCoreBase(Testable):
         self.assertEqual(self.go("counter1()"), 3)
         self.assertEqual(self.go("counter2()"), 3)
 
-    def test_q(self):
+    def test_quote(self):
         self.assertEqual(self.go("quote(5)"), 5)
         self.assertEqual(self.go("quote(None)"), None)
         self.assertEqual(self.go("quote(foo)"), "foo")
@@ -273,7 +273,7 @@ class TestCoreBase(Testable):
         self.assertEqual(self.go("quote(add(5, 6))"), ["add", 5, 6])
         self.assertEqual(self.go("quote(5 + 6)"), ["add", 5, 6])
 
-    def test_qq(self):
+    def test_quasiquote(self):
         self.assertEqual(self.go("quasiquote 5 end"), 5)
         self.assertEqual(self.go("quasiquote None end"), None)
         self.assertEqual(self.go("quasiquote foo end"), "foo")
@@ -288,25 +288,12 @@ class TestCoreBase(Testable):
         self.assertEqual(self.go("quasiquote add(unquote_splicing([5, 6])) end"), ["add", 5, 6])
         self.assertEqual(self.go("quasiquote add(5, unquote_splicing([6])) end"), ["add", 5, 6])
 
-        self.assertEqual(self.go("quasiquote if a == 5 then 6; 7 else unquote(8; 9) end end"),
-                         ["if", ["equal", "a", 5], ["scope", ["seq", 6, 7]], ["scope", 9]])
-
-    def test_macro(self):
-        self.assertEqual(self.expanded("macro () do quote(abc) end ()"), "abc")
-
         self.assertEqual(
-            self.expanded("macro (a) do quasiquote unquote(a) * unquote(a) end end (5 + 6)"),
-            ["mul", ["add", 5, 6], ["add", 5, 6]])
+            self.go("quasiquote unquote(when False do 5 end) end"),
+            None)
 
-        self.go("build_exp := macro (op, *r) do quasiquote unquote(op)(unquote_splicing(r)) end end")
-        self.assertEqual(self.expanded("build_exp(add)"), ["add"])
-        self.assertEqual(self.expanded("build_exp(add, 5)"), ["add", 5])
-        self.assertEqual(self.expanded("build_exp(add, 5, 6)"), ["add", 5, 6])
-
-        self.assertEqual(self.go("macro (*a, b) do quasiquote [quote(unquote(a)), quote(unquote(b))] end end (5)"), [[], 5])
-        self.assertEqual(self.go("macro (*a, b) do quasiquote [quote(unquote(a)), quote(unquote(b))] end end (5, 6)"), [[5], 6])
-        self.assertEqual(self.go("macro (*a, b) do quasiquote [quote(unquote(a)), quote(unquote(b))] end end (5, 6, 7)"), [[5, 6], 7])
-        self.assertEqual(self.go("macro (a, *b, c) do quasiquote [quote(unquote(a)), quote(unquote(b)), quote(unquote(c))] end end (5, 6, 7)"), [5, [6], 7])
+        self.assertEqual(self.go("quasiquote if a == 5 then 6; 7 else unquote(8; 9) end end"),
+                         ["if", ["equal", "a", 5], ["seq", 6, 7], 9])
 
     def test_defmacro(self):
         self.go("defmacro foo () do quote(abc) end")

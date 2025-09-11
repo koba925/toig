@@ -1,5 +1,5 @@
-from toig_commons import is_name
-from toig_environment import Environment
+from commons import is_name
+from environment import Environment
 
 class Expander:
     def __init__(self, vm):
@@ -36,11 +36,12 @@ class Expander:
             case ["letcc", name, body]:
                 return ["letcc", name, self._expr(body)]
             case [op, *args] :
+                expanded_args = [self._expr(arg) for arg in args]
                 if isinstance(op, str) and op in self._vm.menv():
                     macro = self._vm.menv().get(op)
-                    return self._expr(self._macro(macro, args))
+                    return self._expr(self._macro(macro, expanded_args))
                 else:
-                    return [op] + [self._expr(arg) for arg in args]
+                    return [op] + expanded_args
             case unexpected:
                 assert False, f"Unexpected expression: {unexpected}"
 
@@ -62,7 +63,7 @@ class Expander:
             return arr
 
         match expr:
-            case ["unquote", elem]: return elem
+            case ["unquote", elem]: return self._expr(elem)
             case [*elems]: return _quote_elements(elems)
             case elem: return ["quote", elem]
 
@@ -100,6 +101,7 @@ class Compiler:
             case ["quote", elem]:
                 self._code.append(["const", elem])
             case ["define", name, val]:
+                assert is_name(name), f"Invalid name: `{name}`"
                 self._expr(val, False)
                 self._code.append(["def", name])
             case ["assign", left, right]:
@@ -258,7 +260,7 @@ class VM:
                 self.extend(params, args)
                 self._ncode, self._ip = [ncodes, addr]
             case ["cont", [ncodes, addr], env, stack, call_stack]:
-                val = self._stack.pop()
+                val = None if nargs == 0 else self._stack.pop()
                 self._ncode, self._ip = [ncodes, addr]
                 self._env = env
                 self._stack = stack[:]

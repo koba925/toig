@@ -1,5 +1,5 @@
-from toig_commons import ValueType, is_name
-from toig_environment import Environment
+from commons import ValueType, is_name
+from environment import Environment
 
 from dataclasses import dataclass
 
@@ -47,13 +47,6 @@ class Evaluator:
                 self._expr = Expr(["define", name, ["macro", params, body]])
             case ["assign", left, val_expr]:
                 self._eval_assign(left, val_expr)
-            case ["scope", expr]:
-                if not isinstance(self._cont, list) or \
-                        self._cont[0] != "$restore_env":
-                    self._cont = ["$restore_env", self._env, self._cont]
-                self._expr, self._env = (
-                    Expr(expr), Environment(self._env)
-                )
             case ["seq", *exprs]:
                 self._expr, self._cont = None, \
                     ["$seq", exprs, self._cont]
