@@ -319,6 +319,14 @@ class TestCoreBase(Testable):
         self.go("defmacro rest3 (a, *b, c) do quasiquote [quote(unquote(a)), quote(unquote(b)), quote(unquote(c))] end end")
         self.assertEqual(self.go("rest3(5, 6, 7)"), [5, [6], 7])
 
+    def test_step_execution(self):
+        self.go("""
+            myadd := func (a, b) do a + b end;
+            defmacro foo (a) do myadd([quote(array)], [a]) end;
+            foo(5)
+        """)
+
+
     def test_custom(self):
         self.assertTrue(self.fails("""
             defmacro foo (a) do quasiquote print(unquote(a)) end end;

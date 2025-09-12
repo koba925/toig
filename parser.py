@@ -84,6 +84,14 @@ class Parser:
             f"Unexpected token at end: `{self._current_token}` @ parse"
         return expr
 
+    def parse_step(self):
+        yield self._defmacro()
+        while self._current_token == ";":
+            self._advance()
+            yield self._defmacro()
+        assert self._current_token == "$EOF", \
+            f"Unexpected token at end: `{self._current_token}` @ parse"
+
     # Helpers
 
     def _advance(self):

@@ -89,10 +89,12 @@ class Interpreter:
         return self._vm.execute()
 
     def go(self, src):
-        expr = self.parse(src)
-        expanded = self.expand(expr)
-        code = self.compile(expanded)
-        return self.execute(code)
+        val = None
+        for expr in Parser(src, self._custom_rule).parse_step():
+            expanded = self.expand(expr)
+            code = self.compile(expanded)
+            val = self.execute(code)
+        return val
 
 if __name__ == "__main__":
 
@@ -119,12 +121,10 @@ if __name__ == "__main__":
         print(f"Expected Result: {expected}")
         assert expected == result
 
-    go_verbose("""
-        i := sum := 0;
-        while i < 10 do
-            if i == 5 then i = i + 1; continue() end;
-            sum = sum + i;
-            i = i + 1;
-            sum
-        end
+    i.go("""
+        myadd := func (a, b) do a + b end;
+        defmacro foo (a) do myadd([quote(array)], [a]) end;
+        foo(5)
     """)
+
+
