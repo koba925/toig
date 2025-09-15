@@ -1,10 +1,14 @@
-from typing import Protocol
+from ici import Interpreter as ICI
+from stm import Interpreter as STM
 
-class Testable(Protocol):
-    def go(self, src): ...
-    def fails(self, src): ...
-    def expanded(self, src): ...
-    def printed(self, src): ...
-    def assertEqual(self, first, second, msg=...): ...
-    def assertTrue(self, expr, msg=...): ...
-    def assertFalse(self, expr, msg=...): ...
+class BaseTest:
+    i: ICI | STM
+
+    def parsed(self, src):
+        return self.i.parse(src)
+
+    def expanded(self, src):
+        return self.i.expand(self.parsed(src))
+
+    def go(self, src):
+        return self.i.go(src)

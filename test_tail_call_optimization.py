@@ -1,24 +1,36 @@
-from test_commons import Testable
+import pytest
 
-class TestTailCallOptimizationBase(Testable):
+from test_commons import BaseTest
+from ici import Interpreter as ICI
+from stm import Interpreter as STM
+
+@pytest.mark.parametrize(
+    "set_interpreter",
+    [ICI, STM], ids=["ici", "stm"],
+    indirect=True)
+class TestTailCallOptimization(BaseTest):
+    @pytest.fixture(autouse=True)
+    def set_interpreter(self, request):
+        request.cls.i = request.param()
+
     def test_tco_if(self):
-        self.assertEqual(self.go("""
+        assert self.go("""
             loop_els := func (n) do if n == 0 then 0 else loop_els(n - 1) end end;
             loop_els(10000)
-        """), 0)
-        self.assertEqual(self.go("""
+        """) == 0
+        assert self.go("""
             loop_thn := func (n) do if n != 0 then loop_thn(n - 1) else 0 end end;
             loop_thn(10000)
-        """), 0)
+        """) == 0
 
     def test_tco_seq(self):
-        self.assertEqual(self.go("""
+        assert self.go("""
             loop_seq := func (n) do
                 1 + 1;
                 if n == 0 then 0 else loop_seq(n - 1) end
             end;
             loop_seq(10000)
-        """), 0)
+        """) == 0
         # self.assertTrue(self.fails("""
         #     loop_not_tail := func (n) do
         #         if n == 0 then 0 else loop_not_tail(n - 1) + 1 end
@@ -35,10 +47,10 @@ class TestTailCallOptimizationBase(Testable):
                 if n == 0 then False else even(n - 1) end
             end
         """)
-        self.assertEqual(self.go("even(10000)"), True)
-        self.assertEqual(self.go("odd(10000)"), False)
-        self.assertEqual(self.go("even(10001)"), False)
-        self.assertEqual(self.go("odd(10001)"), True)
+        assert self.go("even(10000)") == True
+        assert self.go("odd(10000)") == False
+        assert self.go("even(10001)") == False
+        assert self.go("odd(10001)") == True
 
     def test_tco_fib_tail(self):
         self.go("""
@@ -49,5 +61,5 @@ class TestTailCallOptimizationBase(Testable):
                 rec(0, 0, 1)
             end
         """)
-        self.assertEqual(self.go("fib_tail(10)"), 55)
+        assert self.go("fib_tail(10)") == 55
         self.go("fib_tail(10000)")

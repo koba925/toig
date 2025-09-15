@@ -1,14 +1,26 @@
-from test_commons import Testable
+import pytest
 
-class TestProblemsBase(Testable):
+from test_commons import BaseTest
+from ici import Interpreter as ICI
+from stm import Interpreter as STM
+
+@pytest.mark.parametrize(
+    "set_interpreter",
+    [ICI, STM], ids=["ici", "stm"],
+    indirect=True)
+class TestProblemsBase(BaseTest):
+    @pytest.fixture(autouse=True)
+    def set_interpreter(self, request):
+        request.cls.i = request.param()
+
     def test_factorial(self):
         self.go("""
             factorial := func (n) do
                 if n == 1 then 1 else n * factorial(n - 1) end
             end
         """)
-        self.assertEqual(self.go("factorial(1)"), 1)
-        self.assertEqual(self.go("factorial(10)"), 3628800)
+        assert self.go("factorial(1)") == 1
+        assert self.go("factorial(10)") == 3628800
 
     def test_fib(self):
         self.go("""
@@ -18,14 +30,14 @@ class TestProblemsBase(Testable):
                 else fib(n - 1) + fib(n - 2) end
             end
         """)
-        self.assertEqual(self.go("fib(0)"), 0)
-        self.assertEqual(self.go("fib(1)"), 1)
-        self.assertEqual(self.go("fib(2)"), 1)
-        self.assertEqual(self.go("fib(3)"), 2)
-        self.assertEqual(self.go("fib(10)"), 55)
+        assert self.go("fib(0)") == 0
+        assert self.go("fib(1)") == 1
+        assert self.go("fib(2)") == 1
+        assert self.go("fib(3)") == 2
+        assert self.go("fib(10)") == 55
 
     def test_sieve(self):
-        self.assertEqual(self.go("""
+        assert self.go("""
             n := 30;
             sieve := [False] * 2 + [True] * (n - 2);
             j := None;
@@ -44,7 +56,7 @@ class TestProblemsBase(Testable):
                      primes = append(primes, i)
                 end
             end
-        """), [2, 3, 5, 7, 11, 13, 17, 19, 23, 29])
+        """), [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
 
     def test_let(self):
         self.go("""
@@ -60,15 +72,15 @@ class TestProblemsBase(Testable):
             end
         """)
 
-        self.assertEqual(self.go("""
+        assert self.go("""
             #rule [let, _let, EXPR, do, EXPR, end]
             let [[a, 5], [b, 6]] do a + b end
-        """), 11)
+        """) == 11
 
-        self.assertEqual(self.go("""
+        assert self.go("""
             #rule [let2, _let, vars, EXPR, do, EXPR, end]
             let2 vars [[a, 5], [b, 6]] do a + b end
-        """), 11)
+        """) == 11
 
     def test_let3(self):
         self.go("""
@@ -86,15 +98,15 @@ class TestProblemsBase(Testable):
             #rule [let3, _let3, *[var, EXPR], do, EXPR, end]
         """)
 
-        self.assertEqual(self.go("let3 do 5 end"), 5)
-        self.assertEqual(self.go("""
+        assert self.go("let3 do 5 end") == 5
+        assert self.go("""
             let3
                 var [a, 5]
                 var [b, 6]
             do
                 a + b
             end
-        """), 11)
+        """) == 11
 
     def test_let4(self):
         self.go("""
@@ -114,15 +126,15 @@ class TestProblemsBase(Testable):
             #rule [let4, _let4, *[var, NAME, is, EXPR], do, EXPR, end]
         """)
 
-        self.assertEqual(self.go("let4 do 5 end"), 5)
-        self.assertEqual(self.go("""
+        assert self.go("let4 do 5 end") == 5
+        assert self.go("""
             let4
                 var a is 5
                 var b is 6
             do
                 a + b
             end
-        """), 11)
+        """) == 11
 
     def test_cond(self):
         self.go("""
@@ -148,12 +160,11 @@ class TestProblemsBase(Testable):
                     [True, fib(n - 1) + fib(n - 2)])
             end
         """)
-        self.assertEqual(self.go("fib(0)"), 0)
-        self.assertEqual(self.go("fib(1)"), 1)
-        self.assertEqual(self.go("fib(2)"), 1)
-        self.assertEqual(self.go("fib(3)"), 2)
-        self.assertEqual(self.go("fib(10)"), 55)
-
+        assert self.go("fib(0)") == 0
+        assert self.go("fib(1)") == 1
+        assert self.go("fib(2)") == 1
+        assert self.go("fib(3)") == 2
+        assert self.go("fib(10)") == 55
 
     def test_cond2(self):
         self.go("""
@@ -184,11 +195,11 @@ class TestProblemsBase(Testable):
                 end
             end
         """)
-        self.assertEqual(self.go("fib(0)"), 0)
-        self.assertEqual(self.go("fib(1)"), 1)
-        self.assertEqual(self.go("fib(2)"), 1)
-        self.assertEqual(self.go("fib(3)"), 2)
-        self.assertEqual(self.go("fib(10)"), 55)
+        assert self.go("fib(0)") == 0
+        assert self.go("fib(1)") == 1
+        assert self.go("fib(2)") == 1
+        assert self.go("fib(3)") == 2
+        assert self.go("fib(10)") == 55
 
     def test_my_if(self):
         self.go("""
@@ -205,35 +216,35 @@ class TestProblemsBase(Testable):
             #rule [my_if, _my_if, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], ?[else, EXPR], end]
         """)
 
-        self.assertEqual(self.go("_my_if(True, 5)"), 5)
-        self.assertEqual(self.go("_my_if(False, 5)"), None)
-        self.assertEqual(self.go("my_if True then 5 end"), 5)
-        self.assertEqual(self.go("my_if False then 5 end"), None)
+        assert self.go("_my_if(True, 5)") == 5
+        assert self.go("_my_if(False, 5)") == None
+        assert self.go("my_if True then 5 end") == 5
+        assert self.go("my_if False then 5 end") == None
 
-        self.assertEqual(self.go("_my_if(True, 5, 6)"), 5)
-        self.assertEqual(self.go("_my_if(False, 5, 6)"), 6)
-        self.assertEqual(self.go("my_if True then 5 else 6 end"), 5)
-        self.assertEqual(self.go("my_if False then 5 else 6 end"), 6)
+        assert self.go("_my_if(True, 5, 6)") == 5
+        assert self.go("_my_if(False, 5, 6)") == 6
+        assert self.go("my_if True then 5 else 6 end") == 5
+        assert self.go("my_if False then 5 else 6 end") == 6
 
-        self.assertEqual(self.go("_my_if(False, 5, True, 6)"), 6)
-        self.assertEqual(self.go("_my_if(False, 5, False, 6)"), None)
-        self.assertEqual(self.go("my_if False then 5 elif True then 6 end"), 6)
-        self.assertEqual(self.go("my_if False then 5 elif False then 6 end"), None)
+        assert self.go("_my_if(False, 5, True, 6)") == 6
+        assert self.go("_my_if(False, 5, False, 6)") == None
+        assert self.go("my_if False then 5 elif True then 6 end") == 6
+        assert self.go("my_if False then 5 elif False then 6 end") == None
 
-        self.assertEqual(self.go("_my_if(False, 5, True, 6, 7)"), 6)
-        self.assertEqual(self.go("_my_if(False, 5, False, 6, 7)"), 7)
-        self.assertEqual(self.go("my_if False then 5 elif True then 6 else 7 end"), 6)
-        self.assertEqual(self.go("my_if False then 5 elif False then 6 else 7 end"), 7)
+        assert self.go("_my_if(False, 5, True, 6, 7)") == 6
+        assert self.go("_my_if(False, 5, False, 6, 7)") == 7
+        assert self.go("my_if False then 5 elif True then 6 else 7 end") == 6
+        assert self.go("my_if False then 5 elif False then 6 else 7 end") == 7
 
-        self.assertEqual(self.go("_my_if(False, 5, False, 6, True, 7)"), 7)
-        self.assertEqual(self.go("_my_if(False, 5, False, 6, False, 7)"), None)
-        self.assertEqual(self.go("my_if False then 5 elif False then 6 elif True then 7 end"), 7)
-        self.assertEqual(self.go("my_if False then 5 elif False then 6 elif False then 7 end"), None)
+        assert self.go("_my_if(False, 5, False, 6, True, 7)") == 7
+        assert self.go("_my_if(False, 5, False, 6, False, 7)") == None
+        assert self.go("my_if False then 5 elif False then 6 elif True then 7 end") == 7
+        assert self.go("my_if False then 5 elif False then 6 elif False then 7 end") == None
 
-        self.assertEqual(self.go("_my_if(False, 5, False, 6, True, 7, 8)"), 7)
-        self.assertEqual(self.go("_my_if(False, 5, False, 6, False, 7, 8)"), 8)
-        self.assertEqual(self.go("my_if False then 5 elif False then 6 elif True then 7 else 8 end"), 7)
-        self.assertEqual(self.go("my_if False then 5 elif False then 6 elif False then 7 else 8 end"), 8)
+        assert self.go("_my_if(False, 5, False, 6, True, 7, 8)") == 7
+        assert self.go("_my_if(False, 5, False, 6, False, 7, 8)") == 8
+        assert self.go("my_if False then 5 elif False then 6 elif True then 7 else 8 end") == 7
+        assert self.go("my_if False then 5 elif False then 6 elif False then 7 else 8 end") == 8
 
     def test_letcc_return(self):
         self.go("""
@@ -242,8 +253,8 @@ class TestProblemsBase(Testable):
             7
         end end
         """)
-        self.assertEqual(self.go("early_return(1)"), 5)
-        self.assertEqual(self.go("early_return(2)"), 7)
+        assert self.go("early_return(1)") == 5
+        assert self.go("early_return(2)") == 7
 
         self.go("""
             defmacro _runc (params, body) do quasiquote
@@ -255,10 +266,10 @@ class TestProblemsBase(Testable):
             early_return_runc := runc (n) do if n == 1 then return(5) else 6 end; 7 end;
             early_return_runc2 := runc (n) do if early_return_runc(n) == 5 then return(6) else 7 end; 8 end
         """)
-        self.assertEqual(self.go("early_return_runc(1)"), 5)
-        self.assertEqual(self.go("early_return_runc(2)"), 7)
-        self.assertEqual(self.go("early_return_runc2(1)"), 6)
-        self.assertEqual(self.go("early_return_runc2(2)"), 8)
+        assert self.go("early_return_runc(1)") == 5
+        assert self.go("early_return_runc(2)") == 7
+        assert self.go("early_return_runc2(1)") == 6
+        assert self.go("early_return_runc2(2)") == 8
 
     def test_letcc_escape(self):
         self.go("""
@@ -272,10 +283,10 @@ class TestProblemsBase(Testable):
                 letcc escape do middlefunc(n, escape) end
             end
         """)
-        self.assertEqual(self.go("parentfunc(1)"), 5)
-        self.assertEqual(self.go("parentfunc(2)"), 8)
+        assert self.go("parentfunc(1)") == 5
+        assert self.go("parentfunc(2)") == 8
 
-    def test_letcc_except(self):
+    def test_letcc_except(self, capsys):
         self.go("""
             raise := None;
             riskyfunc := func (n) do
@@ -293,10 +304,12 @@ class TestProblemsBase(Testable):
                 print(9)
             end
         """)
-        self.assertEqual(self.printed("parentfunc(1) "), (None, "5\n9\n"))
-        self.assertEqual(self.printed("parentfunc(2) "), (None, "6\n7\n8\n9\n"))
+        self.go("parentfunc(1)")
+        assert capsys.readouterr().out == "5\n9\n"
+        self.go("parentfunc(2)")
+        assert capsys.readouterr().out == "6\n7\n8\n9\n"
 
-    def test_letcc_try(self):
+    def test_letcc_try(self, capsys):
         self.go("""
             raise := func (e) do error(quote(raised_outside_of_try), e) end;
             defmacro _try (try_expr, exc_var, exc_expr) do quasiquote scope
@@ -325,8 +338,10 @@ class TestProblemsBase(Testable):
                 print(9)
             end
         """)
-        self.assertEqual(self.printed("parentfunc(1) "), (None, "5\n9\n"))
-        self.assertEqual(self.printed("parentfunc(2) "), (None, "6\n7\n8\n9\n"))
+        self.go("parentfunc(1)")
+        assert capsys.readouterr().out == "5\n9\n"
+        self.go("parentfunc(2)")
+        assert capsys.readouterr().out == "6\n7\n8\n9\n"
 
         self.go("""
             nested := func (n) do
@@ -347,14 +362,19 @@ class TestProblemsBase(Testable):
                 print(11)
             end
         """)
-        self.assertEqual(self.printed("nested(1)"),  (None, "exception_outer_try 5\n11\n"))
-        self.assertEqual(self.printed("nested(2)"),  (None, "6\nexception_inner_try 7\n10\n11\n"))
-        self.assertEqual(self.printed("nested(3)"),  (None, "6\n8\nexception_outer_try 9\n11\n"))
-        self.assertEqual(self.printed("nested(4)"),  (None, "6\n8\n10\n11\n"))
+        self.go("nested(1)")
+        assert capsys.readouterr().out == "exception_outer_try 5\n11\n"
+        self.go("nested(2)")
+        assert capsys.readouterr().out == "6\nexception_inner_try 7\n10\n11\n"
+        self.go("nested(3)")
+        assert capsys.readouterr().out == "6\n8\nexception_outer_try 9\n11\n"
+        self.go("nested(4)")
+        assert capsys.readouterr().out == "6\n8\n10\n11\n"
 
-        self.assertTrue(self.fails("raise(5)"))
+        with pytest.raises(AssertionError):
+            self.go("raise(5)")
 
-    def test_letcc_concurrent(self):
+    def test_letcc_concurrent(self, capsys):
         self.go("""
             tasks := [];
             add_task := func (t) do tasks = append(tasks, t) end;
@@ -376,7 +396,8 @@ class TestProblemsBase(Testable):
             add_task(three_times(6));
             add_task(three_times(7))
         """)
-        self.assertEqual(self.printed("start()"), (None, "5\n6\n7\n5\n6\n7\n5\n6\n7\n"))
+        self.go("start()")
+        assert capsys.readouterr().out == "5\n6\n7\n5\n6\n7\n5\n6\n7\n"
 
     def test_replace_AST_element(self):
         self.go("""
@@ -384,4 +405,4 @@ class TestProblemsBase(Testable):
                 expr[0] = quote(sub); expr
             end
         """)
-        self.assertEqual(self.go("force_minus(5 + 6)"), -1)
+        assert self.go("force_minus(5 + 6)") == -1

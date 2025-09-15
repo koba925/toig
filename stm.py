@@ -69,6 +69,9 @@ class Interpreter:
     def parse(self, src):
         return Parser(src, self._custom_rule).parse()
 
+    def expand(self, expr):
+        return Evaluator(["expand", expr], self._env, ["$halt"]).eval()
+
     def go(self, src):
         return Evaluator(self.parse(src), self._env, ["$halt"]).eval()
 
