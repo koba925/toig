@@ -1,12 +1,12 @@
 from typing import Callable
 
-ValueType = None | bool | int | Callable | list
-
 class CustomRules(dict):
     pass
 
 class ToigStr(str):
     pass
+
+ValueType = None | bool | int | ToigStr | Callable | list
 
 def is_name_first(c): return c.isalpha() or c == "_"
 def is_name_rest(c): return c.isalnum() or c == "_"

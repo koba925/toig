@@ -79,7 +79,7 @@ if __name__ == "__main__":
     i = Interpreter()
 
     src = """
-        5 + 6
+        'hello'
     """
 
     print(i.parse(src))

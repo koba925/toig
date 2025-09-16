@@ -1,4 +1,4 @@
-from commons import ValueType, is_name
+from commons import ToigStr, ValueType, is_name
 from environment import Environment
 
 from dataclasses import dataclass
@@ -25,8 +25,10 @@ class Evaluator:
     def _eval_expr(self):
         assert isinstance(self._expr, Expr)
         match self._expr.elems:
-            case bool(_) | int(_) | None:
-                self._expr = self._expr.elems
+            case None:
+                self._expr = None
+            case bool(val) | int(val) | ToigStr(val):
+                self._expr = val
             case f if callable(f):
                 self._expr = f
             case ["func", params, body]:
