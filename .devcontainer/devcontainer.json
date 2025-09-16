@@ -11,6 +11,7 @@
 				"ms-python.black-formatter",
 				"ms-python.debugpy",
 				"donjayamanne.githistory",
+				"tshino.kb-macro"
 				// "google.geminicodeassist"
 			]
 		}
