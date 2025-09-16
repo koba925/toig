@@ -9,10 +9,6 @@ from stm import Interpreter as STM
     [STM], ids=["stm"],
     indirect=True)
 class TestFirstClassMacroBase(BaseTest):
-    @pytest.fixture(autouse=True)
-    def set_interpreter(self, request):
-        request.cls.i = request.param()
-
     def test_macro(self):
         assert self.expanded("macro () do quote(abc) end ()") == "abc"
 

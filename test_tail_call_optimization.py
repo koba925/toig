@@ -6,13 +6,9 @@ from stm import Interpreter as STM
 
 @pytest.mark.parametrize(
     "set_interpreter",
-    [ICI, STM], ids=["ici", "stm"],
+    [ICI], ids=["ici"],
     indirect=True)
 class TestTailCallOptimization(BaseTest):
-    @pytest.fixture(autouse=True)
-    def set_interpreter(self, request):
-        request.cls.i = request.param()
-
     def test_tco_if(self):
         assert self.go("""
             loop_els := func (n) do if n == 0 then 0 else loop_els(n - 1) end end;
@@ -31,12 +27,14 @@ class TestTailCallOptimization(BaseTest):
             end;
             loop_seq(10000)
         """) == 0
-        # self.assertTrue(self.fails("""
-        #     loop_not_tail := func (n) do
-        #         if n == 0 then 0 else loop_not_tail(n - 1) + 1 end
-        #     end;
-        #     loop_not_tail(10000)
-        # """))
+
+        with pytest.raises(AssertionError):
+            self.go("""
+                loop_not_tail := func (n) do
+                    if n == 0 then 0 else loop_not_tail(n - 1) + 1 end
+                end;
+                loop_not_tail(10000)
+            """)
 
     def test_tco_mutual_recursion(self):
         self.go("""

@@ -121,10 +121,8 @@ if __name__ == "__main__":
         print(f"Expected Result: {expected}")
         assert expected == result
 
-    i.go("""
-        myadd := func (a, b) do a + b end;
-        defmacro foo (a) do myadd([quote(array)], [a]) end;
-        foo(5)
+    go_verbose("""
+        'hello, ' + 'world'
     """)
 
 

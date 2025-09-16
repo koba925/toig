@@ -9,10 +9,6 @@ from stm import Interpreter as STM
     [ICI, STM], ids=["ici", "stm"],
     indirect=True)
 class TestStdlib(BaseTest):
-    @pytest.fixture(autouse=True)
-    def set_interpreter(self, request):
-        request.cls.i = request.param()
-
     def test_id(self):
         assert self.go("id(5 + 6)") == 11
 

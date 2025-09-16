@@ -1,4 +1,4 @@
-from commons import is_name
+from commons import ToigStr, is_name
 from environment import Environment
 
 class Expander:
@@ -13,7 +13,7 @@ class Expander:
 
     def _expr(self, expr):
         match expr:
-            case None | bool(_) |int(_):
+            case None | bool(_) | int(_) | ToigStr(_):
                 return expr
             case ["func", params, body]:
                 return ["func", params, self._expr(body)]
@@ -92,8 +92,10 @@ class Compiler:
 
     def _expr(self, expr, is_tail):
         match expr:
-            case None | bool(_) |int(_):
-                self._code.append(["const", expr])
+            case None:
+                self._code.append(["const", None])
+            case bool(val) |int(val) | ToigStr(val):
+                self._code.append(["const", val])
             case ["func", params, body]:
                 self._func(params, body)
             case str(name):

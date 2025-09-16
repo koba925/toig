@@ -1,4 +1,4 @@
-from commons import CustomRules, is_name, is_name_first, is_name_rest
+from commons import CustomRules, ToigStr, is_name, is_name_first, is_name_rest
 
 class Scanner():
     def __init__(self, src, custom_rules):
@@ -20,6 +20,13 @@ class Scanner():
             case c if c.isnumeric():
                 self._word(str.isnumeric)
                 return int(self._token)
+            case c if c == "'":
+                self._advance()
+                while (c := self._current_char()) != "'":
+                    assert c != "$EOF", f"Unterminated string: {c}"
+                    self._append_char()
+                self._advance()
+                return ToigStr(self._token)
             case c if c in "!":
                 self._append_char()
                 if self._current_char() == "=" or self._current_char() == "!":

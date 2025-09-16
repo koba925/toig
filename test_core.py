@@ -6,13 +6,30 @@ from stm import Interpreter as STM
 
 @pytest.mark.parametrize(
     "set_interpreter",
+    [ICI], ids=["ici"],
+    indirect=True)
+class TestString(BaseTest):
+    def test_str(self, capsys):
+        assert self.go("'hello, world'") == "hello, world"
+
+        assert self.go("'hello, ' + 'world'") == "hello, world"
+        assert self.go("'hello' * 3") == "hellohellohello"
+
+        assert self.go("'hello' == 'hello'") == True
+        assert self.go("'Hello' > 'hello'") == False
+        assert self.go("'Hello' < 'hello'") == True
+
+        assert self.go("'hello'[1]") == "e"
+        assert self.go("'hello'[1:4:2]") == "el"
+
+        self.go("print('hello, world')")
+        assert capsys.readouterr().out == "hello, world\n"
+
+@pytest.mark.parametrize(
+    "set_interpreter",
     [ICI, STM], ids=["ici", "stm"],
     indirect=True)
 class TestCore(BaseTest):
-    @pytest.fixture(autouse=True)
-    def set_interpreter(self, request):
-        request.cls.i = request.param()
-
     def test_comment(self):
         assert self.go("5 # 6") == 5
         assert self.go("\n5 # 6\n") == 5
