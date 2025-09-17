@@ -252,6 +252,8 @@ class Parser:
 
     def _primary(self):
         match self._current_token:
+            case ToigStr(s):
+                return self._advance()
             case "(":
                 self._advance()
                 expr = self._expression()

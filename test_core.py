@@ -258,6 +258,23 @@ class TestCore(BaseTest):
         self.go("print('hello, world')")
         assert capsys.readouterr().out == "hello, world\n"
 
+    def test_type(self):
+        assert self.go("is_bool(None)") == False
+        assert self.go("is_int(None)") == False
+        assert self.go("is_str(None)") == False
+
+        assert self.go("is_bool(5)") == False
+        assert self.go("is_int(5)") == True
+        assert self.go("is_str(5)") == False
+
+        assert self.go("is_bool(True)") == True
+        assert self.go("is_int(True)") == False
+        assert self.go("is_str(True)") == False
+
+        assert self.go("is_bool('hello')") == False
+        assert self.go("is_int('hello')") == False
+        assert self.go("is_str('hello')") == True
+
     def test_func(self):
         assert self.go("func (a, b) do a + b end (5, 6)") == 11
         assert self.go("func (*args) do args end ()") == []

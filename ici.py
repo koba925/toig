@@ -1,3 +1,4 @@
+from commons import ToigStr
 from parser import CustomRules, Parser
 from stdlib import StdLib
 from environment import Environment
@@ -50,7 +51,10 @@ _builtins = {
     "slice": _slice,
     "set_slice": _set_slice,
 
-    "is_name": lambda _, s: s.append(isinstance(s.pop(), str)),
+    "is_bool": lambda _, s: s.append(type(s.pop()) is bool),
+    "is_int": lambda _, s: s.append(type(s.pop()) is int),
+    "is_str": lambda _, s: s.append(type(s.pop()) is ToigStr),
+    "is_name": lambda _, s: s.append(type(s.pop()) is str),
 
     "print": lambda n, s: s.append(print(*[s.pop() for _ in range(n)])),
     "error": _error

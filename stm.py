@@ -1,3 +1,4 @@
+from commons import ToigStr
 from parser import CustomRules, Parser
 from stdlib import StdLib
 from stm_evaluator import Environment, Evaluator
@@ -45,7 +46,10 @@ _builtins = {
     "slice": _slice,
     "set_slice": _set_slice,
 
-    "is_name": lambda args: isinstance(args[0], str),
+    "is_bool": lambda args: type(args[0]) is bool,
+    "is_int": lambda args: type(args[0]) is int,
+    "is_str": lambda args: type(args[0]) is ToigStr,
+    "is_name": lambda args: type(args[0]) is str,
 
     "print": lambda args: print(*args),
     "error": lambda args: _error(args)
