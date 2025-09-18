@@ -9,9 +9,10 @@ from stm import Interpreter as STM
     [ICI, STM], ids=["ici", "stm"],
     indirect=True)
 class TestEval(BaseTest):
-    def test_eval(self):
+    @pytest.fixture(autouse=True)
+    def setup_env(self):
         self.go("""
-            define := runc(env, name, val) do
+            define := runc (env, name, val) do
                 for p in env do
                     if p[0] == name then p[1] = val; return(val) end
                 end;
@@ -21,7 +22,7 @@ class TestEval(BaseTest):
         """)
 
         self.go("""
-            get := runc(env, name) do
+            get := runc (env, name) do
                 for p in env do
                     if p[0] == name then return(p[1]) end
                 end;
@@ -31,7 +32,7 @@ class TestEval(BaseTest):
 
         self.go("""
             _eval := func (expr, env) do
-                print('eval', expr);
+                # print('eval', expr);
                 if expr == None then
                     None
                 elif is_bool(expr) or is_int(expr) then
@@ -57,11 +58,13 @@ class TestEval(BaseTest):
             eval := func (expr) do _eval(expr, global_env) end
         """)
 
+    def test_primary(self):
         assert self.go("eval(None)") == None
         assert self.go("eval(True)") == True
         assert self.go("eval(False)") == False
         assert self.go("eval(5)") == 5
 
+    def test_if(self):
         assert self.go("eval(['if', True, 5, 6])") == 5
         assert self.go("eval(['if', False, 5, 6])") == 6
         assert self.go("eval(['if', ['if', True, True, True], 5, 6])") == 5
@@ -71,6 +74,7 @@ class TestEval(BaseTest):
         with pytest.raises(AssertionError):
             self.go("eval(['unexpected case'])")
 
+    def test_define(self):
         assert self.go("eval(['define', 'a', 5])") == 5
         assert self.go("eval('a')") == 5
         assert self.go("eval(['define', 'b', 6])") == 6
