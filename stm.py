@@ -45,6 +45,7 @@ _builtins = {
     "set_at": _set_at,
     "slice": _slice,
     "set_slice": _set_slice,
+    "append": lambda args: args[0].append(args[1]),
 
     "is_bool": lambda args: type(args[0]) is bool,
     "is_int": lambda args: type(args[0]) is int,

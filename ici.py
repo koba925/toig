@@ -23,6 +23,11 @@ def _set_slice(_, s):
     arr[start:end:step] = val
     s.append(val)
 
+def _append(_, s):
+    arr = s.pop(); val = s.pop()
+    arr.append(val)
+    s.append(None)
+
 def _error(n, s):
     assert False, f"{' '.join(map(str, [s.pop() for _ in range(n)]))}"
 
@@ -44,16 +49,17 @@ _builtins = {
     "not": lambda _, s: s.append(not s.pop()),
 
     "array": lambda n, s: s.append([s.pop() for _ in range(n)]),
-    "is_array": lambda _, s: s.append(isinstance(s.pop(), list)),
     "len": lambda _, s: s.append(len(s.pop())),
     "get_at": _get_at,
     "set_at": _set_at,
     "slice": _slice,
     "set_slice": _set_slice,
+    "append": _append,
 
     "is_bool": lambda _, s: s.append(type(s.pop()) is bool),
     "is_int": lambda _, s: s.append(type(s.pop()) is int),
     "is_str": lambda _, s: s.append(type(s.pop()) is ToigStr),
+    "is_array": lambda _, s: s.append(isinstance(s.pop(), list)),
     "is_name": lambda _, s: s.append(type(s.pop()) is str),
 
     "print": lambda n, s: s.append(print(*[s.pop() for _ in range(n)])),

@@ -22,14 +22,14 @@ class TestStdlib(BaseTest):
         assert self.go("rest(a)") == [6, 7]
         assert self.go("last(a)") == 7
 
-    def test_append_prepend(self):
+    def test_push_pop(self):
         self.go("a := [5, 6, 7]")
-        assert self.go("append(a, 8)") == [5, 6, 7, 8]
-        assert self.go("prepend(8, a)") == [8, 5, 6, 7]
+        assert self.go("push(a, 8)") == [5, 6, 7, 8]
+        assert self.go("pop(a)") == [5, 6]
 
     def test_foldl(self):
         assert self.go("foldl([5, 6, 7], add, 0)") == 18
-        assert self.go("foldl([5, 6, 7], append, [])") == [5, 6, 7]
+        assert self.go("foldl([5, 6, 7], push, [])") == [5, 6, 7]
 
     def test_unfoldl(self):
         assert self.go(
@@ -70,6 +70,13 @@ class TestStdlib(BaseTest):
 
         assert self.go("aif 0 then 5 elif 0 then 6 elif 7 then it + 1 end") == 8
         assert self.go("aif 0 then 5 elif 0 then 6 elif 0 then it + 1 end") is None
+
+    def test_zip(self):
+        assert self.go("zip([], [])") == []
+        assert self.go("zip([5], [15])") == [[5, 15]]
+        assert self.go("zip([5, 6], [15, 16])") == [[5, 15], [6, 16]]
+        assert self.go("zip([5, 6], [15])") == [[5, 15]]
+        assert self.go("zip([5], [15, 16])") == [[5, 15]]
 
     def test_while(self):
         assert self.go("""
@@ -183,6 +190,20 @@ class TestStdlib(BaseTest):
 
         with pytest.raises(AssertionError):
             self.go("for 3 + 7 in [1, 2, 3] do print(i) end")
+
+    def test_runc(self):
+        self.go("""
+            early_return_runc := runc (n) do
+                if n == 1 then return(5) else 6 end; 7
+            end;
+            early_return_runc2 := runc (n) do
+                if early_return_runc(n) == 5 then return(6) else 7 end; 8
+            end
+        """)
+        assert self.go("early_return_runc(1)") == 5
+        assert self.go("early_return_runc(2)") == 7
+        assert self.go("early_return_runc2(1)") == 6
+        assert self.go("early_return_runc2(2)") == 8
 
     def test_letcc_generator(self, capsys):
         self.go("""

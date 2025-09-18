@@ -49,7 +49,7 @@ class TestProblemsBase(BaseTest):
             primes := [];
             for i in range(0, n) do
                 when sieve[i] do
-                     primes = append(primes, i)
+                     primes = push(primes, i)
                 end
             end
         """), [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
@@ -252,21 +252,6 @@ class TestProblemsBase(BaseTest):
         assert self.go("early_return(1)") == 5
         assert self.go("early_return(2)") == 7
 
-        self.go("""
-            defmacro _runc (params, body) do quasiquote
-                func (unquote_splicing(rest(params))) do letcc return do unquote(body) end end
-            end end;
-
-            #rule [runc, _runc, PARAMS, do, EXPR, end]
-
-            early_return_runc := runc (n) do if n == 1 then return(5) else 6 end; 7 end;
-            early_return_runc2 := runc (n) do if early_return_runc(n) == 5 then return(6) else 7 end; 8 end
-        """)
-        assert self.go("early_return_runc(1)") == 5
-        assert self.go("early_return_runc(2)") == 7
-        assert self.go("early_return_runc2(1)") == 6
-        assert self.go("early_return_runc2(2)") == 8
-
     def test_letcc_escape(self):
         self.go("""
             riskyfunc := func (n, escape) do
@@ -373,7 +358,7 @@ class TestProblemsBase(BaseTest):
     def test_letcc_concurrent(self, capsys):
         self.go("""
             tasks := [];
-            add_task := func (t) do tasks = append(tasks, t) end;
+            add_task := func (t) do tasks = push(tasks, t) end;
             start := func () do
                 while tasks != [] do
                     next_task := first(tasks);

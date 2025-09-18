@@ -78,7 +78,7 @@ try-catch ぽいものを実装したところ
     # ジェネレータを使った簡単な並行処理
 
     tasks := [];
-    add_task := func (t) do tasks = append(tasks, t) end;
+    add_task := func (t) do tasks = push(tasks, t) end;
     start := func () do
         while tasks != [] do
             next_task := first(tasks);

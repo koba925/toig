@@ -26,8 +26,8 @@ class StdLib:
         self._go("first := func (l) do l[0] end")
         self._go("rest := func (l) do l[1:] end")
         self._go("last := func (l) do l[-1] end")
-        self._go("append := func (l, a) do l + [a] end")
-        self._go("prepend := func (a, l) do [a] + l end")
+        self._go("push := func (l, a) do l + [a] end")
+        self._go("pop := func (l) do l[:-1] end")
 
         self._go("""
             foldl := func (l, f, init) do
@@ -45,8 +45,16 @@ class StdLib:
             end
         """)
 
-        self._go("map := func (l, f) do foldl(l, func(acc, e) do append(acc, f(e)) end, []) end")
-        self._go("range := func (s, e) do unfoldl(s, func (x) do x >= e end, id, inc) end")
+        self._go("""
+            map := func (l, f) do
+                foldl(l, func(acc, e) do push(acc, f(e)) end, [])
+            end
+        """)
+        self._go("""
+            range := func (s, e) do
+                unfoldl(s, func (x) do x >= e end, id, inc)
+            end
+        """)
 
         self._go("""
             defmacro __stdlib_when (cnd, thn) do quasiquote
@@ -72,6 +80,17 @@ class StdLib:
 
         self._go("defmacro and (a, b) do quasiquote aif unquote(a) then unquote(b) else it end end end")
         self._go("defmacro or (a, b) do quasiquote aif unquote(a) then it else unquote(b) end end end")
+
+        self._go("""
+            zip := func (l1, l2) do
+                unfoldl(
+                    [l1, l2],
+                    func (s) do first(s) == [] or last(s) == [] end,
+                    func (s) do [first(first(s)), first(last(s))] end,
+                    func (s) do [rest(first(s)), rest(last(s))] end
+                )
+            end
+        """)
 
         self._go("""
             defmacro __stdlib_while (cnd, body) do quasiquote scope
@@ -129,6 +148,16 @@ class StdLib:
             end end end
 
             #rule [for, __stdlib_for, NAME, in, EXPR, do, EXPR, end]
+        """)
+
+        self._go("""
+            defmacro _runc (params, body) do quasiquote
+                func (unquote_splicing(rest(params))) do
+                    letcc return do unquote(body) end
+                end
+            end end
+
+            #rule [runc, _runc, PARAMS, do, EXPR, end]
         """)
 
         self._go("""
