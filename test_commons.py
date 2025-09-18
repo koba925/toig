@@ -4,11 +4,9 @@ from ici import Interpreter as ICI
 from stm import Interpreter as STM
 
 class BaseTest:
-    i: ICI | STM
-
     @pytest.fixture(autouse=True)
     def set_interpreter(self, request):
-        request.cls.i = request.param()
+        self.i = request.param()
 
     def parsed(self, src):
         return self.i.parse(src)

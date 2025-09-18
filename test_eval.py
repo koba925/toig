@@ -10,7 +10,7 @@ from stm import Interpreter as STM
     indirect=True)
 class TestEval(BaseTest):
     @pytest.fixture(autouse=True)
-    def setup_env(self):
+    def setup_eval(self):
         self.go("""
             define := runc (env, name, val) do
                 for p in env do
