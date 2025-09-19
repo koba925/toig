@@ -48,13 +48,19 @@ class TestEval(BaseTest):
                         _eval(expr[3], env)
                     end
                 else
-                    error('Unexpected expression: ', expr)
+                    op_val := _eval(expr[0], env);
+                    args_val := map(expr[1:], func (arg) do _eval(arg, env) end);
+                    op_val(args_val)
                 end
             end
         """)
 
         self.go("""
-            global_env := [];
+            global_env := [
+                ['add', func (args) do args[0] + args[1] end],
+                ['sub', func (args) do args[0] - args[1] end],
+                ['equal', func (args) do args[0] == args[1] end]
+            ];
             eval := func (expr) do _eval(expr, global_env) end
         """)
 
@@ -84,3 +90,10 @@ class TestEval(BaseTest):
 
         with pytest.raises(AssertionError):
             self.go("eval('c')")
+
+    def test_builtins(self):
+        assert self.go("eval(['add', 5, 6])") == 11
+        assert self.go("eval(['sub', 11, 6])") == 5
+        assert self.go("eval(['equal', 5, 5])") == True
+        assert self.go("eval(['equal', 5, 6])") == False
+
