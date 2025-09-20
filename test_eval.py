@@ -13,20 +13,24 @@ class TestEval(BaseTest):
     def setup_eval(self):
         self.go("""
             define := runc (env, name, val) do
-                for p in env do
+                for p in env[1] do
                     if p[0] == name then p[1] = val; return(val) end
                 end;
-                append(env, [name, val]);
+                append(env[1], [name, val]);
                 return(val)
             end
         """)
 
         self.go("""
             get := runc (env, name) do
-                for p in env do
+                for p in env[1] do
                     if p[0] == name then return(p[1]) end
                 end;
-                error('Not found:', name)
+                if env[0] != None then
+                    get(env[0], name)
+                else
+                    error('Not found:', name)
+                end
             end
         """)
 
@@ -39,6 +43,8 @@ class TestEval(BaseTest):
                     expr
                 elif is_str(expr) then
                     get(env, expr)
+                elif expr[0] == 'func' then
+                    ['closure', expr[1], expr[2], env]
                 elif expr[0] == 'define' then
                     define(env, expr[1], _eval(expr[2], env))
                 elif expr[0] == 'if' then
@@ -50,17 +56,31 @@ class TestEval(BaseTest):
                 else
                     op_val := _eval(expr[0], env);
                     args_val := map(expr[1:], func (arg) do _eval(arg, env) end);
-                    op_val(args_val)
+                    apply(op_val, args_val)
                 end
             end
         """)
 
         self.go("""
-            global_env := [
-                ['add', func (args) do args[0] + args[1] end],
-                ['sub', func (args) do args[0] - args[1] end],
-                ['equal', func (args) do args[0] == args[1] end]
-            ];
+            apply := func (op_val, args_val) do
+                if op_val[0] == 'primitive' then
+                    op_val[1](args_val)
+                else
+                    env := [op_val[3], []];
+                    for name_val in zip(op_val[1], args_val) do
+                        define(env, name_val[0], name_val[1])
+                    end;
+                    _eval(op_val[2], env)
+                end
+            end
+        """)
+
+        self.go("""
+            global_env := [None, [
+                ['add', ['primitive', func (args) do args[0] + args[1] end]],
+                ['sub', ['primitive', func (args) do args[0] - args[1] end]],
+                ['equal', ['primitive', func (args) do args[0] == args[1] end]]
+            ]];
             eval := func (expr) do _eval(expr, global_env) end
         """)
 
@@ -91,9 +111,34 @@ class TestEval(BaseTest):
         with pytest.raises(AssertionError):
             self.go("eval('c')")
 
-    def test_builtins(self):
+    def test_primitives(self):
         assert self.go("eval(['add', 5, 6])") == 11
         assert self.go("eval(['sub', 11, 6])") == 5
         assert self.go("eval(['equal', 5, 5])") == True
         assert self.go("eval(['equal', 5, 6])") == False
+
+    def test_function(self):
+        assert self.go("eval([['func', ['n'], ['add', 'n', 5]], 6])") == 11
+
+    def test_fib(self):
+        self.go("""eval(
+            ['define', 'fib', ['func', ['n'],
+                ['if', ['equal', 'n', 0], 0,
+                ['if', ['equal', 'n', 1], 1,
+                ['add', ['fib', ['sub', 'n', 1]], ['fib', ['sub', 'n', 2]]]]]]]
+        )""")
+        assert self.go("eval(['fib', 0])") == 0
+        assert self.go("eval(['fib', 1])") == 1
+        assert self.go("eval(['fib', 2])") == 1
+        assert self.go("eval(['fib', 3])") == 2
+        assert self.go("eval(['fib', 6])") == 8
+
+    def test_adder(self):
+        self.go("""eval(
+            ['define', 'make_adder', ['func', ['n'],
+                ['func', ['m'], ['add', 'n', 'm']]
+            ]]
+        )""")
+        assert self.go("eval([['make_adder', 5], 6])") == 11
+
 
