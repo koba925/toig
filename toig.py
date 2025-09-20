@@ -98,16 +98,23 @@ if __name__ == "__main__":
             ["if", ["equal", "n", 0], 0,
             ["if", ["equal", "n", 1], 1,
             ["add", ["fib", ["sub", "n", 1]], ["fib", ["sub", "n", 2]]]]]]])
-    i.go(["print", ["fib", 10]])
+    assert i.go(["fib", 10]) == 55
 
     i.go(["define", "make_counter", ["func", [], ["seq",
             ["define", "c", 0],
             ["func", [], ["assign", "c", ["add", "c", 1]]]]]])
     i.go(["define", "counter1", ["make_counter"]])
     i.go(["define", "counter2", ["make_counter"]])
-    i.go(["print", ["counter1"]])
-    i.go(["print", ["counter1"]])
-    i.go(["print", ["counter2"]])
-    i.go(["print", ["counter2"]])
-    i.go(["print", ["counter1"]])
-    i.go(["print", ["counter2"]])
+    assert i.go(["counter1"]) == 1
+    assert i.go(["counter1"]) == 2
+    assert i.go(["counter2"]) == 1
+    assert i.go(["counter2"]) == 2
+    assert i.go(["counter1"]) == 3
+    assert i.go(["counter2"]) == 3
+
+    i.go(["define", "eval", ["func", ["expr"], "expr"]])
+
+    assert i.go(["eval", None]) == None
+    assert i.go(["eval", True]) == True
+    assert i.go(["eval", False]) == False
+    assert i.go(["eval", 5]) == 5
