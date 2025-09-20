@@ -22,6 +22,19 @@ class TestEval(BaseTest):
         """)
 
         self.go("""
+            assign := runc (env, name, val) do
+                for p in env[1] do
+                    if p[0] == name then p[1] = val; return(val) end
+                end;
+                if env[0] != None then
+                    assign(env[0], name, val)
+                else
+                    error('Not found:', name)
+                end
+            end
+        """)
+
+        self.go("""
             get := runc (env, name) do
                 for p in env[1] do
                     if p[0] == name then return(p[1]) end
@@ -47,6 +60,14 @@ class TestEval(BaseTest):
                     ['closure', expr[1], expr[2], env]
                 elif expr[0] == 'define' then
                     define(env, expr[1], _eval(expr[2], env))
+                elif expr[0] == 'assign' then
+                    assign(env, expr[1], _eval(expr[2], env))
+                elif expr[0] == 'seq' then
+                    val := None;
+                    for e in expr[1:] do
+                        val = _eval(e, env)
+                    end;
+                    val
                 elif expr[0] == 'if' then
                     if _eval(expr[1], env) then
                         _eval(expr[2], env)
@@ -79,7 +100,8 @@ class TestEval(BaseTest):
             global_env := [None, [
                 ['add', ['primitive', func (args) do args[0] + args[1] end]],
                 ['sub', ['primitive', func (args) do args[0] - args[1] end]],
-                ['equal', ['primitive', func (args) do args[0] == args[1] end]]
+                ['equal', ['primitive', func (args) do args[0] == args[1] end]],
+                ['print', ['primitive', func (args) do print(args[0]) end]]
             ]];
             eval := func (expr) do _eval(expr, global_env) end
         """)
@@ -140,5 +162,23 @@ class TestEval(BaseTest):
             ]]
         )""")
         assert self.go("eval([['make_adder', 5], 6])") == 11
+
+    def test_counter(self):
+        self.go("""eval(['seq',
+            ['define', 'make_counter', ['func', [], ['seq',
+                ['define', 'c', 0],
+                ['func', [], ['assign', 'c', ['add', 'c', 1]]]
+            ]]],
+            ['define', 'counter1', ['make_counter']],
+            ['define', 'counter2', ['make_counter']]
+        ])""")
+
+        assert self.go("eval(['counter1'])") == 1
+        assert self.go("eval(['counter1'])") == 2
+        assert self.go("eval(['counter2'])") == 1
+        assert self.go("eval(['counter2'])") == 2
+        assert self.go("eval(['counter1'])") == 3
+        assert self.go("eval(['counter2'])") == 3
+
 
 
