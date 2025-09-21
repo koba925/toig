@@ -24,15 +24,22 @@ class Environment:
         else:
             assert False, f"Undefined variable: `{name}` @ get"
 
+class ToigStr(str):
+    pass
+
 class Evaluator:
     def eval(self, expr, env):
         match expr:
-            case None | bool(_) | int(_):
-                return expr
+            case None:
+                return None
+            case bool(val) | int(val) | ToigStr(val):
+                return val
             case str(name):
                 return env.get(name)
             case ["func", params, body]:
                 return ["func", params, body, env]
+            case ["quote", expr]:
+                return expr
             case ["define", name, val]:
                 return env.define(name, self.eval(val, env))
             case ["assign", name, val]:
@@ -62,7 +69,7 @@ class Evaluator:
 
     def _apply(self, f_val, args_val):
         if callable(f_val):
-            return f_val(*args_val)
+            return f_val(args_val)
 
         _, params, body, env = f_val
         new_env = Environment(env)
@@ -70,22 +77,57 @@ class Evaluator:
             new_env.define(param, arg)
         return self.eval(body, new_env)
 
+# Builtin Functions
+
+def _set_at(args):
+    args[0][args[1]] = args[2]
+    return args[2]
+
+def _slice(args):
+    arr, start, end, step = args
+    return arr[slice(start, end, step)]
+
+def _set_slice(args):
+    arr, start, end, step, val = args
+    arr[start:end:step] = val
+    return val
+
+def _error(args):
+    assert False, f"{' '.join(map(str, args))}"
+
+_builtins = {
+    "__builtins__": None,
+    "add": lambda args: args[0] + args[1],
+    "sub": lambda args: args[0] - args[1],
+
+    "equal": lambda args: args[0] == args[1],
+
+    "array": lambda args: args,
+    "get_at": lambda args: args[0][args[1]],
+    "set_at": _set_at,
+    "append": lambda args: args[0].append(args[1]),
+    "slice": _slice,
+    "set_slice": _set_slice,
+
+    "is_bool": lambda args: type(args[0]) is bool,
+    "is_int": lambda args: type(args[0]) is int,
+    "is_str": lambda args: type(args[0]) is ToigStr,
+    "is_array": lambda args: type(args[0]) is list,
+
+    "print": lambda args: print(*args),
+    "error": lambda args: _error(args)
+}
+
+class BuiltIns:
+    @staticmethod
+    def load(env):
+        for name, func in _builtins.items():
+            env.define(name, func)
+
 class Interpreter:
     def __init__(self):
         self._env = Environment()
-        self.init_builtins()
-
-    def init_builtins(self):
-        _builtins = {
-            "add": lambda a, b: a + b,
-            "sub": lambda a, b: a - b,
-            "equal": lambda a, b: a == b,
-            "print": print
-        }
-
-        for name, func in _builtins.items():
-            self._env.define(name, func)
-
+        BuiltIns.load(self._env)
         self._env = Environment(self._env)
 
     def go(self, src):
@@ -112,9 +154,36 @@ if __name__ == "__main__":
     assert i.go(["counter1"]) == 3
     assert i.go(["counter2"]) == 3
 
-    i.go(["define", "eval", ["func", ["expr"], "expr"]])
+    i.go(["define", "eval", ["func", ["expr"],
+        ["if", ["equal", "expr", None], None,
+        ["if", ["is_bool", "expr"], "expr",
+        ["if", ["is_int", "expr"], "expr",
+        ["if", ["is_str", "expr"], "expr",
+        ["seq",
+            ["define", "op", ["get_at", "expr", 0]],
+            ["if", ["equal", "op", ToigStr("quote")],
+                ["eval", ["get_at", "expr", 1]],
+            ["if", ["equal", "op", ToigStr("if")],
+                ["if", ["eval", ["get_at", "expr", 1]],
+                    ["eval", ["get_at", "expr", 2]],
+                    ["eval", ["get_at", "expr", 3]]],
+            ["error", "expr"]]]
+        ]]]]]
+    ]])
 
-    assert i.go(["eval", None]) == None
-    assert i.go(["eval", True]) == True
-    assert i.go(["eval", False]) == False
-    assert i.go(["eval", 5]) == 5
+    def eval(expr):
+        return i.go(["eval", ["quote", expr]])
+
+    assert eval(None) == None
+    assert eval(True) == True
+    assert eval(False) == False
+    assert eval(5) == 5
+    assert eval(ToigStr("hello")) == "hello"
+
+    assert eval(["if", True, 5, 6]) == 5
+    assert eval(["if", False, 5, 6]) == 6
+    assert eval(["if", ["if", True, True, True], 5, 6]) == 5
+    assert eval(["if", True, ["if", True, 5, 6], 7]) == 5
+    assert eval(["if", False, 5, ["if", False, 6, 7]]) == 7
+
+
