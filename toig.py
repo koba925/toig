@@ -14,7 +14,7 @@ class Environment:
         elif self._parent is not None:
             return self._parent.assign(name, val)
         else:
-            assert False, f"Undefined variable: `{name}` @ assign."
+            assert False, f"Undefined variable: `{name}` @ assign"
 
     def get(self, name):
         if name in self._vals:
@@ -88,7 +88,7 @@ def _set_slice(args):
     return val
 
 def _error(args):
-    assert False, f"{' '.join(map(str, args))}"
+    assert False, f"{" ".join(map(str, args))}"
 
 _builtins = {
     "__builtins__": None,
@@ -150,45 +150,55 @@ if __name__ == "__main__":
 
     # eval on eval
 
+    i.go(["define", "first", ["func", ["l"], ["get_at", "l", 0]]])
+    i.go(["define", "last", ["func", ["l"], ["get_at", "l", -1]]])
+    i.go(["define", "rest", ["func", ["l"], ["slice", "l", 1, None, None]]])
+
+    i.go(["define", "map", ["func", ["l", "f"],
+        ["if", ["equal", "l", ["array"]],
+            ["array"],
+            ["add",
+                ["array", ["f", ["first", "l"]]],
+                ["map", ["slice", "l", 1, None, None], "f"]]]]])
+
     i.go(["define", "define_", ["func", ["env", "name", "val"], ["seq",
         ["define", "_define_", ["func", ["pairs"],
             ["if", ["equal", "pairs", ["array"]],
                 ["seq",
-                    ["append", ["get_at", "env", 1], ["array", "name", "val"]],
+                    ["append", ["last", "env"], ["array", "name", "val"]],
                     "val"],
                 ["seq",
-                    ["define", "name_val", ["get_at", "pairs", 0]],
-                    ["if", ["equal", ["get_at", "name_val", 0], "name"],
+                    ["define", "name_val", ["first", "pairs"]],
+                    ["if", ["equal", ["first", "name_val"], "name"],
                         ["set_at", "name_val", 1, "val"],
                         ["_define_", ["slice", "pairs", 1, None, None]]]]]]],
-        ["_define_", ["get_at", "env", 1]]
-    ]]])
+        ["_define_", ["last", "env", 1]]]]])
 
     i.go(["define", "assign_", ["func", ["env", "name", "val"], ["seq",
         ["define", "_assign_", ["func", ["pairs"],
             ["if", ["equal", "pairs", ["array"]],
-                ["assign_", ["get_at", "env", 0], "name", "val"],
+                ["assign_", ["first", "env"], "name", "val"],
                 ["seq",
-                    ["define", "name_val", ["get_at", "pairs", 0]],
-                    ["if", ["equal", ["get_at", "name_val", 0], "name"],
+                    ["define", "name_val", ["first", "pairs"]],
+                    ["if", ["equal", ["first", "name_val"], "name"],
                         ["set_at", "name_val", 1, "val"],
-                        ["_assign_", ["slice", "pairs", 1, None, None]]]]]]],
+                        ["_assign_", ["rest", "pairs"]]]]]]],
         ["if", ["equal", "env", None],
             ["error", "name"],
-            ["_assign_", ["get_at", "env", 1]]]]]])
+            ["_assign_", ["last", "env"]]]]]])
 
     i.go(["define", "get_", ["func", ["env", "name"], ["seq",
         ["define", "_get_", ["func", ["pairs"],
             ["if", ["equal", "pairs", ["array"]],
-                ["get_", ["get_at", "env", 0], "name"],
+                ["get_", ["first", "env"], "name"],
                 ["seq",
-                    ["define", "name_val", ["get_at", "pairs", 0]],
-                    ["if", ["equal", ["get_at", "name_val", 0], "name"],
-                        ["get_at", "name_val", 1],
-                        ["_get_", ["slice", "pairs", 1, None, None]]]]]]],
+                    ["define", "name_val", ["first", "pairs"]],
+                    ["if", ["equal", ["first", "name_val"], "name"],
+                        ["last", "name_val"],
+                        ["_get_", ["rest", "pairs"]]]]]]],
         ["if", ["equal", "env", None],
             ["error", "name"],
-            ["_get_", ["get_at", "env", 1]]]]]])
+            ["_get_", ["last", "env"]]]]]])
 
     i.go(["define", "eval", ["func", ["expr", "env"],
         ["if", ["not", ["is_array", "expr"]],
@@ -197,8 +207,11 @@ if __name__ == "__main__":
             ["if", ["is_int", "expr"], "expr",
             ["get_", "env", "expr"]]]],
             ["seq",
-                ["define", "op", ["get_at", "expr", 0]],
-                ["if", ["equal", "op", ["quote","quote"]],
+                ["define", "op", ["first", "expr"]],
+                ["if", ["equal", "op", ["quote","func"]],
+                    ["array", ["quote", "closure"],
+                        ["get_at", "expr", 1], ["get_at", "expr", 2], "env"],
+                ["if", ["equal", "op", ["quote", "quote"]],
                     ["eval", ["get_at", "expr", 1], "env"],
                 ["if", ["equal", "op", ["quote", "define"]],
                     ["define_", "env",
@@ -208,16 +221,50 @@ if __name__ == "__main__":
                     ["assign_", "env",
                         ["get_at", "expr", 1],
                         ["eval", ["get_at", "expr", 2], "env"]],
+                ["if", ["equal", "op", ["quote", "seq"]],
+                    ["eval_seq", ["rest", "expr"], "env", None],
                 ["if", ["equal", "op", ["quote", "if"]],
                     ["if", ["eval", ["get_at", "expr", 1], "env"],
                         ["eval", ["get_at", "expr", 2], "env"],
                         ["eval", ["get_at", "expr", 3], "env"]],
-                ["error", "expr"]]]]]
-            ]
-        ]
-    ]])
+                ["seq",
+                    ["define", "op_val", ["eval", "op", "env"]],
+                    ["define", "args_val", ["map",
+                        ["rest", "expr"],
+                        ["func", ["arg"], ["eval", "arg", "env"]]]],
+                    ["apply", "op_val", "args_val"]]]]]]]]]]]])
 
-    i.go(["define", "global_env", ["array", None, ["array"]]])
+    i.go(["define", "eval_seq", ["func", ["exprs", "env", "result"],
+        ["if", ["equal", "exprs", ["array"]],
+            "result",
+            ["eval_seq", ["rest", "exprs"], "env",
+                ["eval", ["first", "exprs"], "env"]]]]])
+
+    i.go(["define", "apply", ["func", ["op_val", "args_val"],
+        ["if", ["equal", ["first", "op_val"], ["quote", "primitive"]],
+            [["last", "op_val"], "args_val"],
+            ["seq",
+                ["define", "env", ["array", ["get_at", "op_val", 3], ["array"]]],
+                ["set_params", "env", ["get_at", "op_val", 1], "args_val"],
+                ["eval", ["get_at", "op_val", 2], "env"]]]]])
+
+    i.go(["define", "set_params", ["func", ["env", "params", "args"],
+        ["if", ["equal", "params", ["array"]], None,
+            ["seq",
+                ["define_", "env", ["first", "params"], ["first", "args"]],
+                ["set_params", ["rest", "params"], ["rest", "args"]]]]]])
+
+    i.go(["define", "global_env", ["array", None, ["array",
+        ["array", ["quote", "add"], ["array", ["quote", "primitive"],
+            ["func", ["args"], ["add",
+                ["get_at", "args", 0], ["get_at", "args", 1]]]]],
+        ["array", ["quote", "sub"], ["array", ["quote", "primitive"],
+            ["func", ["args"], ["sub",
+                ["get_at", "args", 0], ["get_at", "args", 1]]]]],
+        ["array", ["quote", "equal"], ["array", ["quote", "primitive"],
+            ["func", ["args"], ["equal",
+                ["get_at", "args", 0], ["get_at", "args", 1]]]]],
+    ]]])
 
     def eval(expr):
         return i.go(["eval", ["quote", expr], "global_env"])
@@ -269,4 +316,40 @@ if __name__ == "__main__":
     assert eval("a") == 5
     assert eval("b") == 10
 
+    assert eval(["add", 5, 6]) == 11
+    assert eval(["sub", 11, 6]) == 5
+    assert eval(["equal", 5, 5]) == True
+    assert eval(["equal", 5, 6]) == False
 
+    assert eval([["func", ["n"], ["add", "n", 5]], 6]) == 11
+
+    eval(["define", "fib", ["func", ["n"],
+        ["if", ["equal", "n", 0], 0,
+        ["if", ["equal", "n", 1], 1,
+        ["add", ["fib", ["sub", "n", 1]], ["fib", ["sub", "n", 2]]]]]]])
+
+    assert eval(["fib", 0]) == 0
+    assert eval(["fib", 1]) == 1
+    assert eval(["fib", 2]) == 1
+    assert eval(["fib", 3]) == 2
+    assert eval(["fib", 6]) == 8
+
+    eval(["define", "make_adder",
+        ["func", ["n"], ["func", ["m"], ["add", "n", "m"]]]])
+    assert eval([["make_adder", 5], 6]) == 11
+
+    eval(["seq",
+        ["define", "make_counter", ["func", [], ["seq",
+            ["define", "c", 0],
+            ["func", [], ["assign", "c", ["add", "c", 1]]]
+        ]]],
+        ["define", "counter1", ["make_counter"]],
+        ["define", "counter2", ["make_counter"]]
+    ])
+
+    assert eval(["counter1"]) == 1
+    assert eval(["counter1"]) == 2
+    assert eval(["counter2"]) == 1
+    assert eval(["counter2"]) == 2
+    assert eval(["counter1"]) == 3
+    assert eval(["counter2"]) == 3
