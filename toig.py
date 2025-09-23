@@ -24,16 +24,11 @@ class Environment:
         else:
             assert False, f"Undefined variable: `{name}` @ get"
 
-class ToigStr(str):
-    pass
-
 class Evaluator:
     def eval(self, expr, env):
         match expr:
-            case None:
-                return None
-            case bool(val) | int(val) | ToigStr(val):
-                return val
+            case None | bool(_) | int(_):
+                return expr
             case str(name):
                 return env.get(name)
             case ["func", params, body]:
@@ -99,7 +94,7 @@ _builtins = {
     "__builtins__": None,
     "add": lambda args: args[0] + args[1],
     "sub": lambda args: args[0] - args[1],
-
+    "not": lambda args: not args[0],
     "equal": lambda args: args[0] == args[1],
 
     "array": lambda args: args,
@@ -111,7 +106,6 @@ _builtins = {
 
     "is_bool": lambda args: type(args[0]) is bool,
     "is_int": lambda args: type(args[0]) is int,
-    "is_str": lambda args: type(args[0]) is ToigStr,
     "is_array": lambda args: type(args[0]) is list,
 
     "print": lambda args: print(*args),
@@ -154,36 +148,125 @@ if __name__ == "__main__":
     assert i.go(["counter1"]) == 3
     assert i.go(["counter2"]) == 3
 
-    i.go(["define", "eval", ["func", ["expr"],
-        ["if", ["equal", "expr", None], None,
-        ["if", ["is_bool", "expr"], "expr",
-        ["if", ["is_int", "expr"], "expr",
-        ["if", ["is_str", "expr"], "expr",
-        ["seq",
-            ["define", "op", ["get_at", "expr", 0]],
-            ["if", ["equal", "op", ToigStr("quote")],
-                ["eval", ["get_at", "expr", 1]],
-            ["if", ["equal", "op", ToigStr("if")],
-                ["if", ["eval", ["get_at", "expr", 1]],
-                    ["eval", ["get_at", "expr", 2]],
-                    ["eval", ["get_at", "expr", 3]]],
-            ["error", "expr"]]]
-        ]]]]]
+    # eval on eval
+
+    i.go(["define", "define_", ["func", ["env", "name", "val"], ["seq",
+        ["define", "_define_", ["func", ["pairs"],
+            ["if", ["equal", "pairs", ["array"]],
+                ["seq",
+                    ["append", ["get_at", "env", 1], ["array", "name", "val"]],
+                    "val"],
+                ["seq",
+                    ["define", "name_val", ["get_at", "pairs", 0]],
+                    ["if", ["equal", ["get_at", "name_val", 0], "name"],
+                        ["set_at", "name_val", 1, "val"],
+                        ["_define_", ["slice", "pairs", 1, None, None]]]]]]],
+        ["_define_", ["get_at", "env", 1]]
+    ]]])
+
+    i.go(["define", "assign_", ["func", ["env", "name", "val"], ["seq",
+        ["define", "_assign_", ["func", ["pairs"],
+            ["if", ["equal", "pairs", ["array"]],
+                ["assign_", ["get_at", "env", 0], "name", "val"],
+                ["seq",
+                    ["define", "name_val", ["get_at", "pairs", 0]],
+                    ["if", ["equal", ["get_at", "name_val", 0], "name"],
+                        ["set_at", "name_val", 1, "val"],
+                        ["_assign_", ["slice", "pairs", 1, None, None]]]]]]],
+        ["if", ["equal", "env", None],
+            ["error", "name"],
+            ["_assign_", ["get_at", "env", 1]]]]]])
+
+    i.go(["define", "get_", ["func", ["env", "name"], ["seq",
+        ["define", "_get_", ["func", ["pairs"],
+            ["if", ["equal", "pairs", ["array"]],
+                ["get_", ["get_at", "env", 0], "name"],
+                ["seq",
+                    ["define", "name_val", ["get_at", "pairs", 0]],
+                    ["if", ["equal", ["get_at", "name_val", 0], "name"],
+                        ["get_at", "name_val", 1],
+                        ["_get_", ["slice", "pairs", 1, None, None]]]]]]],
+        ["if", ["equal", "env", None],
+            ["error", "name"],
+            ["_get_", ["get_at", "env", 1]]]]]])
+
+    i.go(["define", "eval", ["func", ["expr", "env"],
+        ["if", ["not", ["is_array", "expr"]],
+            ["if", ["equal", "expr", None], None,
+            ["if", ["is_bool", "expr"], "expr",
+            ["if", ["is_int", "expr"], "expr",
+            ["get_", "env", "expr"]]]],
+            ["seq",
+                ["define", "op", ["get_at", "expr", 0]],
+                ["if", ["equal", "op", ["quote","quote"]],
+                    ["eval", ["get_at", "expr", 1], "env"],
+                ["if", ["equal", "op", ["quote", "define"]],
+                    ["define_", "env",
+                        ["get_at", "expr", 1],
+                        ["eval", ["get_at", "expr", 2], "env"]],
+                ["if", ["equal", "op", ["quote", "assign"]],
+                    ["assign_", "env",
+                        ["get_at", "expr", 1],
+                        ["eval", ["get_at", "expr", 2], "env"]],
+                ["if", ["equal", "op", ["quote", "if"]],
+                    ["if", ["eval", ["get_at", "expr", 1], "env"],
+                        ["eval", ["get_at", "expr", 2], "env"],
+                        ["eval", ["get_at", "expr", 3], "env"]],
+                ["error", "expr"]]]]]
+            ]
+        ]
     ]])
 
+    i.go(["define", "global_env", ["array", None, ["array"]]])
+
     def eval(expr):
-        return i.go(["eval", ["quote", expr]])
+        return i.go(["eval", ["quote", expr], "global_env"])
+
+    def fails(expr):
+        try: eval(expr)
+        except AssertionError: return True
+        else: return False
 
     assert eval(None) == None
     assert eval(True) == True
     assert eval(False) == False
     assert eval(5) == 5
-    assert eval(ToigStr("hello")) == "hello"
 
     assert eval(["if", True, 5, 6]) == 5
     assert eval(["if", False, 5, 6]) == 6
     assert eval(["if", ["if", True, True, True], 5, 6]) == 5
     assert eval(["if", True, ["if", True, 5, 6], 7]) == 5
     assert eval(["if", False, 5, ["if", False, 6, 7]]) == 7
+
+    assert eval(["define", "a", 5]) == 5
+    assert eval(["define", "b", 6]) == 6
+    assert eval("a") == 5
+    assert eval("b") == 6
+
+    assert eval(["define", "b", 7]) == 7
+    assert eval("a") == 5
+    assert eval("b") == 7
+
+    i.go(["define", "global_env", ["array", "global_env", ["array"]]])
+
+    assert eval(["define", "a", 8]) == 8
+    assert eval("a") == 8
+    assert eval("b") == 7
+
+    assert eval(["assign", "a", 9]) == 9
+    assert eval("a") == 9
+    assert eval("b") == 7
+
+    assert eval(["assign", "b", 10]) == 10
+    assert eval("a") == 9
+    assert eval("b") == 10
+
+    assert fails(["assign", "c", 11])
+    assert fails("c")
+
+    i.go(["define", "global_env", ["get_at", "global_env", 0]])
+
+    assert eval("a") == 5
+    assert eval("b") == 10
 
 
