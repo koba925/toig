@@ -1,6 +1,6 @@
 import pytest
 
-from test_commons import BaseTest
+from toig_on_toig import BaseToigOnToigTest
 from ici import Interpreter as ICI
 from stm import Interpreter as STM
 
@@ -8,111 +8,90 @@ from stm import Interpreter as STM
     "set_interpreter",
     [ICI, STM], ids=["ici", "stm"],
     indirect=True)
-class TestEval(BaseTest):
-    @pytest.fixture(autouse=True)
-    def setup_eval(self):
-        self.go("""
-            define := runc (env, name, val) do
-                for p in env[1] do
-                    if p[0] == name then p[1] = val; return(val) end
-                end;
-                append(env[1], [name, val]);
-                return(val)
-            end
-        """)
+class TestUtilities(BaseToigOnToigTest):
+    def test_is_space(self):
+        assert self.go("is_space(' ')") == True
+        assert self.go("""is_space('
+')""") == True
+        assert self.go("is_space('a')") == False
 
-        self.go("""
-            assign := runc (env, name, val) do
-                for p in env[1] do
-                    if p[0] == name then p[1] = val; return(val) end
-                end;
-                if env[0] != None then
-                    assign(env[0], name, val)
-                else
-                    error('Not found:', name)
-                end
-            end
-        """)
+    def test_is_digit(self):
+        assert self.go("is_digit('0')") == True
+        assert self.go("is_digit('1')") == True
+        assert self.go("is_digit('9')") == True
+        assert self.go("is_digit(' ')") == False
+        assert self.go("is_digit('A')") == False
 
-        self.go("""
-            get := runc (env, name) do
-                for p in env[1] do
-                    if p[0] == name then return(p[1]) end
-                end;
-                if env[0] != None then
-                    get(env[0], name)
-                else
-                    error('Not found:', name)
-                end
-            end
-        """)
+    def test_is_alphabet(self):
+        assert self.go("is_alphabet('a')") == True
+        assert self.go("is_alphabet('z')") == True
+        assert self.go("is_alphabet('A')") == True
+        assert self.go("is_alphabet('Z')") == True
+        assert self.go("is_alphabet('_')") == False
+        assert self.go("is_alphabet('0')") == False
+        assert self.go("is_alphabet(' ')") == False
 
-        self.go("""
-            _eval := func (expr, env) do
-                # print('eval', expr);
-                if expr == None then
-                    None
-                elif is_bool(expr) or is_int(expr) then
-                    expr
-                elif is_str(expr) then
-                    get(env, expr)
-                elif expr[0] == 'func' then
-                    ['closure', expr[1], expr[2], env]
-                elif expr[0] == 'define' then
-                    define(env, expr[1], _eval(expr[2], env))
-                elif expr[0] == 'assign' then
-                    assign(env, expr[1], _eval(expr[2], env))
-                elif expr[0] == 'seq' then
-                    val := None;
-                    for e in expr[1:] do
-                        val = _eval(e, env)
-                    end;
-                    val
-                elif expr[0] == 'if' then
-                    if _eval(expr[1], env) then
-                        _eval(expr[2], env)
-                    else
-                        _eval(expr[3], env)
-                    end
-                else
-                    op_val := _eval(expr[0], env);
-                    args_val := map(expr[1:], func (arg) do _eval(arg, env) end);
-                    apply(op_val, args_val)
-                end
-            end
-        """)
+    def test_is_name_first(self):
+        assert self.go("is_name_first('a')") == True
+        assert self.go("is_name_first('z')") == True
+        assert self.go("is_name_first('A')") == True
+        assert self.go("is_name_first('Z')") == True
+        assert self.go("is_name_first('_')") == True
+        assert self.go("is_name_first('0')") == False
+        assert self.go("is_name_first('#')") == False
+        assert self.go("is_name_first(' ')") == False
 
-        self.go("""
-            apply := func (op_val, args_val) do
-                if op_val[0] == 'primitive' then
-                    op_val[1](args_val)
-                else
-                    env := [op_val[3], []];
-                    for name_val in zip(op_val[1], args_val) do
-                        define(env, name_val[0], name_val[1])
-                    end;
-                    _eval(op_val[2], env)
-                end
-            end
-        """)
+    def test_is_name_rest(self):
+        assert self.go("is_name_rest('a')") == True
+        assert self.go("is_name_rest('z')") == True
+        assert self.go("is_name_rest('A')") == True
+        assert self.go("is_name_rest('Z')") == True
+        assert self.go("is_name_rest('_')") == True
+        assert self.go("is_name_rest('0')") == True
+        assert self.go("is_name_rest('#')") == False
+        assert self.go("is_name_rest(' ')") == False
 
-        self.go("""
-            global_env := [None, [
-                ['add', ['primitive', func (args) do args[0] + args[1] end]],
-                ['sub', ['primitive', func (args) do args[0] - args[1] end]],
-                ['equal', ['primitive', func (args) do args[0] == args[1] end]],
-                ['print', ['primitive', func (args) do print(args[0]) end]]
-            ]];
-            eval := func (expr) do _eval(expr, global_env) end
-        """)
+    def test_contains(self):
+        assert self.go("contains('a', [])") == False
+        assert self.go("contains('a', [1, None, 'b', False, []])") == False
+        assert self.go("contains('a', [1, None, 'b', False, 'a'])") == True
 
+@pytest.mark.parametrize(
+    "set_interpreter",
+    [ICI, STM], ids=["ici", "stm"],
+    indirect=True)
+class TestScanner(BaseToigOnToigTest):
+    def test_scan_whitespace(self):
+        assert self.go("scan('')") == ["$EOF"]
+        assert self.go("scan(' 5 ')") == [5, "$EOF"]
+        assert self.go("scan('\n5\n')") == [5, "$EOF"]
+
+    def test_scan_primary(self):
+        assert self.go("scan('None True False 5 56')") == [None, True, False, 5, 56, '$EOF']
+
+@pytest.mark.parametrize(
+    "set_interpreter",
+    [ICI, STM], ids=["ici", "stm"],
+    indirect=True)
+class TestInterpreter(BaseToigOnToigTest):
     def test_primary(self):
+        assert self.go("go('None')") == None
+        assert self.go("go('True')") == True
+        assert self.go("go('False')") == False
+        assert self.go("go('5')") == 5
+
+@pytest.mark.parametrize(
+    "set_interpreter",
+    [ICI, STM], ids=["ici", "stm"],
+    indirect=True)
+class TestEvaluator(BaseToigOnToigTest):
+    def test_eval_primary(self):
         assert self.go("eval(None)") == None
         assert self.go("eval(True)") == True
         assert self.go("eval(False)") == False
         assert self.go("eval(5)") == 5
 
-    def test_if(self):
+    def test_eval_if(self):
         assert self.go("eval(['if', True, 5, 6])") == 5
         assert self.go("eval(['if', False, 5, 6])") == 6
         assert self.go("eval(['if', ['if', True, True, True], 5, 6])") == 5
@@ -122,7 +101,7 @@ class TestEval(BaseTest):
         with pytest.raises(AssertionError):
             self.go("eval(['unexpected case'])")
 
-    def test_define(self):
+    def test_eval_define(self):
         assert self.go("eval(['define', 'a', 5])") == 5
         assert self.go("eval('a')") == 5
         assert self.go("eval(['define', 'b', 6])") == 6
@@ -133,16 +112,16 @@ class TestEval(BaseTest):
         with pytest.raises(AssertionError):
             self.go("eval('c')")
 
-    def test_primitives(self):
+    def test_eval_primitives(self):
         assert self.go("eval(['add', 5, 6])") == 11
         assert self.go("eval(['sub', 11, 6])") == 5
         assert self.go("eval(['equal', 5, 5])") == True
         assert self.go("eval(['equal', 5, 6])") == False
 
-    def test_function(self):
+    def test_eval_function(self):
         assert self.go("eval([['func', ['n'], ['add', 'n', 5]], 6])") == 11
 
-    def test_fib(self):
+    def test_eval_fib(self):
         self.go("""eval(
             ['define', 'fib', ['func', ['n'],
                 ['if', ['equal', 'n', 0], 0,
@@ -155,7 +134,7 @@ class TestEval(BaseTest):
         assert self.go("eval(['fib', 3])") == 2
         assert self.go("eval(['fib', 6])") == 8
 
-    def test_adder(self):
+    def test_eval_adder(self):
         self.go("""eval(
             ['define', 'make_adder', ['func', ['n'],
                 ['func', ['m'], ['add', 'n', 'm']]
@@ -163,7 +142,7 @@ class TestEval(BaseTest):
         )""")
         assert self.go("eval([['make_adder', 5], 6])") == 11
 
-    def test_counter(self):
+    def test_eval_counter(self):
         self.go("""eval(['seq',
             ['define', 'make_counter', ['func', [], ['seq',
                 ['define', 'c', 0],
@@ -179,6 +158,4 @@ class TestEval(BaseTest):
         assert self.go("eval(['counter2'])") == 2
         assert self.go("eval(['counter1'])") == 3
         assert self.go("eval(['counter2'])") == 3
-
-
 

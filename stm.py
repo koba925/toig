@@ -52,6 +52,8 @@ _builtins = {
     "is_str": lambda args: type(args[0]) is ToigStr,
     "is_name": lambda args: type(args[0]) is str,
 
+    "to_int": lambda args: int(args[0]),
+
     "print": lambda args: print(*args),
     "error": lambda args: _error(args)
 }

@@ -62,6 +62,8 @@ _builtins = {
     "is_array": lambda _, s: s.append(isinstance(s.pop(), list)),
     "is_name": lambda _, s: s.append(type(s.pop()) is str),
 
+    "to_int": lambda _, s: s.append(int(s.pop())),
+
     "print": lambda n, s: s.append(print(*[s.pop() for _ in range(n)])),
     "error": _error
 }
