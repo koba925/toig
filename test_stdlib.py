@@ -157,12 +157,12 @@ class TestStdlib(BaseTest):
         """) == 27
 
     def test_is_name(self):
-        assert self.go("is_name(a)") == True
-        assert self.go("is_name(None)") == False
-        assert self.go("is_name(True)") == False
-        assert self.go("is_name(5)") == False
-        assert self.go("is_name('hello')") == False
-        assert self.go("is_name(5 + 6)") == False
+        assert self.go(r"""is_name(a)""") == True
+        assert self.go(r"""is_name(None)""") == False
+        assert self.go(r"""is_name(True)""") == False
+        assert self.go(r"""is_name(5)""") == False
+        assert self.go(r"""is_name("hello")""") == False
+        assert self.go(r"""is_name(5 + 6)""") == False
 
     def test_for(self):
         assert self.go("""

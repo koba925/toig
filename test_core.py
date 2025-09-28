@@ -243,37 +243,45 @@ class TestCore(BaseTest):
             self.go("5 + 6 = 7")
 
     def test_string(self, capsys):
-        assert self.go("'hello, world'") == "hello, world"
+        assert self.go(""" "hello, world" """) == "hello, world"
 
-        assert self.go("'hello, ' + 'world'") == "hello, world"
-        assert self.go("'hello' * 3") == "hellohellohello"
+        assert self.go(""" "hello, " + "world" """) == "hello, world"
+        assert self.go(""" "hello" * 3""") == "hellohellohello"
 
-        assert self.go("'hello' == 'hello'") == True
-        assert self.go("'Hello' > 'hello'") == False
-        assert self.go("'Hello' < 'hello'") == True
+        assert self.go(""" "hello" == "hello" """) == True
+        assert self.go(""" "Hello" > "hello" """) == False
+        assert self.go(""" "Hello" < "hello" """) == True
 
-        assert self.go("'hello'[1]") == "e"
-        assert self.go("'hello'[1:4:2]") == "el"
+        assert self.go(""" "hello"[1]""") == "e"
+        assert self.go(""" "hello"[1:4:2]""") == "el"
 
-        self.go("print('hello, world')")
+        self.go("""print("hello, world")""")
         assert capsys.readouterr().out == "hello, world\n"
 
+        with pytest.raises(AssertionError):
+            self.go("""print("hello, world)""")
+
+
+    def test_string_escape(self, capsys):
+        assert self.go(r""" "\n" """) == "\n"
+        assert self.go(r""" "\\" """) == "\\"
+        assert self.go(r""" "\'" """) == "'"
+        assert self.go(r""" "\a" """) == "a"
+        assert self.go(r"""if 1 != "\'" then 1 else 2 end""") == 1
+
     def test_type(self):
-        assert self.go("is_bool(None)") == False
-        assert self.go("is_int(None)") == False
-        assert self.go("is_str(None)") == False
-
-        assert self.go("is_bool(5)") == False
-        assert self.go("is_int(5)") == True
-        assert self.go("is_str(5)") == False
-
-        assert self.go("is_bool(True)") == True
-        assert self.go("is_int(True)") == False
-        assert self.go("is_str(True)") == False
-
-        assert self.go("is_bool('hello')") == False
-        assert self.go("is_int('hello')") == False
-        assert self.go("is_str('hello')") == True
+        assert self.go(r"""is_bool(None)""") == False
+        assert self.go(r"""is_int(None)""") == False
+        assert self.go(r"""is_str(None)""") == False
+        assert self.go(r"""is_bool(5)""") == False
+        assert self.go(r"""is_int(5)""") == True
+        assert self.go(r"""is_str(5)""") == False
+        assert self.go(r"""is_bool(True)""") == True
+        assert self.go(r"""is_int(True)""") == False
+        assert self.go(r"""is_str(True)""") == False
+        assert self.go(r"""is_bool("hello")""") == False
+        assert self.go(r"""is_int("hello")""") == False
+        assert self.go(r"""is_str("hello")""") == True
 
     def test_func(self):
         assert self.go("func (a, b) do a + b end (5, 6)") == 11

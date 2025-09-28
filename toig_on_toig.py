@@ -8,18 +8,16 @@ class BaseToigOnToigTest(BaseTest):
 
         # Utilities
 
-        self.go("""
-            EOL := '
-';
-            is_space := func (c) do c == ' ' or c == EOL end;
-            is_digit := func (c) do '0' <= c and c <= '9' end;
+        self.go(r"""
+            is_space := func (c) do c == " " or c == "\n" end;
+            is_digit := func (c) do "0" <= c and c <= "9" end;
             is_alphabet := func (c) do
-                ('A' <= c and c <= 'Z') or  ('a' <= c and c <= 'z')
+                ("A" <= c and c <= "Z") or  ("a" <= c and c <= "z")
             end
         """)
 
         self.go("""
-            is_name_first := func (c) do is_alphabet(c) or c == '_' end;
+            is_name_first := func (c) do is_alphabet(c) or c == "_" end;
             is_name_rest := func (c) do
                 is_name_first(c) or is_digit(c)
             end
@@ -36,15 +34,15 @@ class BaseToigOnToigTest(BaseTest):
 
         # Scanner
 
-        self.go("""
+        self.go(r"""
             scan := func (src) do
                 pos := 0;
-                token := '';
+                token := "";
 
                 advance := func () do pos = pos + 1 end;
 
                 current_char := func () do
-                    if pos < len(src) then src[pos] else '$EOF' end
+                    if pos < len(src) then src[pos] else "$EOF" end
                 end;
 
                 append_char := func () do
@@ -59,31 +57,65 @@ class BaseToigOnToigTest(BaseTest):
 
                 name := func () do
                     word(is_name_rest);
-                    if token == 'None' then None
-                    elif token == 'True' then True
-                    elif token == 'False' then False
+                    if token == "None" then None
+                    elif token == "True" then True
+                    elif token == "False" then False
                     else token end
                 end;
 
+                raw_string := func () do
+                    advance();
+                    while (c := current_char()) != "'" do
+                        if c == "$EOF" then error(c) end;
+                        append_char()
+                    end;
+                    advance();
+                    ["$STR", token]
+                end;
+
+                string := func () do
+                    advance();
+                    while (c := current_char()) != "\"" do
+                        if c == "$EOF" then error(c) end;
+                        if c == "\\" then
+                            advance();
+                            c := current_char();
+                            if c == "$EOF" then error(c) end;
+                            if c == "n" then token = token + "\n"
+                            else token = token + c end;
+                            advance()
+                        else
+                            append_char()
+                        end
+                    end;
+                    advance();
+                    ["$STR", token]
+                end;
+
                 get_token := func () do
-                    token = '';
+                    token = "";
 
                     while is_space(current_char()) do advance() end;
 
-                    if current_char() == '$EOF' then '$EOF'
-                    elif is_name_first(current_char()) then
+                    c := current_char();
+                    if c == "$EOF" then "$EOF"
+                    elif is_name_first(c) then
                         name()
-                    elif is_digit(current_char()) then
+                    elif is_digit(c) then
                         word(is_digit);
                         to_int(token)
+                    elif c == "'" then
+                        raw_string()
+                    elif c == "\"" then
+                        string()
                     else error(c) end
                 end;
 
                 tokens := [];
                 while True do
-                    token :=get_token();
+                    token := get_token();
                     append(tokens, token);
-                    if token == '$EOF' then break() end
+                    if token == "$EOF" then break() end
                 end;
                 tokens
             end
@@ -110,7 +142,7 @@ class BaseToigOnToigTest(BaseTest):
                 end;
 
                 expr := expression();
-                if current_token() != '$EOF' then
+                if current_token() != "$EOF" then
                     error(current_token())
                 end;
                 expr
@@ -137,7 +169,7 @@ class BaseToigOnToigTest(BaseTest):
                 if env[0] != None then
                     assign(env[0], name, val)
                 else
-                    error('Not found:', name)
+                    error("Not found:", name)
                 end
             end
         """)
@@ -150,33 +182,35 @@ class BaseToigOnToigTest(BaseTest):
                 if env[0] != None then
                     get(env[0], name)
                 else
-                    error('Not found:', name)
+                    error("Not found:", name)
                 end
             end
         """)
 
         self.go("""
             _eval := func (expr, env) do
-                # print('eval', expr);
+                # print("eval", expr);
                 if expr == None then
                     None
                 elif is_bool(expr) or is_int(expr) then
                     expr
                 elif is_str(expr) then
                     get(env, expr)
-                elif expr[0] == 'func' then
-                    ['closure', expr[1], expr[2], env]
-                elif expr[0] == 'define' then
+                elif expr[0] == "$STR" then
+                    expr[1]
+                elif expr[0] == "func" then
+                    ["closure", expr[1], expr[2], env]
+                elif expr[0] == "define" then
                     define(env, expr[1], _eval(expr[2], env))
-                elif expr[0] == 'assign' then
+                elif expr[0] == "assign" then
                     assign(env, expr[1], _eval(expr[2], env))
-                elif expr[0] == 'seq' then
+                elif expr[0] == "seq" then
                     val := None;
                     for e in expr[1:] do
                         val = _eval(e, env)
                     end;
                     val
-                elif expr[0] == 'if' then
+                elif expr[0] == "if" then
                     if _eval(expr[1], env) then
                         _eval(expr[2], env)
                     else
@@ -192,7 +226,7 @@ class BaseToigOnToigTest(BaseTest):
 
         self.go("""
             apply := func (op_val, args_val) do
-                if op_val[0] == 'primitive' then
+                if op_val[0] == "primitive" then
                     op_val[1](args_val)
                 else
                     env := [op_val[3], []];
@@ -206,10 +240,10 @@ class BaseToigOnToigTest(BaseTest):
 
         self.go("""
             global_env := [None, [
-                ['add', ['primitive', func (args) do args[0] + args[1] end]],
-                ['sub', ['primitive', func (args) do args[0] - args[1] end]],
-                ['equal', ['primitive', func (args) do args[0] == args[1] end]],
-                ['print', ['primitive', func (args) do print(args[0]) end]]
+                ["add", ["primitive", func (args) do args[0] + args[1] end]],
+                ["sub", ["primitive", func (args) do args[0] - args[1] end]],
+                ["equal", ["primitive", func (args) do args[0] == args[1] end]],
+                ["print", ["primitive", func (args) do print(args[0]) end]]
             ]];
             eval := func (expr) do _eval(expr, global_env) end
         """)

@@ -21,12 +21,9 @@ class Scanner():
                 self._word(str.isnumeric)
                 return int(self._token)
             case c if c == "'":
-                self._advance()
-                while (c := self._current_char()) != "'":
-                    assert c != "$EOF", f"Unterminated string: {c}"
-                    self._append_char()
-                self._advance()
-                return ToigStr(self._token)
+                return self._raw_string()
+            case c if c == "\"":
+                return self._string()
             case c if c in "!":
                 self._append_char()
                 if self._current_char() == "=" or self._current_char() == "!":
@@ -63,6 +60,31 @@ class Scanner():
             case "True": return True
             case "False": return False
             case _ : return self._token
+
+    def _raw_string(self):
+        self._advance()
+        while (c := self._current_char()) != "'":
+            assert c != "$EOF", f"Unterminated string: {c}"
+            self._append_char()
+        self._advance()
+        return ToigStr(self._token)
+
+    def _string(self):
+        self._advance()
+        while (c := self._current_char()) != "\"":
+            assert c != "$EOF", f"Unterminated string: {c}"
+            if c == "\\":
+                self._advance()
+                c = self._current_char()
+                assert c != "$EOF", f"Unterminated string: {c}"
+                match c:
+                    case "n": self._token += "\n"
+                    case _: self._token += c
+                self._advance()
+            else:
+                self._append_char()
+        self._advance()
+        return ToigStr(self._token)
 
     def _comment(self):
         self._advance()
