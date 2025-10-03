@@ -86,10 +86,10 @@ class TestScanner(BaseToigOnToigTest):
     indirect=True)
 class TestInterpreter(BaseToigOnToigTest):
     def test_primary(self):
-        assert self.go(r""" go("None") """) == None
-        assert self.go(r""" go("True") """) == True
-        assert self.go(r""" go("False") """) == False
-        assert self.go(r""" go("5") """) == 5
+        assert self.go(r""" go('None') """) == None
+        assert self.go(r""" go('True') """) == True
+        assert self.go(r""" go('False') """) == False
+        assert self.go(r""" go('5') """) == 5
 
     def test_raw_string(self):
         assert self.go(r""" go("''") """) == ""
@@ -108,6 +108,20 @@ class TestInterpreter(BaseToigOnToigTest):
             assert self.go(r""" go('"abc') """)
         with pytest.raises(AssertionError):
             assert self.go(r""" go('"abc\"') """)
+
+    def test_if(self):
+        assert self.go(r""" go('if True then 5 else 6 end') """) == 5
+        assert self.go(r""" go('if False then 5 else 6 end') """) == 6
+        assert self.go(r""" go('if if True then True else 5 end then 6 else 7 end') """) == 6
+        assert self.go(r""" go('if True then if True then 5 else 6 end else 7 end') """) == 5
+        assert self.go(r""" go('if False then 5 else if True then 6 else 7 end end') """) == 6
+
+        with pytest.raises(AssertionError):
+            self.go(r""" go('if True end') """)
+        with pytest.raises(AssertionError):
+            self.go(r""" go('if True then 5') """)
+        with pytest.raises(AssertionError):
+            self.go(r""" go('if True then 5 else 6') """)
 
 @pytest.mark.parametrize(
     "set_interpreter",
