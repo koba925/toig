@@ -39,7 +39,6 @@ _builtins = {
     "not": lambda args: not args[0],
 
     "array": lambda args: args,
-    "is_array": lambda args: isinstance(args[0], list),
     "len": lambda args: len(args[0]),
     "get_at": lambda args: args[0][args[1]],
     "set_at": _set_at,
@@ -47,9 +46,11 @@ _builtins = {
     "set_slice": _set_slice,
     "append": lambda args: args[0].append(args[1]),
 
+    "pytype": lambda args: type(args[0]),
     "is_bool": lambda args: type(args[0]) is bool,
     "is_int": lambda args: type(args[0]) is int,
     "is_str": lambda args: type(args[0]) is ToigStr,
+    "is_array": lambda args: isinstance(args[0], list),
     "is_name": lambda args: type(args[0]) is str,
 
     "to_int": lambda args: int(args[0]),

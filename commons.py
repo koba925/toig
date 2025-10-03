@@ -4,7 +4,17 @@ class CustomRules(dict):
     pass
 
 class ToigStr(str):
-    pass
+    def __add__(self, other):
+        result = super().__add__(other)
+        return self.__class__(result)
+
+    def __mul__(self, other):
+        result = super().__mul__(other)
+        return self.__class__(result)
+
+    def __getitem__(self, key):
+        result = super().__getitem__(key)
+        return self.__class__(result)
 
 ValueType = None | bool | int | ToigStr | Callable | list
 

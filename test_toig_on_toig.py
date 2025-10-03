@@ -110,11 +110,8 @@ class TestInterpreter(BaseToigOnToigTest):
             assert self.go(r""" go('"abc\"') """)
 
     def test_if(self):
-        assert self.go(r""" go('if True then 5 else 6 end') """) == 5
-        assert self.go(r""" go('if False then 5 else 6 end') """) == 6
-        assert self.go(r""" go('if if True then True else 5 end then 6 else 7 end') """) == 6
-        assert self.go(r""" go('if True then if True then 5 else 6 end else 7 end') """) == 5
-        assert self.go(r""" go('if False then 5 else if True then 6 else 7 end end') """) == 6
+        assert self.go(r""" go('if 1; True then 2; 5 else 3; 6 end') """) == 5
+        assert self.go(r""" go('if 1; False then 2; 5 else 3; 6 end') """) == 6
 
         with pytest.raises(AssertionError):
             self.go(r""" go('if True end') """)
@@ -122,6 +119,24 @@ class TestInterpreter(BaseToigOnToigTest):
             self.go(r""" go('if True then 5') """)
         with pytest.raises(AssertionError):
             self.go(r""" go('if True then 5 else 6') """)
+
+    def test_sequence(self):
+        assert self.go(r""" go('5; 6') """) == 6
+
+    def test_define(self, capsys):
+        assert self.go(r""" go('a := 5') """) == 5
+        assert self.go(r""" go('a') """) == 5
+        assert self.go(r""" go('a := b := 6') """) == 6
+        assert self.go(r""" go('a') """) == 6
+        assert self.go(r""" go('b') """) == 6
+
+    def test_assign(self):
+        self.go(r""" a := b := 5 """)
+        assert self.go(r""" a = 6 """) == 6
+        assert self.go(r""" a """) == 6
+        assert self.go(r""" a = b = 7 """) == 7
+        assert self.go(r""" a """) == 7
+        assert self.go(r""" b """) == 7
 
 @pytest.mark.parametrize(
     "set_interpreter",

@@ -114,7 +114,15 @@ class BaseToigOnToigTest(BaseTest):
                         raw_string()
                     elif c == '"' then
                         string()
-                    else error('Invalid char:', c) end
+                    elif contains(c, ['=', ':']) then
+                        append_char();
+                        if current_char() == '=' then append_char() end;
+                        token
+                    elif contains(c, [';']) then
+                        append_char(); token
+                    else
+                        error('Invalid char:', c)
+                    end
                 end;
 
                 tokens := [];
@@ -151,15 +159,6 @@ class BaseToigOnToigTest(BaseTest):
                     advance()
                 end;
 
-                primary := func () do
-                    c := current_token();
-                    if c == None or is_bool(c) or is_int(c) then advance()
-                    elif is_array(c) and c[0] == '$STR' then advance()
-                    elif c == 'if' then if_()
-                    else error('Unexpected primary:', c)
-                    end
-                end;
-
                 if_ := func () do
                     advance();
                     cond_expr := expression();
@@ -171,8 +170,38 @@ class BaseToigOnToigTest(BaseTest):
                     ['if', cond_expr, then_expr, else_expr]
                 end;
 
+                primary := func () do
+                    c := current_token();
+                    if c == None or is_bool(c) or is_int(c) then advance()
+                    elif is_array(c) and c[0] == '$STR' then advance()
+                    elif c == 'if' then if_()
+                    else advance()
+                    end
+                end;
+
+                define_assign := func () do
+                    left := primary();
+                    op := current_token();
+                    if op == ':=' then
+                        advance(); ['define', left, define_assign()]
+                    elif op == '==' then
+                        advance(); ['assign', left, define_assign()]
+                    else
+                        left
+                    end
+                end;
+
+                sequence := func () do
+                    exprs := [define_assign()];
+                    while current_token() == ';' do
+                        advance();
+                        append(exprs, define_assign())
+                    end;
+                    if len(exprs) == 1 then exprs[0] else ['seq'] + exprs end
+                end;
+
                 expression := func () do
-                    primary()
+                    sequence()
                 end;
 
                 expr := expression();
@@ -191,7 +220,7 @@ class BaseToigOnToigTest(BaseTest):
                     if p[0] == name then p[1] = val; return(val) end
                 end;
                 append(env[1], [name, val]);
-                return(val)
+                val
             end
         """)
 
@@ -276,6 +305,7 @@ class BaseToigOnToigTest(BaseTest):
                 ['add', ['primitive', func (args) do args[0] + args[1] end]],
                 ['sub', ['primitive', func (args) do args[0] - args[1] end]],
                 ['equal', ['primitive', func (args) do args[0] == args[1] end]],
+                ['pytype', ['primitive', func (args) do pytype(args[0]) end]],
                 ['print', ['primitive', func (args) do print(args[0]) end]]
             ]];
             eval := func (expr) do _eval(expr, global_env) end
@@ -284,7 +314,8 @@ class BaseToigOnToigTest(BaseTest):
         # Interpreter
 
         self.go(r"""
-            go := func (src) do
+            go := func (src) do eval(parse(scan(src))) end;
+            go_verbose := func (src) do
                 print('src:', src);
                 tokens := scan(src);
                 print('tokens:', tokens);

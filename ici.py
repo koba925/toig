@@ -56,6 +56,7 @@ _builtins = {
     "set_slice": _set_slice,
     "append": _append,
 
+    "pytype": lambda _, s: s.append(type(s.pop())),
     "is_bool": lambda _, s: s.append(type(s.pop()) is bool),
     "is_int": lambda _, s: s.append(type(s.pop()) is int),
     "is_str": lambda _, s: s.append(type(s.pop()) is ToigStr),
