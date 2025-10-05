@@ -179,8 +179,17 @@ class BaseToigOnToigTest(BaseTest):
                     end
                 end;
 
+                not_ := func () do
+                    c := current_token();
+                    if c == 'not' then
+                        advance(); ['not_', not_()]
+                    else
+                        primary()
+                    end
+                end;
+
                 define_assign := func () do
-                    left := primary();
+                    left := not_();
                     op := current_token();
                     if op == ':=' then
                         advance(); ['define', left, define_assign()]

@@ -107,7 +107,7 @@ class Interpreter:
             expanded = self.expand(expr)
             code = self.compile(expanded)
             val = self.execute(code)
-        return val
+        return str(val) if isinstance(val, ToigStr) else val
 
 if __name__ == "__main__":
 

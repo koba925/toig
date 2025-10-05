@@ -242,6 +242,9 @@ class TestCore(BaseTest):
         with pytest.raises(AssertionError):
             self.go("5 + 6 = 7")
 
+    def test_raw_string(self):
+        assert self.go(""" 'not' """) == 'not'
+
     def test_string(self, capsys):
         assert self.go(""" "hello, world" """) == "hello, world"
 

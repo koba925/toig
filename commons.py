@@ -4,6 +4,15 @@ class CustomRules(dict):
     pass
 
 class ToigStr(str):
+    def __repr__(self):
+        return f"ToigStr({super().__repr__()})"
+
+    def __hash__(self):
+        return super().__hash__()
+
+    def __eq__(self, other):
+        return isinstance(other, ToigStr) and super().__eq__(other)
+
     def __add__(self, other):
         result = super().__add__(other)
         return self.__class__(result)

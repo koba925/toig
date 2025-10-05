@@ -1,5 +1,6 @@
 import pytest
 
+from commons import ToigStr
 from toig_on_toig import BaseToigOnToigTest
 from ici import Interpreter as ICI
 from stm import Interpreter as STM
@@ -61,24 +62,26 @@ class TestUtilities(BaseToigOnToigTest):
     indirect=True)
 class TestScanner(BaseToigOnToigTest):
     def test_whitespace(self):
-        assert self.go(r""" scan('') """) == ["$EOF"]
-        assert self.go(r""" scan(' 5 ') """) == [5, "$EOF"]
+        assert self.go(r""" scan('') """) == [ToigStr("$EOF")]
+        assert self.go(r""" scan(' 5 ') """) == [5, ToigStr("$EOF")]
         assert self.go(r""" scan('
             5
-        ') """) == [5, "$EOF"]
+        ') """) == [5, ToigStr("$EOF")]
 
     def test_primary(self):
-        assert self.go(r""" scan('None True False 5 56') """) == [None, True, False, 5, 56, "$EOF"]
+        assert self.go(r""" scan('None') """) == [None, ToigStr("$EOF")]
+        assert self.go(r""" scan('True False') """) == [True, False, ToigStr("$EOF")]
+        assert self.go(r""" scan('5 56') """) == [5, 56, ToigStr("$EOF")]
 
     def test_raw_string(self):
-        assert self.go(r""" scan("''") """) == [["$STR", ""], "$EOF"]
-        assert self.go(r""" scan("'abc'") """) == [["$STR", "abc"], "$EOF"]
-        assert self.go(r""" scan("'\\'") """) == [["$STR", "\\"], "$EOF"]
+        assert self.go(r""" scan("''") """) == [[ToigStr("$STR"), ToigStr("")], ToigStr("$EOF")]
+        assert self.go(r""" scan("'abc'") """) == [[ToigStr("$STR"), ToigStr("abc")], ToigStr("$EOF")]
+        assert self.go(r""" scan("'\\'") """) == [[ToigStr("$STR"), ToigStr("\\")], ToigStr("$EOF")]
 
     def test_string(self):
-        assert self.go(r""" scan('""') """) == [["$STR", ""], "$EOF"]
-        assert self.go(r""" scan('"abc"') """) == [["$STR", "abc"], "$EOF"]
-        assert self.go(r""" scan('"\\\n\""') """) == [["$STR", "\\\n\""], "$EOF"]
+        assert self.go(r""" scan('""') """) == [[ToigStr("$STR"), ToigStr("")], ToigStr("$EOF")]
+        assert self.go(r""" scan('"abc"') """) == [[ToigStr("$STR"), ToigStr("abc")], ToigStr("$EOF")]
+        assert self.go(r""" scan('"\\\n\""') """) == [[ToigStr("$STR"), ToigStr("\\\n\"")], ToigStr("$EOF")]
 
 @pytest.mark.parametrize(
     "set_interpreter",
@@ -137,6 +140,10 @@ class TestInterpreter(BaseToigOnToigTest):
         assert self.go(r""" a = b = 7 """) == 7
         assert self.go(r""" a """) == 7
         assert self.go(r""" b """) == 7
+
+    def test_not(self):
+        assert self.go(r""" not True """) == False
+        assert self.go(r""" not False """) == True
 
 @pytest.mark.parametrize(
     "set_interpreter",

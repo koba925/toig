@@ -81,7 +81,8 @@ class Interpreter:
         return Evaluator(["expand", expr], self._env, ["$halt"]).eval()
 
     def go(self, src):
-        return Evaluator(self.parse(src), self._env, ["$halt"]).eval()
+        val = Evaluator(self.parse(src), self._env, ["$halt"]).eval()
+        return str(val) if isinstance(val, ToigStr) else val
 
 if __name__ == "__main__":
     i = Interpreter()
