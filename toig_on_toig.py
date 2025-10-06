@@ -114,7 +114,7 @@ class BaseToigOnToigTest(BaseTest):
                         raw_string()
                     elif c == '"' then
                         string()
-                    elif contains(c, ['=', ':']) then
+                    elif contains(c, ['=', '<', '>', '!', ':']) then
                         append_char();
                         if current_char() == '=' then append_char() end;
                         token
@@ -179,12 +179,34 @@ class BaseToigOnToigTest(BaseTest):
                     end
                 end;
 
+                comparison := runc () do
+                    left := primary();
+                    while True do
+                        op := current_token();
+                        if op == '==' then
+                            advance(); left = ['equal', left, primary()]
+                        elif op == '!=' then
+                            advance(); left = ['not_equal', left, primary()]
+                        elif op == '<' then
+                            advance(); left = ['less', left, primary()]
+                        elif op == '>' then
+                            advance(); left = ['greater', left, primary()]
+                        elif op == '<=' then
+                            advance(); left = ['less_equal', left, primary()]
+                        elif op == '>=' then
+                            advance(); left = ['greater_equal', left, primary()]
+                        else
+                            return(left)
+                        end
+                    end
+                end;
+
                 not_ := func () do
                     c := current_token();
                     if c == 'not' then
-                        advance(); ['not_', not_()]
+                        advance(); ['not', not_()]
                     else
-                        primary()
+                        comparison()
                     end
                 end;
 
@@ -193,7 +215,7 @@ class BaseToigOnToigTest(BaseTest):
                     op := current_token();
                     if op == ':=' then
                         advance(); ['define', left, define_assign()]
-                    elif op == '==' then
+                    elif op == '=' then
                         advance(); ['assign', left, define_assign()]
                     else
                         left
@@ -313,7 +335,15 @@ class BaseToigOnToigTest(BaseTest):
             global_env := [None, [
                 ['add', ['primitive', func (args) do args[0] + args[1] end]],
                 ['sub', ['primitive', func (args) do args[0] - args[1] end]],
+
                 ['equal', ['primitive', func (args) do args[0] == args[1] end]],
+                ['not_equal', ['primitive', func (args) do args[0] != args[1] end]],
+                ['less', ['primitive', func (args) do args[0] < args[1] end]],
+                ['greater', ['primitive', func (args) do args[0] > args[1] end]],
+                ['less_equal', ['primitive', func (args) do args[0] <= args[1] end]],
+                ['greater_equal', ['primitive', func (args) do args[0] >= args[1] end]],
+                ['not', ['primitive', func (args) do not args[0] end]],
+
                 ['pytype', ['primitive', func (args) do pytype(args[0]) end]],
                 ['print', ['primitive', func (args) do print(args[0]) end]]
             ]];

@@ -134,16 +134,25 @@ class TestInterpreter(BaseToigOnToigTest):
         assert self.go(r""" go('b') """) == 6
 
     def test_assign(self):
-        self.go(r""" a := b := 5 """)
-        assert self.go(r""" a = 6 """) == 6
-        assert self.go(r""" a """) == 6
-        assert self.go(r""" a = b = 7 """) == 7
-        assert self.go(r""" a """) == 7
-        assert self.go(r""" b """) == 7
+        self.go(r""" go('a := b := 5') """)
+        assert self.go(r""" go('a = 6') """) == 6
+        assert self.go(r""" go('a') """) == 6
+        assert self.go(r""" go('a = b = 7') """) == 7
+        assert self.go(r""" go('a') """) == 7
+        assert self.go(r""" go('b') """) == 7
 
     def test_not(self):
-        assert self.go(r""" not True """) == False
-        assert self.go(r""" not False """) == True
+        assert self.go(r""" go('not 5 == 5') """) == False
+        assert self.go(r""" go('not 5 == 6') """) == True
+        assert self.go(r""" go('not not 5 == 5') """) == True
+
+    def test_comparison(self):
+        assert self.go(r""" go('5 == 5') """) == True
+        assert self.go(r""" go('5 == 6') """) == False
+        assert self.go(r""" go('5 != 5') """) == False
+        assert self.go(r""" go('5 != 6') """) == True
+
+        assert self.go(r""" go('5 == 5 == True') """) == True
 
 @pytest.mark.parametrize(
     "set_interpreter",
