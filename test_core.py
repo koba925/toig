@@ -95,6 +95,8 @@ class TestCore(BaseTest):
         assert self.go("not True and False") is False
         assert self.go("not (True and False)") is True
 
+        assert self.go("not not True") is True
+
     def test_comparison(self):
         assert self.go("5 + 8 == 6 + 7") is True
         assert self.go("5 + 6 == 6 + 7") is False
@@ -114,6 +116,8 @@ class TestCore(BaseTest):
         assert self.go("5 + 7 >= 6 + 7") is False
         assert self.go("5 + 8 >= 6 + 7") is True
         assert self.go("5 + 8 >= 5 + 7") is True
+
+        assert self.go("5 == 5 == True") is True
 
         assert self.go("not 5 == 6") is True
         assert self.go("(not 5) == 6") is False
@@ -243,6 +247,7 @@ class TestCore(BaseTest):
             self.go("5 + 6 = 7")
 
     def test_raw_string(self):
+        assert self.go(""" ')' """) == ')'
         assert self.go(""" 'not' """) == 'not'
 
     def test_string(self, capsys):

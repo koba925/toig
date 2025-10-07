@@ -127,14 +127,14 @@ class TestInterpreter(BaseToigOnToigTest):
         assert self.go(r""" go('5; 6') """) == 6
 
     def test_define(self, capsys):
-        assert self.go(r""" go('a := 5') """) == 5
-        assert self.go(r""" go('a') """) == 5
+        assert self.go(r""" go('a := not True') """) == False
+        assert self.go(r""" go('a') """) == False
         assert self.go(r""" go('a := b := 6') """) == 6
         assert self.go(r""" go('a') """) == 6
         assert self.go(r""" go('b') """) == 6
 
     def test_assign(self):
-        self.go(r""" go('a := b := 5') """)
+        self.go(r""" go('a := b := not True') """)
         assert self.go(r""" go('a = 6') """) == 6
         assert self.go(r""" go('a') """) == 6
         assert self.go(r""" go('a = b = 7') """) == 7
@@ -147,12 +147,53 @@ class TestInterpreter(BaseToigOnToigTest):
         assert self.go(r""" go('not not 5 == 5') """) == True
 
     def test_comparison(self):
-        assert self.go(r""" go('5 == 5') """) == True
-        assert self.go(r""" go('5 == 6') """) == False
-        assert self.go(r""" go('5 != 5') """) == False
-        assert self.go(r""" go('5 != 6') """) == True
+        assert self.go(r""" go('5 + 8 == 6 + 7') """) == True
+        assert self.go(r""" go('5 + 6 == 6 + 7') """) == False
+        assert self.go(r""" go('5 + 8 != 6 + 7') """) == False
+        assert self.go(r""" go('5 + 6 != 6 + 7') """) == True
+
+        assert self.go(r""" go('5 + 7 < 6 + 7') """) == True
+        assert self.go(r""" go('5 + 8 < 6 + 7') """) == False
+        assert self.go(r""" go('5 + 8 < 5 + 7') """) == False
+        assert self.go(r""" go('5 + 7 > 6 + 7') """) == False
+        assert self.go(r""" go('5 + 8 > 6 + 7') """) == False
+        assert self.go(r""" go('5 + 8 > 5 + 7') """) == True
+        assert self.go(r""" go('5 + 7 <= 6 + 7') """) == True
+        assert self.go(r""" go('5 + 8 <= 6 + 7') """) == True
+        assert self.go(r""" go('5 + 8 <= 5 + 7') """) == False
+        assert self.go(r""" go('5 + 7 >= 6 + 7') """) == False
+        assert self.go(r""" go('5 + 8 >= 6 + 7') """) == True
+        assert self.go(r""" go('5 + 8 >= 5 + 7') """) == True
 
         assert self.go(r""" go('5 == 5 == True') """) == True
+
+    def test_add_sub(self):
+        assert self.go(r""" go('5 + 6 + 7') """) == 18
+        assert self.go(r""" go('18 - 7 - 6') """) == 5
+
+    def test_mul_div_mod(self):
+        assert self.go(r""" go('5 * 6 * 7') """) == 210
+        assert self.go(r""" go('210 / 6 / 7') """) == 5
+        assert self.go(r""" go('216 / 6 % 7') """) == 1
+        assert self.go(r""" go('5 + 6 * 7') """) == 47
+        assert self.go(r""" go('5 * 6 + 7') """) == 37
+
+    def test_neg(self):
+        assert self.go(r""" go('-5') """) == -5
+        assert self.go(r""" go('-5 * 6') """) == -30
+        assert self.go(r""" go('5 * -6') """) == -30
+
+        assert self.go(r""" go('--5') """) == 5
+
+    def test_paren(self):
+        assert self.go(r""" go('(5; 6) * 7') """) == 42
+        assert self.go(r""" go('5 * (6; 7)') """) == 35
+        assert self.go(r""" go('(5) + 6') """) == 11
+
+        with pytest.raises(AssertionError):
+            self.go(r""" go('(5') """)
+        with pytest.raises(AssertionError):
+            self.go(r""" go('5)') """)
 
 @pytest.mark.parametrize(
     "set_interpreter",

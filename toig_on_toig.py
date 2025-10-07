@@ -114,11 +114,11 @@ class BaseToigOnToigTest(BaseTest):
                         raw_string()
                     elif c == '"' then
                         string()
-                    elif contains(c, ['=', '<', '>', '!', ':']) then
+                    elif contains(c, '=<>!:') then
                         append_char();
                         if current_char() == '=' then append_char() end;
                         token
-                    elif contains(c, [';']) then
+                    elif contains(c, '+-*/%();') then
                         append_char(); token
                     else
                         error('Invalid char:', c)
@@ -174,27 +174,71 @@ class BaseToigOnToigTest(BaseTest):
                     c := current_token();
                     if c == None or is_bool(c) or is_int(c) then advance()
                     elif is_array(c) and c[0] == '$STR' then advance()
+                    elif c == '(' then
+                        advance();
+                        expr := expression();
+                        consume([')']);
+                        expr
                     elif c == 'if' then if_()
                     else advance()
                     end
                 end;
 
+                unary_ops := func () do
+                    c := current_token();
+                    if c == '-' then
+                        advance(); ['neg', unary_ops()]
+                    else
+                        primary()
+                    end
+                end;
+
+                mul_div := runc () do
+                    left := unary_ops();
+                    while True do
+                        op := current_token();
+                        if op == '*' then
+                            advance(); left = ['mul', left, unary_ops()]
+                        elif op == '/' then
+                            advance(); left = ['div', left, unary_ops()]
+                        elif op == '%' then
+                            advance(); left = ['mod', left, unary_ops()]
+                        else
+                            return(left)
+                        end
+                    end
+                end;
+
+                add_sub := runc () do
+                    left := mul_div();
+                    while True do
+                        op := current_token();
+                        if op == '+' then
+                            advance(); left = ['add', left, mul_div()]
+                        elif op == '-' then
+                            advance(); left = ['sub', left, mul_div()]
+                        else
+                            return(left)
+                        end
+                    end
+                end;
+
                 comparison := runc () do
-                    left := primary();
+                    left := add_sub();
                     while True do
                         op := current_token();
                         if op == '==' then
-                            advance(); left = ['equal', left, primary()]
+                            advance(); left = ['equal', left, add_sub()]
                         elif op == '!=' then
-                            advance(); left = ['not_equal', left, primary()]
+                            advance(); left = ['not_equal', left, add_sub()]
                         elif op == '<' then
-                            advance(); left = ['less', left, primary()]
+                            advance(); left = ['less', left, add_sub()]
                         elif op == '>' then
-                            advance(); left = ['greater', left, primary()]
+                            advance(); left = ['greater', left, add_sub()]
                         elif op == '<=' then
-                            advance(); left = ['less_equal', left, primary()]
+                            advance(); left = ['less_equal', left, add_sub()]
                         elif op == '>=' then
-                            advance(); left = ['greater_equal', left, primary()]
+                            advance(); left = ['greater_equal', left, add_sub()]
                         else
                             return(left)
                         end
@@ -335,6 +379,10 @@ class BaseToigOnToigTest(BaseTest):
             global_env := [None, [
                 ['add', ['primitive', func (args) do args[0] + args[1] end]],
                 ['sub', ['primitive', func (args) do args[0] - args[1] end]],
+                ['mul', ['primitive', func (args) do args[0] * args[1] end]],
+                ['div', ['primitive', func (args) do args[0] / args[1] end]],
+                ['mod', ['primitive', func (args) do args[0] % args[1] end]],
+                ['neg', ['primitive', func (args) do -args[0] end]],
 
                 ['equal', ['primitive', func (args) do args[0] == args[1] end]],
                 ['not_equal', ['primitive', func (args) do args[0] != args[1] end]],
