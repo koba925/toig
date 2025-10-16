@@ -118,7 +118,7 @@ class BaseToigOnToigTest(BaseTest):
                         append_char();
                         if current_char() == '=' then append_char() end;
                         token
-                    elif contains(c, '+-*/%();') then
+                    elif contains(c, '+-*/%(),;') then
                         append_char(); token
                     else
                         error('Invalid char:', c)
@@ -159,6 +159,29 @@ class BaseToigOnToigTest(BaseTest):
                     advance()
                 end;
 
+                comma_separated_exprs := func (closing_token) do
+                    cse := [];
+                    if not match([closing_token]) then
+                        append(cse, expression());
+                        while match([',']) do
+                            advance();
+                            append(cse, expression())
+                        end
+                    end;
+                    consume([closing_token]);
+                    cse
+                end;
+
+                func_ := func () do
+                    advance();
+                    consume(['(']);
+                    params := comma_separated_exprs(')');
+                    consume(['do']);
+                    body := expression();
+                    consume(['end']);
+                    ['func', params, body]
+                end;
+
                 if_ := func () do
                     advance();
                     cond_expr := expression();
@@ -179,9 +202,21 @@ class BaseToigOnToigTest(BaseTest):
                         expr := expression();
                         consume([')']);
                         expr
+                    elif c == 'func' then func_()
                     elif c == 'if' then if_()
                     else advance()
                     end
+                end;
+
+                call := func () do
+                    target := primary();
+                    if match(['(']) then
+                        while match(['(']) do
+                            advance();
+                            target = [target] + comma_separated_exprs(')')
+                        end
+                    end;
+                    target
                 end;
 
                 unary_ops := func () do
@@ -189,7 +224,7 @@ class BaseToigOnToigTest(BaseTest):
                     if c == '-' then
                         advance(); ['neg', unary_ops()]
                     else
-                        primary()
+                        call()
                     end
                 end;
 
@@ -393,7 +428,9 @@ class BaseToigOnToigTest(BaseTest):
                 ['not', ['primitive', func (args) do not args[0] end]],
 
                 ['pytype', ['primitive', func (args) do pytype(args[0]) end]],
-                ['print', ['primitive', func (args) do print(args[0]) end]]
+
+                ['print', ['primitive', func (args) do print(args[0]) end]],
+                ['clock_ms', ['primitive', func (args) do clock_ms() end]]
             ]];
             eval := func (expr) do _eval(expr, global_env) end
         """)

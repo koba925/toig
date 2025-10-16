@@ -31,6 +31,8 @@ def _append(_, s):
 def _error(n, s):
     assert False, f"{' '.join(map(str, [s.pop() for _ in range(n)]))}"
 
+import time
+
 _builtins = {
     "__builtins__": None,
     "add": lambda _, s: s.append(s.pop() + s.pop()),
@@ -66,6 +68,7 @@ _builtins = {
     "to_int": lambda _, s: s.append(int(s.pop())),
 
     "print": lambda n, s: s.append(print(*[s.pop() for _ in range(n)])),
+    "clock_ms": lambda _, s: s.append(time.perf_counter_ns() // 1_000_000),
     "error": _error
 }
 
@@ -134,8 +137,8 @@ if __name__ == "__main__":
         print(f"Expected Result: {expected}")
         assert expected == result
 
-    go_verbose("""
-        'hello, ' + 'world'
-    """)
+    print(i.parse("""
+        print(')')
+    """))
 
 

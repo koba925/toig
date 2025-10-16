@@ -21,6 +21,8 @@ def _set_slice(args):
 def _error(args):
     assert False, f"{' '.join(map(str, args))}"
 
+import time
+
 _builtins = {
     "__builtins__": None,
     "add": lambda args: args[0] + args[1],
@@ -56,6 +58,7 @@ _builtins = {
     "to_int": lambda args: int(args[0]),
 
     "print": lambda args: print(*args),
+    "clock_ms": lambda args: time.perf_counter_ns() // 1_000_000,
     "error": lambda args: _error(args)
 }
 
