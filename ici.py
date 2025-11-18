@@ -3,87 +3,14 @@ from parser import CustomRules, Parser
 from stdlib import StdLib
 from environment import Environment
 from ici_evaluator import Expander, Compiler, VM
-
-# Builtins
-
-def _get_at(_, s):
-    arr = s.pop(); index = s.pop(); s.append(arr[index])
-
-def _set_at(_, s):
-    arr = s.pop(); index = s.pop(); val = s.pop()
-    arr[index] = val
-    s.append(val)
-
-def _slice(_, s):
-    arr = s.pop(); start = s.pop(); end = s.pop(); step = s.pop()
-    s.append(arr[slice(start, end, step)])
-
-def _set_slice(_, s):
-    arr = s.pop(); start = s.pop(); end = s.pop(); step = s.pop(); val = s.pop()
-    arr[start:end:step] = val
-    s.append(val)
-
-def _append(_, s):
-    arr = s.pop(); val = s.pop()
-    arr.append(val)
-    s.append(None)
-
-def _error(n, s):
-    assert False, f"{' '.join(map(str, [s.pop() for _ in range(n)]))}"
-
-import time
-
-_builtins = {
-    "__builtins__": None,
-    "add": lambda _, s: s.append(s.pop() + s.pop()),
-    "sub": lambda _, s: s.append(s.pop() - s.pop()),
-    "mul": lambda _, s: s.append(s.pop() * s.pop()),
-    "div": lambda _, s: s.append(s.pop() // s.pop()),
-    "mod": lambda _, s: s.append(s.pop() % s.pop()),
-    "neg": lambda _, s: s.append(-s.pop()),
-
-    "equal": lambda _, s: s.append(s.pop() == s.pop()),
-    "not_equal": lambda _, s: s.append(s.pop() != s.pop()),
-    "less": lambda _, s: s.append(s.pop() < s.pop()),
-    "greater": lambda _, s: s.append(s.pop() > s.pop()),
-    "less_equal": lambda _, s: s.append(s.pop() <= s.pop()),
-    "greater_equal": lambda _, s: s.append(s.pop() >= s.pop()),
-    "not": lambda _, s: s.append(not s.pop()),
-
-    "array": lambda n, s: s.append([s.pop() for _ in range(n)]),
-    "len": lambda _, s: s.append(len(s.pop())),
-    "get_at": _get_at,
-    "set_at": _set_at,
-    "slice": _slice,
-    "set_slice": _set_slice,
-    "append": _append,
-
-    "pytype": lambda _, s: s.append(type(s.pop())),
-    "is_bool": lambda _, s: s.append(type(s.pop()) is bool),
-    "is_int": lambda _, s: s.append(type(s.pop()) is int),
-    "is_str": lambda _, s: s.append(type(s.pop()) is ToigStr),
-    "is_array": lambda _, s: s.append(isinstance(s.pop(), list)),
-    "is_name": lambda _, s: s.append(type(s.pop()) is str),
-
-    "to_int": lambda _, s: s.append(int(s.pop())),
-
-    "print": lambda n, s: s.append(print(*[s.pop() for _ in range(n)])),
-    "clock_ms": lambda _, s: s.append(time.perf_counter_ns() // 1_000_000),
-    "error": _error
-}
-
-class Builtins:
-    @staticmethod
-    def load(env):
-        for name, func in _builtins.items():
-            env.define(name, func)
+import builtin_functions
 
 class Interpreter:
     def __init__(self):
         self._custom_rule = CustomRules()
         self._env = Environment()
         self._vm = VM(self._env)
-        Builtins.load(self._env)
+        builtin_functions.load(self._env)
         self._vm.new_scope()
         StdLib(self).load()
         self._vm.new_scope()
@@ -137,8 +64,6 @@ if __name__ == "__main__":
         print(f"Expected Result: {expected}")
         assert expected == result
 
-    print(i.parse("""
-        print(')')
+    print(go_verbose("""
+        letcc cc do cc(5) + 6 end
     """))
-
-

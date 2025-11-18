@@ -370,16 +370,16 @@ class TestCore(BaseTest):
         assert self.go("quasiquote if a == 5 then 6; 7 else unquote(8; 9) end end") == ["if", ["equal", "a", 5], ["seq", 6, 7], 9]
 
     def test_defmacro(self):
-        self.go("defmacro foo () do quote(abc) end")
+        self.go("defmacro foo with () do quote(abc) end")
         assert self.expanded("foo()") == "abc"
 
         self.go("""
-            defmacro sq (a) do quasiquote unquote(a) * unquote(a) end end
+            defmacro sq with (a) do quasiquote unquote(a) * unquote(a) end end
         """)
         assert self.expanded("sq(5 + 6)") == ["mul", ["add", 5, 6], ["add", 5, 6]]
 
         self.go("""
-            defmacro build_exp (op, *r) do quasiquote
+            defmacro build_exp with (op, *r) do quasiquote
                 unquote(op)(unquote_splicing(r))
             end end
         """)
@@ -388,7 +388,7 @@ class TestCore(BaseTest):
         assert self.expanded("build_exp(add, 5, 6)") == ["add", 5, 6]
 
         self.go("""
-            defmacro rest2 (*a, b) do quasiquote
+            defmacro rest2 with (*a, b) do quasiquote
                 [quote(unquote(a)), quote(unquote(b))]
             end end
         """)
@@ -397,23 +397,37 @@ class TestCore(BaseTest):
         assert self.go("rest2(5, 6, 7)") == [[5, 6], 7]
 
         self.go("""
-            defmacro rest3 (a, *b, c) do quasiquote
+            defmacro rest3 with (a, *b, c) do quasiquote
                 [quote(unquote(a)), quote(unquote(b)), quote(unquote(c))]
             end end
         """)
         assert self.go("rest3(5, 6, 7)") == [5, [6], 7]
 
+    def test_macro_defining_macro(self):
+        self.go("""
+            defmacro alias with (als, org) do quasiquote
+                defmacro unquote(als) with (*args) do quasiquote
+                    unquote(org)(unquote(quote(unquote_splicing(args))))
+                end end
+            end end
+        """)
+
+        self.go(""" alias(a, add) """)
+
+        assert self.expanded("a(5, 6)") == ["add", 5, 6]
+        assert self.go("a(5, 6)") == 11
+
     def test_step_execution(self):
         self.go("""
             myadd := func (a, b) do a + b end;
-            defmacro foo (a) do myadd([quote(array)], [a]) end;
+            defmacro foo with (a) do myadd([quote(array)], [a]) end;
             foo(5)
         """)
 
     def test_custom(self):
         with pytest.raises(AssertionError):
             self.go("""
-                defmacro foo (a) do quasiquote print(unquote(a)) end end;
+                defmacro foo with (a) do quasiquote print(unquote(a)) end end;
                 #rule [foo, foo, 5, EXPR, end]
                 foo 6 end
             """)

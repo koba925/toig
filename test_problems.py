@@ -56,7 +56,7 @@ class TestProblemsBase(BaseTest):
 
     def test_let(self):
         self.go("""
-            defmacro _let (bindings, body) do
+            defmacro _let with (bindings, body) do
                 defines := func (bindings) do
                     map(bindings[1:], func (b) do
                         quasiquote unquote(b[1]) := unquote(b[2]) end
@@ -80,7 +80,7 @@ class TestProblemsBase(BaseTest):
 
     def test_let3(self):
         self.go("""
-            defmacro _let3 (*bindings, body) do
+            defmacro _let3 with (*bindings, body) do
                 defines := func (bindings) do
                     map(bindings, func (b) do
                         quasiquote unquote(b[1]) := unquote(b[2]) end
@@ -106,7 +106,7 @@ class TestProblemsBase(BaseTest):
 
     def test_let4(self):
         self.go("""
-            defmacro _let4 (*bindings, body) do
+            defmacro _let4 with (*bindings, body) do
                 i := 0; defines := array();
                 while i < len(bindings) do
                     defines = defines + array(
@@ -134,7 +134,7 @@ class TestProblemsBase(BaseTest):
 
     def test_cond(self):
         self.go("""
-            defmacro cond (*clauses) do
+            defmacro cond with (*clauses) do
                 _cond := func (clauses) do
                     if clauses == [] then None else
                         clause := first(clauses);
@@ -164,7 +164,7 @@ class TestProblemsBase(BaseTest):
 
     def test_cond2(self):
         self.go("""
-            defmacro _cond (*clauses) do
+            defmacro _cond with (*clauses) do
                 __cond := func (clauses) do
                     if clauses == [] then None else
                         cnd := first(clauses); clauses := rest(clauses);
@@ -199,7 +199,7 @@ class TestProblemsBase(BaseTest):
 
     def test_my_if(self):
         self.go("""
-            defmacro _my_if (cnd, thn, *rest) do
+            defmacro _my_if with (cnd, thn, *rest) do
                 if len(rest) == 0 then
                     quasiquote if unquote(cnd) then unquote(thn) else None end end
                 elif len(rest) == 1 then
@@ -293,7 +293,7 @@ class TestProblemsBase(BaseTest):
     def test_letcc_try(self, capsys):
         self.go("""
             raise := func (e) do error(quote(raised_outside_of_try), e) end;
-            defmacro _try (try_expr, exc_var, exc_expr) do quasiquote scope
+            defmacro _try with (try_expr, exc_var, exc_expr) do quasiquote scope
                 prev_raise := raise;
                 letcc escape do
                     raise = func (unquote(exc_var)) do escape(unquote(exc_expr)) end;
@@ -382,7 +382,7 @@ class TestProblemsBase(BaseTest):
 
     def test_replace_AST_element(self):
         self.go("""
-            defmacro force_minus (expr) do
+            defmacro force_minus with (expr) do
                 expr[0] = quote(sub); expr
             end
         """)

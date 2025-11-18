@@ -33,6 +33,8 @@ class Scanner():
                 if self._current_char() == "=": self._append_char()
             case c if c in "+-*/%?()[],;":
                 self._append_char()
+            case invalid:
+                assert False, f"Invalid Character: {invalid}"
 
         return self._token
 
@@ -180,7 +182,9 @@ class Parser:
         if self._current_token != "defmacro":
             return self._define_assign()
         self._advance()
-        name = self._advance()
+
+        name = self._expression()
+        self._consume("with")
         self._consume("(")
         params = self._comma_separated_exprs(")")
         self._consume("do")

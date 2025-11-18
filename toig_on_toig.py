@@ -12,7 +12,7 @@ class BaseToigOnToigTest(BaseTest):
             is_space := func (c) do c == ' ' or c == "\n" end;
             is_digit := func (c) do '0' <= c and c <= '9' end;
             is_alphabet := func (c) do
-                ('A' <= c and c <= 'Z') or  ('a' <= c and c <= 'z')
+                ('A' <= c and c <= 'Z') or ('a' <= c and c <= 'z')
             end
         """)
 
@@ -35,7 +35,7 @@ class BaseToigOnToigTest(BaseTest):
         # Scanner
 
         self.go(r"""
-            scan := func (src) do
+            scan := func (src, rules) do
                 pos := 0;
                 token := '';
 
@@ -98,6 +98,21 @@ class BaseToigOnToigTest(BaseTest):
                     ['$STR', token]
                 end;
 
+                comment := func () do
+                    advance();
+
+                    line := "";
+                    while not contains(current_char(), ["\n", '$EOF']) do
+                        line = line + current_char();
+                        advance()
+                    end;
+                    if line[0:5] == 'rule ' then
+                        rule := parse(scan(line[5:], new_env()), new_env());
+                        define(rules, rule[1], rule[2:])
+                    end;
+                    get_token()
+                end;
+
                 get_token := func () do
                     token = '';
 
@@ -105,6 +120,8 @@ class BaseToigOnToigTest(BaseTest):
 
                     c := current_char();
                     if c == '$EOF' then '$EOF'
+                    elif c == '#' then
+                        comment()
                     elif is_name_first(c) then
                         name()
                     elif is_digit(c) then
@@ -118,7 +135,7 @@ class BaseToigOnToigTest(BaseTest):
                         append_char();
                         if current_char() == '=' then append_char() end;
                         token
-                    elif contains(c, '+-*/%(),;') then
+                    elif contains(c, '+-*/%?()[],;') then
                         append_char(); token
                     else
                         error('Invalid char:', c)
@@ -138,7 +155,7 @@ class BaseToigOnToigTest(BaseTest):
         # Parser
 
         self.go(r"""
-            parse := func (tokens) do
+            parse := func (tokens, rules) do
                 pos := 0;
 
                 current_token := func () do tokens[pos] end;
@@ -172,14 +189,14 @@ class BaseToigOnToigTest(BaseTest):
                     cse
                 end;
 
-                func_ := func () do
-                    advance();
+                func_macro := func () do
+                    op := advance();
                     consume(['(']);
                     params := comma_separated_exprs(')');
                     consume(['do']);
                     body := expression();
                     consume(['end']);
-                    ['func', params, body]
+                    [op, params, body]
                 end;
 
                 if_ := func () do
@@ -193,27 +210,122 @@ class BaseToigOnToigTest(BaseTest):
                     ['if', cond_expr, then_expr, else_expr]
                 end;
 
+                custom := func (rule) do
+                    _custom := func (r) do
+                        if r == [] then []
+                        elif r[0] == 'EXPR' then
+                            [expression()] + [_custom(r[1:])][0]
+                        elif r[0] == 'PARAMS' then
+                            consume(['(']);
+                            [comma_separated_exprs(")")] + _custom(r[1:])
+                        elif is_str(r[0]) then
+                            consume([r[0]]);
+                            _custom(r[1:])
+                        elif r[0][0] == '*' then
+                            subrule := r[0][1]; elems := [];
+                            while current_token() == subrule[1] do
+                                advance();
+                                elems = elems + _custom(subrule[2:])
+                            end;
+                            elems + _custom(r[1:])
+                        elif r[0][0] == '?' then
+                            subrule := r[0][1]; elems := [];
+                            if current_token() == subrule[1] then
+                                advance();
+                                elems = elems + _custom(subrule[2:])
+                            end;
+                            elems + _custom(r[1:])
+                        else
+                            error('Illegal rule:', r)
+                        end
+                    end;
+
+                    [rule[0]] + _custom(rule[1:])
+                end;
+
                 primary := func () do
                     c := current_token();
-                    if c == None or is_bool(c) or is_int(c) then advance()
-                    elif is_array(c) and c[0] == '$STR' then advance()
+                    if c == None or is_bool(c) or is_int(c) then
+                        advance()
+                    elif is_array(c) and c[0] == '$STR' then
+                        advance()
                     elif c == '(' then
-                        advance();
-                        expr := expression();
-                        consume([')']);
+                        advance(); expr := expression(); consume([')']);
                         expr
-                    elif c == 'func' then func_()
-                    elif c == 'if' then if_()
-                    else advance()
+                    elif c == '[' then
+                        advance();
+                        ['array'] + comma_separated_exprs(']')
+                    elif contains(c, ['func', 'macro']) then
+                        func_macro()
+                    elif c == '__if' then
+                        if_()
+                    elif has_name(rules, c) then
+                        advance();
+                        custom(get(rules, c))
+                    else
+                        advance()
                     end
                 end;
 
-                call := func () do
+                index_slice := runc (target) do
+                    start := end := step := None;
+
+                    if current_token() == "]" then
+                        error("Invalid index/slice:", current_token())
+                    end;
+                    if current_token() != ":" then
+                        start = expression()
+                    end;
+                    if current_token() == "]" then
+                        advance();
+                        return(["get_at", target, start])
+                    end;
+
+                    if current_token() != ":" then
+                        error("Invalid index/slice:", current_token())
+                    end;
+                    advance();
+
+                    if current_token() == "]" then
+                        advance();
+                        return(["slice", target, start, end, step])
+                    end;
+                    if current_token() != ":" then
+                        end = expression()
+                    end;
+                    if current_token() == "]" then
+                        advance();
+                        return(["slice", target, start, end, step])
+                    end;
+
+                    if current_token() != ":" then
+                        error("Invalid index/slice:", current_token())
+                    end;
+                    advance();
+                    if current_token() == "]" then
+                        advance();
+                        return(["slice", target, start, end, step])
+                    end;
+                    if current_token() != ":" then
+                        step = expression()
+                    end;
+                    if current_token() == "]" then
+                        advance();
+                        return(["slice", target, start, end, step])
+                    end;
+
+                    error("Invalid index/slice:", current_token())
+                end;
+
+                call_index := func () do
                     target := primary();
-                    if match(['(']) then
-                        while match(['(']) do
-                            advance();
-                            target = [target] + comma_separated_exprs(')')
+                    if match(['(', '[']) then
+                        while match(['(', '[']) do
+                            if advance() == '(' then
+                                target = [target] + comma_separated_exprs(')')
+                            else
+                                target = index_slice(target)
+                            end
                         end
                     end;
                     target
@@ -223,8 +335,12 @@ class BaseToigOnToigTest(BaseTest):
                     c := current_token();
                     if c == '-' then
                         advance(); ['neg', unary_ops()]
+                    elif c == '*' then
+                        advance(); ['*', unary_ops()]
+                    elif c == '?' then
+                        advance(); ['?', unary_ops()]
                     else
-                        call()
+                        call_index()
                     end
                 end;
 
@@ -289,8 +405,32 @@ class BaseToigOnToigTest(BaseTest):
                     end
                 end;
 
-                define_assign := func () do
+                and_ := runc () do
                     left := not_();
+                    while True do
+                        op := current_token();
+                        if op == 'and' then
+                            advance(); left = ['and', left, not_()]
+                        else
+                            return(left)
+                        end
+                    end
+                end;
+
+                or_ := runc () do
+                    left := and_();
+                    while True do
+                        op := current_token();
+                        if op == 'or' then
+                            advance(); left = ['or', left, and_()]
+                        else
+                            return(left)
+                        end
+                    end
+                end;
+
+                define_assign := func () do
+                    left := or_();
                     op := current_token();
                     if op == ':=' then
                         advance(); ['define', left, define_assign()]
@@ -323,6 +463,11 @@ class BaseToigOnToigTest(BaseTest):
         """)
 
         # Evaluator
+
+        self.go(r"""
+            new_env := func() do [None, []][:] end;
+            enter_scope := func (env) do [env, []] end
+        """)
 
         self.go(r"""
             define := runc (env, name, val) do
@@ -361,7 +506,21 @@ class BaseToigOnToigTest(BaseTest):
         """)
 
         self.go(r"""
+             has_name := runc (env, name) do
+                for p in env[1] do
+                    if p[0] == name then return(True) end
+                end;
+                if env[0] != None then
+                    has_name(env[0], name)
+                else
+                    False
+                end
+            end
+        """)
+
+        self.go(r"""
             _eval := func (expr, env) do
+                print("_eval", expr);
                 if expr == None then
                     None
                 elif is_bool(expr) or is_int(expr) then
@@ -372,46 +531,161 @@ class BaseToigOnToigTest(BaseTest):
                     expr[1]
                 elif expr[0] == 'func' then
                     ['closure', expr[1], expr[2], env]
+                elif expr[0] == 'macro' then
+                    ['mclosure', expr[1], expr[2], env]
+                elif expr[0] == 'quote' then
+                    expr[1]
+                elif expr[0] == '__quasiquote' then
+                    eval_quasiquote(expr[1], env)
                 elif expr[0] == 'define' then
                     define(env, expr[1], _eval(expr[2], env))
                 elif expr[0] == 'assign' then
-                    assign(env, expr[1], _eval(expr[2], env))
+                    eval_assign(expr, env)
                 elif expr[0] == 'seq' then
-                    val := None;
-                    for e in expr[1:] do
-                        val = _eval(e, env)
-                    end;
-                    val
+                    eval_seq(expr, env)
                 elif expr[0] == 'if' then
-                    if _eval(expr[1], env) then
-                        _eval(expr[2], env)
-                    else
-                        _eval(expr[3], env)
-                    end
+                    eval_if(expr, env)
+                elif expr[0] == 'expand' then
+                    eval_expand(expr[1][0], expr[1][1:], env)
                 else
-                    op_val := _eval(expr[0], env);
-                    args_val := map(expr[1:], func (arg) do _eval(arg, env) end);
-                    apply(op_val, args_val)
+                    eval_op(expr[0], expr[1:], env)
                 end
             end
         """)
 
         self.go(r"""
-            apply := func (op_val, args_val) do
-                if op_val[0] == 'primitive' then
+            eval_quasiquote := func (expr, env) do
+                quote_elements := func (elems) do
+                    quoted := [];
+                    for elem in elems do
+                        if is_array(elem) and len(elem) > 0 and elem[0] == "unquote_splicing" then
+                            quoted = quoted + _eval(elem[1], env)
+                        else
+                            append(quoted, eval_quasiquote(elem, env))
+                        end
+                    end;
+                    quoted
+                end;
+
+                if is_array(expr) and len(expr) > 0 then
+                    if expr[0] == "unquote" then
+                        _eval(expr[1], env)
+                    else
+                        quote_elements(expr)
+                    end
+                else
+                    expr
+                end
+            end
+        """)
+
+        self.go(r"""
+            eval_assign := func (expr, env) do
+                if is_str(expr[1]) then
+                    assign(env, expr[1], _eval(expr[2], env))
+                elif expr[1][0] == 'get_at' then
+                    eval_op("set_at", expr[1][1:] + [expr[2]], env)
+                end
+            end
+        """)
+
+        self.go(r"""
+            eval_if := func (expr, env) do
+                if _eval(expr[1], env) then
+                    _eval(expr[2], env)
+                else
+                    _eval(expr[3], env)
+                end
+            end
+        """)
+
+        self.go(r"""
+            eval_seq := func (expr, env) do
+                val := None;
+                for e in expr[1:] do
+                    val = _eval(e, env)
+                end;
+                val
+            end
+        """)
+
+        self.go(r"""
+            eval_expand := func (op_expr, args_expr, env) do
+                op_val := _eval(op_expr, env);
+                params := op_val[1]; body := op_val[2]; menv := op_val[3];
+                expand(body, params, args_expr, menv)
+            end
+        """)
+
+        self.go(r"""
+            eval_op := runc (op_expr, args_expr, env) do
+                op_val := _eval(op_expr, env);
+                kind := op_val[0];
+                if kind == 'mclosure' then
+                    params := op_val[1]; body := op_val[2]; menv := op_val[3];
+                    return(_eval(expand(body, params, args_expr, menv), env))
+                end;
+
+                args_val := map(args_expr, func (arg) do _eval(arg, env) end);
+                if kind == 'primitive' then
                     op_val[1](args_val)
                 else
-                    env := [op_val[3], []];
-                    for name_val in zip(op_val[1], args_val) do
-                        define(env, name_val[0], name_val[1])
-                    end;
-                    _eval(op_val[2], env)
+                    params := op_val[1]; body := op_val[2]; cenv := op_val[3];
+                    _eval(body, extend(cenv, params, args_val))
                 end
+            end
+        """)
+
+        self.go(r"""
+            apply_macro := func (op_val, args_expr, env) do
+                params := op_val[1]; body := op_val[2]; menv := op_val[3];
+                _eval(expand(body, params, args_expr, menv), env)
+            end
+        """)
+
+        self.go(r"""
+            expand := func (body, params, args, menv) do
+                new_menv := extend(menv, params, args);
+                _eval(body, new_menv)
+            end
+        """)
+
+        self.go(r"""
+            extend := func (env, params, args) do
+                _extend := runc(params, args) do
+                    if params == [] and args == [] then
+                        return(env)
+                    elif params == [] then
+                        error('Too many arguments:', args)
+                    end;
+
+                    param := params[0];
+                    if is_str(param) then
+                        if args == [] then
+                            error('Too many parameters:', params)
+                        end;
+                        define(env, param, args[0]);
+                        _extend(rest(params), args[1:])
+                    elif param[0] == '*' then
+                        rest_len := len(args) - len(params) + 1;
+                        define(env, param[1], args[:rest_len]);
+                        _extend(params[1:], args[rest_len:])
+                    else
+                        error('Unexpected param:', param)
+                    end
+                end;
+
+                env := enter_scope(env);
+                _extend(params, args)
             end
         """)
 
         self.go(r"""
             global_env := [None, [
+                ['id', ['primitive', func (args) do id(args[0]) end]],
+                ['inc', ['primitive', func (args) do inc(args[0]) end]],
+                ['dec', ['primitive', func (args) do dec(args[0]) end]],
+
                 ['add', ['primitive', func (args) do args[0] + args[1] end]],
                 ['sub', ['primitive', func (args) do args[0] - args[1] end]],
                 ['mul', ['primitive', func (args) do args[0] * args[1] end]],
@@ -427,6 +701,19 @@ class BaseToigOnToigTest(BaseTest):
                 ['greater_equal', ['primitive', func (args) do args[0] >= args[1] end]],
                 ['not', ['primitive', func (args) do not args[0] end]],
 
+                ['array', ['primitive', func (args) do args end]],
+                ['is_array', ['primitive', func (args) do is_array(args[0]) end]],
+                ['len', ['primitive', func (args) do len(args[0]) end]],
+                ['get_at', ['primitive', func (args) do get_at(args[0], args[1]) end]],
+                ['set_at', ['primitive', func (args) do set_at(args[0], args[1], args[2]) end]],
+                ['slice', ['primitive', func (args) do slice(args[0], args[1], args[2], args[3]) end]],
+                ['first', ['primitive', func (args) do first(args[0]) end]],
+                ['rest', ['primitive', func (args) do rest(args[0]) end]],
+                ['last', ['primitive', func (args) do last(args[0]) end]],
+                ['append', ['primitive', func (args) do append(args[0], args[1]) end]],
+
+                ['map', ['primitive', func (args) do map(args[0], args[1]) end]],
+
                 ['pytype', ['primitive', func (args) do pytype(args[0]) end]],
 
                 ['print', ['primitive', func (args) do print(args[0]) end]],
@@ -435,18 +722,79 @@ class BaseToigOnToigTest(BaseTest):
             eval := func (expr) do _eval(expr, global_env) end
         """)
 
+        # Standard Library
+
+        self.go(r"""
+            stdlib := func () do
+                go('None #rule [quasiquote, __quasiquote, EXPR, end]');
+                go('
+                    _defmacro := macro (name, params, body) do quasiquote
+                        unquote(name) := macro (unquote_splicing(params)) do
+                            unquote(body)
+                        end
+                    end end
+
+                    #rule [defmacro, _defmacro, EXPR, with, PARAMS, do, EXPR, end]
+                ');
+                go('
+                    defmacro _scope with (body) do quasiquote
+                        func () do unquote(body) end ()
+                    end end
+
+                    #rule [scope, _scope, EXPR, end]
+                ');
+                go('
+                    defmacro _if with  (cnd, thn, *rest) do
+                        __if len(rest) == 0 then quasiquote scope
+                            __if unquote(cnd) then unquote(thn) else None end
+                        end end else
+                            __if len(rest) == 1 then quasiquote scope
+                                __if unquote(cnd) then unquote(thn) else unquote(rest[0]) end
+                            end end else quasiquote scope
+                                __if unquote(cnd) then unquote(thn) else _if(unquote_splicing(rest)) end
+                            end end end
+                        end
+                    end
+
+                    #rule [if, _if, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], ?[else, EXPR], end]
+                ');
+                go('
+                    defmacro _aif with  (cnd, thn, *rest) do
+                        __if len(rest) == 0 then quasiquote scope
+                            it := unquote(cnd); __if it then unquote(thn) else None end
+                        end end else
+                            __if len(rest) == 1 then quasiquote scope
+                                it := unquote(cnd); __if it then unquote(thn) else unquote(rest[0]) end
+                            end end else quasiquote scope
+                                it := unquote(cnd); __if it then unquote(thn) else _aif(unquote_splicing(rest)) end
+                            end end end
+                        end
+                    end
+
+                    #rule [aif, _aif, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], ?[else, EXPR], end]
+                ');
+                go('defmacro and with (a, b) do quasiquote aif unquote(a) then unquote(b) else it end end end');
+                go('defmacro or with (a, b) do quasiquote aif unquote(a) then it else unquote(b) end end end')
+
+            end
+        """)
+
         # Interpreter
 
         self.go(r"""
-            go := func (src) do eval(parse(scan(src))) end;
+            rules := new_env();
+            go := func (src) do eval(parse(scan(src, rules), rules)) end;
             go_verbose := func (src) do
                 print('src:', src);
-                tokens := scan(src);
+                tokens := scan(src, rules);
                 print('tokens:', tokens);
-                expr := parse(tokens);
+                print('rules:', rules);
+                expr := parse(tokens, rules);
                 print('expr:', expr);
                 val := eval(expr);
                 print('val:', val);
                 val
-            end
+            end;
+            stdlib()
         """)
+

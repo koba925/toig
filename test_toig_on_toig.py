@@ -62,24 +62,35 @@ class TestUtilities(BaseToigOnToigTest):
     indirect=True)
 class TestScanner(BaseToigOnToigTest):
     def test_whitespace(self):
-        assert self.go(r""" scan('') """) == [ToigStr("$EOF")]
-        assert self.go(r""" scan(' 5 ') """) == [5, ToigStr("$EOF")]
-        assert self.go(r""" scan("\n5\n") """) == [5, ToigStr("$EOF")]
+        assert self.go(r""" scan('', [None, []]) """) == [ToigStr("$EOF")]
+        assert self.go(r""" scan(' 5 ', [None, []]) """) == [5, ToigStr("$EOF")]
+        assert self.go(r""" scan("\n5\n", [None, []]) """) == [5, ToigStr("$EOF")]
+
+    def test_comment(self):
+        assert self.go(r""" scan("\n# comment\n5", [None, []]) """) == [5, ToigStr("$EOF")]
+        assert self.go(r""" scan("5 # comment", [None, []]) """) == [5, ToigStr("$EOF")]
+
 
     def test_primary(self):
-        assert self.go(r""" scan('None') """) == [None, ToigStr("$EOF")]
-        assert self.go(r""" scan('True False') """) == [True, False, ToigStr("$EOF")]
-        assert self.go(r""" scan('5 56') """) == [5, 56, ToigStr("$EOF")]
+        assert self.go(r""" scan('None', [None, []]) """) == [None, ToigStr("$EOF")]
+        assert self.go(r""" scan('True False', [None, []]) """) == [True, False, ToigStr("$EOF")]
+        assert self.go(r""" scan('5 56', [None, []]) """) == [5, 56, ToigStr("$EOF")]
 
     def test_raw_string(self):
-        assert self.go(r""" scan("''") """) == [[ToigStr("$STR"), ToigStr("")], ToigStr("$EOF")]
-        assert self.go(r""" scan("'abc'") """) == [[ToigStr("$STR"), ToigStr("abc")], ToigStr("$EOF")]
-        assert self.go(r""" scan("'\\'") """) == [[ToigStr("$STR"), ToigStr("\\")], ToigStr("$EOF")]
+        assert self.go(r""" scan("''", [None, []]) """) == [[ToigStr("$STR"), ToigStr("")], ToigStr("$EOF")]
+        assert self.go(r""" scan("'abc'", [None, []]) """) == [[ToigStr("$STR"), ToigStr("abc")], ToigStr("$EOF")]
+        assert self.go(r""" scan("'\\'", [None, []]) """) == [[ToigStr("$STR"), ToigStr("\\")], ToigStr("$EOF")]
 
     def test_string(self):
-        assert self.go(r""" scan('""') """) == [[ToigStr("$STR"), ToigStr("")], ToigStr("$EOF")]
-        assert self.go(r""" scan('"abc"') """) == [[ToigStr("$STR"), ToigStr("abc")], ToigStr("$EOF")]
-        assert self.go(r""" scan('"\\\n\""') """) == [[ToigStr("$STR"), ToigStr("\\\n\"")], ToigStr("$EOF")]
+        assert self.go(r""" scan('""', [None, []]) """) == [[ToigStr("$STR"), ToigStr("")], ToigStr("$EOF")]
+        assert self.go(r""" scan('"abc"', [None, []]) """) == [[ToigStr("$STR"), ToigStr("abc")], ToigStr("$EOF")]
+        assert self.go(r""" scan('"\\\n\""', [None, []]) """) == [[ToigStr("$STR"), ToigStr("\\\n\"")], ToigStr("$EOF")]
+
+    def test_rule(self):
+        self.go(r""" rules := new_env() """)
+        self.go(r""" scan("#rule [foo, _foo, EXPR, end]", rules) """)
+        assert self.go(r""" rules """) == [None, [[ToigStr('foo'), [ToigStr('_foo'), ToigStr('EXPR'), ToigStr('end')]]]]
+
 
 @pytest.mark.parametrize(
     "set_interpreter",
@@ -91,6 +102,10 @@ class TestInterpreter(BaseToigOnToigTest):
 
     def tot_go_verbose(self, tot_src):
         return self.go(f"go_verbose({tot_src})")
+
+    def test_comment(self):
+        assert self.tot_go(r""" "# comment\n5" """) == 5
+        assert self.tot_go(r""" "5 # comment" """) == 5
 
     def test_primary(self):
         assert self.tot_go(r""" 'None' """) == None
@@ -117,15 +132,15 @@ class TestInterpreter(BaseToigOnToigTest):
             assert self.tot_go(r""" '"abc\"' """)
 
     def test_if(self):
-        assert self.tot_go(r""" 'if 1; True then 2; 5 else 3; 6 end' """) == 5
-        assert self.tot_go(r""" 'if 1; False then 2; 5 else 3; 6 end' """) == 6
+        assert self.tot_go(r""" '__if 1; True then 2; 5 else 3; 6 end' """) == 5
+        assert self.tot_go(r""" '__if 1; False then 2; 5 else 3; 6 end' """) == 6
 
         with pytest.raises(AssertionError):
-            self.tot_go(r""" 'if True end' """)
+            self.tot_go(r""" '__if True end' """)
         with pytest.raises(AssertionError):
-            self.tot_go(r""" 'if True then 5' """)
+            self.tot_go(r""" '__if True then 5' """)
         with pytest.raises(AssertionError):
-            self.tot_go(r""" 'if True then 5 else 6' """)
+            self.tot_go(r""" '__if True then 5 else 6' """)
 
     def test_sequence(self):
         assert self.tot_go(r""" '5; 6' """) == 6
@@ -213,17 +228,17 @@ class TestInterpreter(BaseToigOnToigTest):
         assert self.tot_go(r""" 'func () do 5 end ()' """) == 5
         assert self.tot_go(r""" 'func (a) do a + 1 end (5)' """) == 6
         assert self.tot_go(r""" 'func (a, b) do a + b end (5, 6)' """) == 11
-        # assert self.tot_go(r""" 'func (*args) do args end ()' """) == []
-        # assert self.tot_go(r""" 'func (*args) do args end (5)' """) == [5]
-        # assert self.tot_go(r""" 'func (*args) do args end (5, 6)' """) == [5, 6]
-        # assert self.tot_go(r""" 'func (*(args)) do args end (5, 6)' """) == [5, 6]
+        assert self.tot_go(r""" 'func (*args) do args end ()' """) == []
+        assert self.tot_go(r""" 'func (*args) do args end (5)' """) == [5]
+        assert self.tot_go(r""" 'func (*args) do args end (5, 6)' """) == [5, 6]
+        assert self.tot_go(r""" 'func (*(args)) do args end (5, 6)' """) == [5, 6]
 
-        # assert self.tot_go(r""" 'func (*args, a) do [args, a] end (5)' """) == [[], 5]
-        # assert self.tot_go(r""" 'func (*args, a) do [args, a] end (5, 6)' """) == [[5], 6]
-        # assert self.tot_go(r""" 'func (*args, a) do [args, a] end (5, 6, 7)' """) == [[5, 6], 7]
-        # assert self.tot_go(r""" 'func (*args, a, b) do [args, a, b] end (5, 6, 7)' """) == [[5], 6, 7]
-        # assert self.tot_go(r""" 'func (a, *args, b) do [a, args, b] end (5, 6, 7)' """) == [5, [6], 7]
-        # assert self.tot_go(r""" 'func (a, b, *args) do [a, b, args] end (5, 6, 7)' """) == [5, 6, [7]]
+        assert self.tot_go(r""" 'func (*args, a) do [args, a] end (5)' """) == [[], 5]
+        assert self.tot_go(r""" 'func (*args, a) do [args, a] end (5, 6)' """) == [[5], 6]
+        assert self.tot_go(r""" 'func (*args, a) do [args, a] end (5, 6, 7)' """) == [[5, 6], 7]
+        assert self.tot_go(r""" 'func (*args, a, b) do [args, a, b] end (5, 6, 7)' """) == [[5], 6, 7]
+        assert self.tot_go(r""" 'func (a, *args, b) do [a, args, b] end (5, 6, 7)' """) == [5, [6], 7]
+        assert self.tot_go(r""" 'func (a, b, *args) do [a, b, args] end (5, 6, 7)' """) == [5, 6, [7]]
 
         with pytest.raises(AssertionError):
             self.tot_go(r""" 'func (a, b) a + b end' """)
@@ -242,10 +257,10 @@ class TestInterpreter(BaseToigOnToigTest):
         with pytest.raises(AssertionError):
             self.tot_go(r""" 'func (a, b) do a + b end (5) 6 end' """)
 
-        # with pytest.raises(AssertionError):
-        #     self.tot_go(r""" '*a' """)
-        # with pytest.raises(AssertionError):
-        #     self.tot_go(r""" 'func (*args, a) do [args, a] end ()' """)
+        with pytest.raises(AssertionError):
+            self.tot_go(r""" '*a' """)
+        with pytest.raises(AssertionError):
+            self.tot_go(r""" 'func (*args, a) do [args, a] end ()' """)
 
     def test_closure_adder(self):
         self.tot_go(r""" 'make_adder := func (n) do func (m) do n + m end end' """)
@@ -304,6 +319,272 @@ class TestInterpreter(BaseToigOnToigTest):
         ' """)
         assert self.tot_go(r""" 'fib_tail(10)' """) == 55
         # self.tot_go(r""" 'fib_tail(10000)' """)
+
+    def test_array_by_builtin(self):
+        assert self.tot_go(r""" 'array()' """) == []
+        assert self.tot_go(r""" 'array(5; 6)' """) == [6]
+        assert self.tot_go(r""" 'array(5; 6, 7; 8)' """) == [6, 8]
+
+    def test_array(self):
+        assert self.tot_go(r""" '[]' """) == []
+        assert self.tot_go(r""" '[5; 6]' """) == [6]
+        assert self.tot_go(r""" '[5; 6, 7; 8]' """) == [6, 8]
+
+        assert self.tot_go(r""" 'is_array([])' """) == True
+        assert self.tot_go(r""" 'is_array(1)' """) == False
+
+        assert self.tot_go(r""" 'len([5, 6, 7])' """) == 3
+
+        assert self.tot_go(r""" 'get_at([5, 6, 7], 1)' """) == 6
+        assert self.tot_go(r""" 'a := [5, 6, 7]; set_at(a, 1, 8); a' """) == [5, 8, 7]
+        assert self.tot_go(r""" 'a := [5, 6, 7]; a[1] = 8; a' """) == [5, 8, 7]
+        assert self.tot_go(r""" 'slice(array(5, 6, 7), 1, 2, None)' """) == [6]
+
+        assert self.tot_go(r""" 'first([5, 6, 7])' """) == 5
+        assert self.tot_go(r""" 'rest([5, 6, 7])' """) == [6, 7]
+        assert self.tot_go(r""" 'last([5, 6, 7])' """) == 7
+
+    def test_array_index(self):
+        self.tot_go(r""" 'a := [5, 6, 7]' """)
+        assert self.tot_go_verbose(r""" 'a[1]' """) == 6
+        assert self.tot_go_verbose(r""" 'a[-1]' """) == 7
+
+        assert self.tot_go(r""" '[[5, 6, 7], [15, 16, 17], [25, 26, 27]][1]' """) == [15, 16, 17]
+        assert self.tot_go(r""" '[[5, 6, 7], [15, 16, 17], [25, 26, 27]][1][2]' """) == 17
+        assert self.tot_go(r""" '[add, sub][0](5, 6)' """) == 11
+        assert self.tot_go(r""" 'func (a, b) do [a, b] end (5, 6)[1]' """) == 6
+
+    def test_array_append(self):
+        assert self.tot_go(r""" 'a := [5, 6]; append(a, 7); a' """) == [5, 6, 7]
+
+    def test_quote(self):
+        assert self.tot_go(r""" 'quote(5)' """) == 5
+        assert self.tot_go(r""" 'quote(None)' """) is None
+        assert self.tot_go(r""" 'quote(foo)' """) == "foo"
+        assert self.tot_go(r""" 'quote([5, 6])' """) == [ToigStr("array"), 5, 6]
+        assert self.tot_go(r""" 'quote(add(5, 6))' """) == [ToigStr("add"), 5, 6]
+        assert self.tot_go(r""" 'quote(5 + 6)' """) == [ToigStr("add"), 5, 6]
+
+    def test_array_index_slice(self):
+        self.tot_go(r""" 'a := [5, 6, 7, 8, 9]' """)
+        with pytest.raises(AssertionError):
+            self.tot_go(r""" 'a[]' """)
+        assert self.tot_go(r""" 'a[1]' """) == 6
+        assert self.tot_go(r""" 'a[:]' """) == [5, 6, 7, 8, 9]
+        with pytest.raises(AssertionError):
+            self.tot_go(r""" 'a[1,]' """)
+        assert self.tot_go(r""" 'a[1:]' """) == [6, 7, 8, 9]
+        assert self.tot_go(r""" 'a[1:4]' """) == [6, 7, 8]
+        assert self.tot_go(r""" 'a[:4]' """) == [5, 6, 7, 8]
+        with pytest.raises(AssertionError):
+            self.tot_go(r""" 'a[1:2,]' """)
+        assert self.tot_go(r""" 'a[3:1:-1]' """) == [8, 7]
+        assert self.tot_go(r""" 'a[:1:-1]' """) == [9, 8, 7]
+        assert self.tot_go(r""" 'a[3::-1]' """) == [8, 7, 6, 5]
+        assert self.tot_go(r""" 'a[1:4:]' """) == [6, 7, 8]
+        assert self.tot_go(r""" 'a[::-1]' """) == [9, 8, 7, 6, 5]
+        assert self.tot_go(r""" 'a[:3:]' """) == [5, 6, 7]
+        assert self.tot_go(r""" 'a[1::]' """) == [6, 7, 8, 9]
+        assert self.tot_go(r""" 'a[::]' """) == [5, 6, 7, 8, 9]
+        with pytest.raises(AssertionError):
+            self.tot_go(r""" 'a[1:2:3,' """)
+
+        assert self.tot_go(r""" 'a[0;3:0;1:0;-1]' """) == [8, 7]
+
+        assert self.tot_go(r""" '[[5, 6, 7], [15, 16, 17], [25, 26, 27]][1]' """) == [15, 16, 17]
+        assert self.tot_go(r""" '[[5, 6, 7], [15, 16, 17], [25, 26, 27]][1][2]' """) == 17
+        assert self.tot_go(r""" '[add, sub][0](5, 6)' """) == 11
+        assert self.tot_go(r""" 'func (a, b) do [a, b] end (5, 6)[1]' """) == 6
+
+    def test_macro(self):
+        self.tot_go(r""" 'sq := macro (a) do [quote(mul), a, a] end' """)
+        assert self.tot_go(r""" 'expand(sq(5 + 6))' """) == [
+            ToigStr("mul"), [ToigStr("add"), 5, 6], [ToigStr("add"), 5, 6]
+        ]
+        assert self.tot_go(r""" 'sq(5 + 6)' """) == 121
+
+        self.tot_go(r""" '
+            when := macro (cnd, thn, els) do
+                expr := quote(if c then t else e end);
+                expr[1] = cnd;
+                expr[2] = thn;
+                expr[3] = els;
+                expr
+            end
+        ' """)
+        assert self.tot_go(r""" 'expand(when(5 == 6, 7, 8))' """) == [
+            ToigStr("_if"), [ToigStr("equal"), 5, 6], 7, 8
+        ]
+        assert self.tot_go(r""" 'when(5 == 6, 7, 8)' """) == 8
+
+        self.tot_go(r""" 'arg_array := macro (*args) do [quote(array)] + args end' """)
+        assert self.tot_go(r""" 'expand(arg_array(5 + 6, 7))' """) == [
+            ToigStr("array"), [ToigStr("add"), 5, 6], 7
+        ]
+        assert self.tot_go(r""" 'arg_array(5 + 6, 7)' """) == [11, 7]
+
+    def test_custom_expr(self):
+        self.tot_go(r""" '
+            _custom := macro (a) do [quote(mul), a, a] end
+            #rule [custom, _custom, EXPR, end]
+        ' """)
+        assert self.tot_go(r""" '
+            expand(custom 5 + 6 end)
+        ' """) == [
+            ToigStr("mul"), [ToigStr("add"), 5, 6], [ToigStr("add"), 5, 6]
+        ]
+        assert self.tot_go(r""" 'custom 5 + 6 end' """) == 121
+
+    def test_custom_params(self):
+        self.tot_go(r""" '
+            _custom := macro (a) do [quote(mul), a[0], a[1]] end
+            #rule [custom, _custom, PARAMS, end]
+        ' """)
+        assert self.tot_go_verbose(r""" '
+            expand(custom(5 + 6, 7) end)
+        ' """) == [
+            ToigStr("mul"), [ToigStr("add"), 5, 6], 7
+        ]
+        assert self.tot_go_verbose(r""" 'custom (5 + 6, 7) end' """) == 77
+
+    def test_custom_many(self):
+        self.tot_go(r""" '
+            _custom := macro (*args) do [quote(array)] + args end
+            #rule [custom, _custom, EXPR, *[many, EXPR], end]
+        ' """)
+
+        assert self.tot_go(r""" 'expand(custom 5 + 6 end)' """) == [
+            ToigStr("array"), [ToigStr("add"), 5, 6]
+        ]
+        assert self.tot_go(r""" 'custom 5 + 6 end' """) == [11]
+
+        assert self.tot_go(r""" 'expand(custom 5 + 6 many 7 end)' """) == [
+            ToigStr("array"), [ToigStr("add"), 5, 6], 7
+        ]
+        assert self.tot_go(r""" 'custom 5 + 6 many 7 end' """) == [11, 7]
+
+        assert self.tot_go(r""" 'expand(custom 5 + 6 many 7 many 8 end)' """) == [
+            ToigStr("array"), [ToigStr("add"), 5, 6], 7, 8
+        ]
+        assert self.tot_go(r""" 'custom 5 + 6 many 7 many 8 end' """) == [11, 7, 8]
+
+    def test_custom_optional(self):
+        self.tot_go(r""" '
+            _custom := macro (*args) do [quote(array)] + args end
+            #rule [custom, _custom, EXPR, ?[optional, EXPR], end]
+        ' """)
+
+        assert self.tot_go_verbose(r""" 'expand(custom 5 + 6 end)' """) == [
+            ToigStr("array"), [ToigStr("add"), 5, 6]
+        ]
+        assert self.tot_go(r""" 'custom 5 + 6 end' """) == [11]
+
+        assert self.tot_go(r""" 'expand(custom 5 + 6 optional 7 end)' """) == [
+            ToigStr("array"), [ToigStr("add"), 5, 6], 7
+        ]
+        assert self.tot_go(r""" 'custom 5 + 6 optional 7 end' """) == [11, 7]
+
+        with pytest.raises(AssertionError):
+            self.tot_go(r""" 'expand(custom 5 + 6 optional 7 optional 8 end)' """)
+
+    def test_quasiquote(self):
+        assert self.tot_go(r""" 'quasiquote 5 end' """) == 5
+        assert self.tot_go(r""" 'quasiquote None end' """) is None
+        assert self.tot_go(r""" 'quasiquote foo end' """) == "foo"
+        assert self.tot_go(r""" 'quasiquote [5, 6] end' """) == [ToigStr("array"), 5, 6]
+        assert self.tot_go(r""" 'quasiquote add(5, 6) end' """) == [ToigStr("add"), 5, 6]
+        assert self.tot_go(r""" 'quasiquote 5 + 6 end' """) == [ToigStr("add"), 5, 6]
+
+        assert self.tot_go(r""" 'quasiquote unquote(add(5, 6)) end' """) == 11
+        assert self.tot_go(r""" 'quasiquote add(5, unquote(6; 7)) end' """) == [ToigStr("add"), 5, 7]
+        assert self.tot_go(r""" 'quasiquote unquote(5 + 6) end' """) == 11
+        assert self.tot_go(r""" 'quasiquote 5 + unquote(6; 7) end' """) == [ToigStr("add"), 5, 7]
+        assert self.tot_go(r""" 'quasiquote add(unquote_splicing([5, 6])) end' """) == [ToigStr("add"), 5, 6]
+        assert self.tot_go(r""" 'quasiquote add(5, unquote_splicing([6])) end' """) == [ToigStr("add"), 5, 6]
+        assert self.tot_go(r""" '
+            quasiquote if a == 5 then 6; 7 else unquote(8; 9) end end
+        ' """) == [ToigStr("_if"), [ToigStr("equal"), ToigStr("a"), 5], [ToigStr("seq"), 6, 7], 9]
+
+        # assert self.tot_go(r""" 'quasiquote unquote(when(False, 5)) end' """) is None
+
+    def test_defmacro(self):
+        assert self.tot_go_verbose(r""" '
+            expand(defmacro myadd with (a, b) do
+                quasiquote unquote(a) + unquote(b) end
+            end)
+        ' """) == [ToigStr('define'), ToigStr('myadd'),
+            [ToigStr('macro'), [ToigStr('a'), ToigStr('b')], [ToigStr('__quasiquote'),
+                [ToigStr('add'),
+                    [ToigStr('unquote'), ToigStr('a')],
+                    [ToigStr('unquote'), ToigStr('b')]
+                ]
+            ]
+        ]]
+        self.tot_go_verbose(r""" '
+            defmacro myadd with (a, b) do
+                quasiquote unquote(a) + unquote(b) end
+            end
+        ' """)
+        assert self.tot_go_verbose(r""" 'myadd(5, 6)' """) == 11
+
+    def test_scope(self):
+        assert self.tot_go_verbose(""" 'expand(
+            scope x := 6; y = x end
+        )' """) == [[ToigStr("func"), [], [ToigStr("seq"),
+            [ToigStr("define"), ToigStr("x"), 6],
+            [ToigStr("assign"), ToigStr("y"), ToigStr("x")]
+        ]]]
+        assert self.tot_go_verbose(""" '
+            x := 5; y := 6; scope x := 6; y = x end; [x, y]
+        ' """) == [5, 6]
+        assert self.tot_go(""" '
+            x := 5; y := 6; scope x = 6; y = x end; [x, y]
+        ' """) == [6, 6]
+
+    def test_elif(self):
+        assert self.tot_go(""" 'if 5; True then 6; 7 end' """) == 7
+        assert self.tot_go(""" 'if 5; False then 6; 7 end' """) is None
+        assert self.tot_go(""" 'if 5; True then 6; 7 else 8; 9 end' """) == 7
+        assert self.tot_go(""" 'if 5; False then 6; 7 else 8; 9 end' """) == 9
+        assert self.tot_go(""" 'if 5; True then 6; 7 elif 8; True then 9; 10 else 11; 12 end' """) == 7
+        assert self.tot_go(""" 'if 5; False then 6; 7 elif 8; True then 9; 10 else 11; 12 end' """) == 10
+        assert self.tot_go(""" 'if 5; False then 6; 7 elif 8; False then 9; 10 else 11; 12 end' """) == 12
+
+
+    def test_aif(self):
+        assert self.tot_go(""" 'aif 5 then it + 1 end' """) == 6
+        assert self.tot_go(""" 'aif 0 then it + 1 end' """) is None
+        assert self.tot_go(""" 'aif 5 then it + 1 else it + 1 end' """) == 6
+        assert self.tot_go(""" 'aif 0 then it + 1 else it + 1 end' """) == 1
+        assert self.tot_go(""" 'aif 0 then 5 elif 6 then it + 1 end' """) == 7
+        assert self.tot_go(""" 'aif 0 then 5 elif 0 then it + 1 end' """) is None
+        assert self.tot_go(""" 'aif 0 then 5 elif 6 then it + 1 else it + 1 end' """) == 7
+        assert self.tot_go(""" 'aif 0 then 5 elif 0 then it + 1 else it + 1 end' """) == 1
+        assert self.tot_go(""" 'aif 0 then 5 elif 0 then 6 elif 7 then it + 1 end' """) == 8
+        assert self.tot_go(""" 'aif 0 then 5 elif 0 then 6 elif 0 then it + 1 end' """) is None
+
+    def test_or(self):
+        assert self.tot_go(""" '5 == 5 or 5 == 5' """) is True
+        assert self.tot_go(""" '5 == 5 or 5 != 5' """) is True
+        assert self.tot_go(""" '5 != 5 or 5 == 5' """) is True
+        assert self.tot_go(""" '5 != 5 or 5 != 5' """) is False
+        assert self.tot_go(""" '5 or x' """) == 5
+        assert self.tot_go(""" 'False or 5' """) == 5
+        assert self.tot_go(""" 'False or False or True' """) is True
+        assert self.tot_go(""" 'False or False or False' """) is False
+        assert self.tot_go(""" 'x := True or False' """) is True
+        assert self.tot_go(""" 'x' """) is True
+        assert self.tot_go(""" '5 == 5 and 5 == 5' """) is True
+        assert self.tot_go(""" '5 == 5 and 5 != 5' """) is False
+        assert self.tot_go(""" '5 != 5 and 5 == 5' """) is False
+        assert self.tot_go(""" '5 != 5 and 5 != 5' """) is False
+        assert self.tot_go(""" 'True and 5' """) == 5
+        assert self.tot_go(""" '0 and x' """) == 0
+        assert self.tot_go(""" 'True or True and False' """) is True
+        assert self.tot_go(""" '(True or True) and False' """) is False
+
+    def test_and(self):
+        pass
 
 @pytest.mark.parametrize(
     "set_interpreter",
@@ -386,3 +667,8 @@ class TestEvaluator(BaseToigOnToigTest):
         assert self.eot_go(r""" ["counter2"] """) == 2
         assert self.eot_go(r""" ["counter1"] """) == 3
         assert self.eot_go(r""" ["counter2"] """) == 3
+
+    # def test_macro(self):
+    #     self.eot_go(r""" ["defmacro", "sq", ["a"],
+    #         ["quasiquote",  ["inc", ["unquote", "a"]]]
+    #     ] """)

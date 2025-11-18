@@ -169,7 +169,7 @@ class Compiler:
         self._set_operand(cont_jump, self._current_addr())
 
     def _op(self, op, args, is_tail):
-        for arg in args[-1::-1]:
+        for arg in args:
             self._expr(arg, False)
         self._expr(op, False)
         if is_tail:
@@ -248,12 +248,13 @@ class VM:
         return self._stack[0]
 
     def _call(self, nargs, is_tail):
-        match self._stack.pop():
+        op = self._stack.pop()
+        args = list(reversed([self._stack.pop() for _ in range(nargs)]))
+        match op:
             case f if callable(f):
-                f(nargs, self._stack)
+                self._stack.append(f(args))
                 self._ip += 1
             case ["closure", [ncodes, addr], params, env]:
-                args = [self._stack.pop() for _ in range(nargs)]
                 if not is_tail:
                     self._call_stack.append([[self._ncode, self._ip + 1], self._env])
                     if len(self._call_stack) > 1000:
@@ -262,7 +263,7 @@ class VM:
                 self.extend(params, args)
                 self._ncode, self._ip = [ncodes, addr]
             case ["cont", [ncodes, addr], env, stack, call_stack]:
-                val = None if nargs == 0 else self._stack.pop()
+                val = None if nargs == 0 else args[0]
                 self._ncode, self._ip = [ncodes, addr]
                 self._env = env
                 self._stack = stack[:]
