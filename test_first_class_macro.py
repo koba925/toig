@@ -10,27 +10,27 @@ from stm import Interpreter as STM
     indirect=True)
 class TestFirstClassMacroBase(BaseTest):
     def test_macro(self):
-        assert self.expanded("macro () do quote(abc) end ()") == "abc"
+        assert self.expanded("macro () do q(abc) end ()") == "abc"
 
         assert self.expanded("""
-            macro (a) do quasiquote unquote(a) * unquote(a) end end (5 + 6)
+            macro (a) do qq !a * !a end end (5 + 6)
         """) == ["mul", ["add", 5, 6], ["add", 5, 6]]
 
-        self.go("build_exp := macro (op, *r) do quasiquote unquote(op)(unquote_splicing(r)) end end")
+        self.go("build_exp := macro (op, *r) do qq (!op)(!!r) end end")
         assert self.expanded("build_exp(add)") == ["add"]
         assert self.expanded("build_exp(add, 5)") == ["add", 5]
         assert self.expanded("build_exp(add, 5, 6)") == ["add", 5, 6]
 
-        assert self.go("macro (*a, b) do quasiquote [quote(unquote(a)), quote(unquote(b))] end end (5)") == [[], 5]
-        assert self.go("macro (*a, b) do quasiquote [quote(unquote(a)), quote(unquote(b))] end end (5, 6)") == [[5], 6]
-        assert self.go("macro (*a, b) do quasiquote [quote(unquote(a)), quote(unquote(b))] end end (5, 6, 7)") == [[5, 6], 7]
-        assert self.go("macro (a, *b, c) do quasiquote [quote(unquote(a)), quote(unquote(b)), quote(unquote(c))] end end (5, 6, 7)") == [5, [6], 7]
+        assert self.go("macro (*a, b) do qq [q(!a), q(!b)] end end (5)") == [[], 5]
+        assert self.go("macro (*a, b) do qq [q(!a), q(!b)] end end (5, 6)") == [[5], 6]
+        assert self.go("macro (*a, b) do qq [q(!a), q(!b)] end end (5, 6, 7)") == [[5, 6], 7]
+        assert self.go("macro (a, *b, c) do qq [q(!a), q(!b), q(!c)] end end (5, 6, 7)") == [5, [6], 7]
 
     def test_macro_defining_macro(self):
         self.go("""
-        alias := macro (als, org) do quasiquote
-            unquote(als) := macro (*args) do quasiquote
-                unquote(org)(unquote(quote(unquote_splicing(args))))
+        alias := macro (als, org) do qq
+            !als := macro (*args) do qq
+                (!org)(!q(!!args))
             end end
         end end;
 

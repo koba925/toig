@@ -8,11 +8,11 @@ class StdLib:
     def load(self):
         self._go("__stdlib__ := None")
 
-        self._go("None #rule [quasiquote, quasiquote, EXPR, end]")
+        self._go("None #rule [qq, _qq, EXPR, end]")
 
         self._go("""
-            defmacro scope with (body) do quasiquote
-                func () do unquote(body) end ()
+            defmacro scope with (body) do qq
+                func () do !body end ()
             end end
 
             #rule [scope, scope, EXPR, end]
@@ -57,8 +57,8 @@ class StdLib:
         """)
 
         self._go("""
-            defmacro __stdlib_when with (cnd, thn) do quasiquote
-                if unquote(cnd) then unquote(thn) end
+            defmacro __stdlib_when with (cnd, thn) do qq
+                if !cnd then !thn end
             end end
 
             #rule [when, __stdlib_when, EXPR, do, EXPR, end]
@@ -66,20 +66,20 @@ class StdLib:
 
         self._go("""
             defmacro _aif with  (cnd, thn, *rest) do
-                if len(rest) == 0 then quasiquote scope
-                    it := unquote(cnd); if it then unquote(thn) else None end
-                end end elif len(rest) == 1 then quasiquote scope
-                    it := unquote(cnd); if it then unquote(thn) else unquote(rest[0]) end
-                end end else quasiquote scope
-                    it := unquote(cnd); if it then unquote(thn) else _aif(unquote_splicing(rest)) end
+                if len(rest) == 0 then qq scope
+                    it := !cnd; if it then !thn else None end
+                end end elif len(rest) == 1 then qq scope
+                    it := !cnd; if it then !thn else !rest[0] end
+                end end else qq scope
+                    it := !cnd; if it then !thn else _aif(!!rest) end
                 end end end
             end
 
             #rule [aif, _aif, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], ?[else, EXPR], end]
         """)
 
-        self._go("defmacro and with (a, b) do quasiquote aif unquote(a) then unquote(b) else it end end end")
-        self._go("defmacro or with (a, b) do quasiquote aif unquote(a) then it else unquote(b) end end end")
+        self._go("defmacro and with (a, b) do qq aif !a then !b else it end end end")
+        self._go("defmacro or with (a, b) do qq aif !a then it else !b end end end")
 
         self._go("""
             zip := func (l1, l2) do
@@ -93,12 +93,12 @@ class StdLib:
         """)
 
         self._go("""
-            defmacro __stdlib_while with (cnd, body) do quasiquote scope
+            defmacro __stdlib_while with (cnd, body) do qq scope
                 continue := val := None;
                 letcc break do
                     loop := func() do
                         letcc cc do continue = cc end;
-                        if unquote(cnd) then val = unquote(body); loop() else val end
+                        if !cnd then val = !body; loop() else val end
                     end;
                     loop()
                 end
@@ -108,13 +108,13 @@ class StdLib:
         """)
 
         self._go("""
-            defmacro __stdlib_awhile with (cnd, body) do quasiquote scope
+            defmacro __stdlib_awhile with (cnd, body) do qq scope
                 continue := val := None;
                 letcc break do
                     loop := func() do
                         letcc cc do continue = cc end;
-                        it := unquote(cnd);
-                        if it then val = unquote(body); loop() else val end
+                        it := !cnd;
+                        if it then val = !body; loop() else val end
                     end;
                     loop()
                 end
@@ -125,21 +125,23 @@ class StdLib:
 
         self._go("""
             __stdlib_is_name_before := is_name;
-            defmacro is_name with (e) do quasiquote __stdlib_is_name_before(quote(unquote(e))) end end
+            defmacro is_name with (e) do
+                 qq __stdlib_is_name_before(q(!e)) end
+            end
         """)
 
         self._go("""
-            defmacro __stdlib_for with (e, l, body) do quasiquote scope
+            defmacro __stdlib_for with (e, l, body) do qq scope
                 __stdlib_for_index := -1;
-                __stdlib_for_l := unquote(l);
-                continue := __stdlib_for_val := unquote(e) := None;
+                __stdlib_for_l := !l;
+                continue := __stdlib_for_val := !e := None;
                 letcc break do
                     loop := func () do
                         letcc cc do continue = cc end;
                         __stdlib_for_index = __stdlib_for_index + 1;
                         if __stdlib_for_index < len(__stdlib_for_l) then
-                            unquote(e) = __stdlib_for_l[__stdlib_for_index];
-                            __stdlib_for_val = unquote(body);
+                            !e = __stdlib_for_l[__stdlib_for_index];
+                            __stdlib_for_val = !body;
                             loop()
                         else __stdlib_for_val end
                     end;
@@ -151,9 +153,9 @@ class StdLib:
         """)
 
         self._go("""
-            defmacro _runc with (params, body) do quasiquote
-                func (unquote_splicing(rest(params))) do
-                    letcc return do unquote(body) end
+            defmacro _runc with (params, body) do qq
+                func (!!rest(params)) do
+                    letcc return do !body end
                 end
             end end
 
@@ -161,12 +163,12 @@ class StdLib:
         """)
 
         self._go("""
-            defmacro __stdlib_gfunc with (params, body) do quasiquote
-                func (unquote_splicing(params[1:])) do
+            defmacro __stdlib_gfunc with (params, body) do qq
+                func (!!params[1:]) do
                     yd := nx := None;
                     yield := func (x) do letcc cc do nx = cc; yd(x) end end;
                     next := func () do letcc cc do yd = cc; nx(None) end end;
-                    nx := func (_) do unquote(body); yield(None) end;
+                    nx := func (_) do !body; yield(None) end;
                     next
                 end
             end end
@@ -177,10 +179,10 @@ class StdLib:
         self._go("agen := gfunc (a) do for e in a do yield(e) end end")
 
         self._go("""
-            defmacro __stdlib_gfor with (e, gen, body) do quasiquote scope
-                __stdlib_gfor_gen := unquote(gen);
-                unquote(e) := None;
-                while (unquote(e) = __stdlib_gfor_gen()) != None do unquote(body) end
+            defmacro __stdlib_gfor with (e, gen, body) do qq scope
+                __stdlib_gfor_gen := !gen;
+                !e := None;
+                while (!e = __stdlib_gfor_gen()) != None do !body end
             end end end
 
             #rule [gfor, __stdlib_gfor, NAME, in, EXPR, do, EXPR, end]

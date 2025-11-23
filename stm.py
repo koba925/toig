@@ -27,9 +27,9 @@ if __name__ == "__main__":
     i = Interpreter()
 
     i.go("""
-        alias := macro (als, org) do quasiquote
-            unquote(als) := macro (*args) do quasiquote
-                unquote(org)(unquote(quote(unquote_splicing(args))))
+        alias := macro (als, org) do qq
+            !als := macro (*args) do qq
+                (!org)(!q(!!args))
             end end
         end end;
 

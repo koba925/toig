@@ -19,9 +19,9 @@ class Expander:
                 return ["func", params, self._expr(body)]
             case str(name):
                 return expr
-            case ["quote", elem]:
-                return ["quote", elem]
-            case ["quasiquote", elem]:
+            case ["q", elem]:
+                return ["q", elem]
+            case ["_qq", elem]:
                 return self._quasiquote(elem)
             case ["defmacro", name, params, body]:
                 return self._defmacro(name, params, self._expr(body))
@@ -65,7 +65,7 @@ class Expander:
         match expr:
             case ["unquote", elem]: return self._expr(elem)
             case [*elems]: return _quote_elements(elems)
-            case elem: return ["quote", elem]
+            case elem: return ["q", elem]
 
     def _macro(self, macro, args):
         match macro:
@@ -100,7 +100,7 @@ class Compiler:
                 self._func(params, body)
             case str(name):
                 self._code.append(["get", name])
-            case ["quote", elem]:
+            case ["q", elem]:
                 self._code.append(["const", elem])
             case ["define", name, val]:
                 assert is_name(name), f"Invalid name: `{name}`"

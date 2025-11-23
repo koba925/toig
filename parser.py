@@ -224,7 +224,13 @@ class Parser:
         }, self._unary_ops)
 
     def _unary_ops(self):
-        return self._unary({"-": "neg", "*": "*", "?": "?"}, self._call_index)
+        return self._unary({
+            "-": "neg",
+            "!": "unquote",
+            "!!": "unquote_splicing",
+            "*": "*",
+            "?": "?",
+        }, self._call_index)
 
     def _call_index(self):
         target = self._primary()

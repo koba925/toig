@@ -345,51 +345,61 @@ class TestCore(BaseTest):
         assert self.go("counter2()") == 3
 
     def test_quote(self):
-        assert self.go("quote(5)") == 5
-        assert self.go("quote(None)") is None
-        assert self.go("quote(foo)") == "foo"
-        assert self.go("quote([5, 6])") == ["array", 5, 6]
-        assert self.go("quote(add(5, 6))") == ["add", 5, 6]
-        assert self.go("quote(5 + 6)") == ["add", 5, 6]
+        assert self.go("q(5)") == 5
+        assert self.go("q(None)") is None
+        assert self.go("q(foo)") == "foo"
+        assert self.go("q([5, 6])") == ["array", 5, 6]
+        assert self.go("q(add(5, 6))") == ["add", 5, 6]
+        assert self.go("q(5 + 6)") == ["add", 5, 6]
 
-    def test_quasiquote(self):
-        assert self.go("quasiquote 5 end") == 5
-        assert self.go("quasiquote None end") is None
-        assert self.go("quasiquote foo end") == "foo"
-        assert self.go("quasiquote [5, 6] end") == ["array", 5, 6]
-        assert self.go("quasiquote add(5, 6) end") == ["add", 5, 6]
-        assert self.go("quasiquote 5 + 6 end") == ["add", 5, 6]
+    def test_quasiq(self):
+        assert self.go("qq 5 end") == 5
+        assert self.go("qq None end") is None
+        assert self.go("qq foo end") == "foo"
+        assert self.go("qq [5, 6] end") == ["array", 5, 6]
+        assert self.go("qq add(5, 6) end") == ["add", 5, 6]
+        assert self.go("qq 5 + 6 end") == ["add", 5, 6]
 
-        assert self.go("quasiquote unquote(add(5, 6)) end") == 11
-        assert self.go("quasiquote add(5, unquote(6 ; 7)) end") == ["add", 5, 7]
-        assert self.go("quasiquote unquote(5 + 6) end") == 11
-        assert self.go("quasiquote 5 + unquote(6; 7) end") == ["add", 5, 7]
-        assert self.go("quasiquote add(unquote_splicing([5, 6])) end") == ["add", 5, 6]
-        assert self.go("quasiquote add(5, unquote_splicing([6])) end") == ["add", 5, 6]
-        assert self.go("quasiquote unquote(when False do 5 end) end") is None
-        assert self.go("quasiquote if a == 5 then 6; 7 else unquote(8; 9) end end") == ["if", ["equal", "a", 5], ["seq", 6, 7], 9]
+        assert self.go("qq unquote(add(5, 6)) end") == 11
+        assert self.go("qq add(5, unquote(6 ; 7)) end") == ["add", 5, 7]
+        assert self.go("qq unquote(5 + 6) end") == 11
+        assert self.go("qq 5 + unquote(6; 7) end") == ["add", 5, 7]
+        assert self.go("qq add(unquote_splicing([5, 6])) end") == ["add", 5, 6]
+        assert self.go("qq add(5, unquote_splicing([6])) end") == ["add", 5, 6]
+        assert self.go("qq unquote(when False do 5 end) end") is None
+        assert self.go("qq if a == 5 then 6; 7 else unquote(8; 9) end end") == ["if", ["equal", "a", 5], ["seq", 6, 7], 9]
+
+    def test_unquote_operator(self):
+        assert self.go("qq !(add(5, 6)) end") == 11
+        assert self.go("qq add(5, !(6 ; 7)) end") == ["add", 5, 7]
+        assert self.go("qq !(5 + 6) end") == 11
+        assert self.go("qq ![5, 6; 7] end") == [5, 7]
+        assert self.go("a := 5; qq !a + 6 end") == ["add", 5, 6]
+        assert self.go("qq 5 + !(6; 7) end") == ["add", 5, 7]
+        assert self.go("qq add(!![5, 6]) end") == ["add", 5, 6]
+        assert self.go("qq add(5, !![6]) end") == ["add", 5, 6]
+        assert self.go("qq !(when False do 5 end) end") is None
+        assert self.go("qq if a == 5 then 6; 7 else !(8; 9) end end") == ["if", ["equal", "a", 5], ["seq", 6, 7], 9]
 
     def test_defmacro(self):
-        self.go("defmacro foo with () do quote(abc) end")
+        self.go("defmacro foo with () do q(abc) end")
         assert self.expanded("foo()") == "abc"
 
         self.go("""
-            defmacro sq with (a) do quasiquote unquote(a) * unquote(a) end end
+            defmacro sq with (a) do qq !a * !a end end
         """)
         assert self.expanded("sq(5 + 6)") == ["mul", ["add", 5, 6], ["add", 5, 6]]
 
         self.go("""
-            defmacro build_exp with (op, *r) do quasiquote
-                unquote(op)(unquote_splicing(r))
-            end end
+            defmacro build_exp with (op, *r) do qq (!op)(!!r) end end
         """)
         assert self.expanded("build_exp(add)") == ["add"]
         assert self.expanded("build_exp(add, 5)") == ["add", 5]
         assert self.expanded("build_exp(add, 5, 6)") == ["add", 5, 6]
 
         self.go("""
-            defmacro rest2 with (*a, b) do quasiquote
-                [quote(unquote(a)), quote(unquote(b))]
+            defmacro rest2 with (*a, b) do qq
+                [q(!a), q(!b)]
             end end
         """)
         assert self.go("rest2(5)") == [[], 5]
@@ -397,17 +407,17 @@ class TestCore(BaseTest):
         assert self.go("rest2(5, 6, 7)") == [[5, 6], 7]
 
         self.go("""
-            defmacro rest3 with (a, *b, c) do quasiquote
-                [quote(unquote(a)), quote(unquote(b)), quote(unquote(c))]
+            defmacro rest3 with (a, *b, c) do qq
+                [q(!a), q(!b), q(!c)]
             end end
         """)
         assert self.go("rest3(5, 6, 7)") == [5, [6], 7]
 
     def test_macro_defining_macro(self):
         self.go("""
-            defmacro alias with (als, org) do quasiquote
-                defmacro unquote(als) with (*args) do quasiquote
-                    unquote(org)(unquote(quote(unquote_splicing(args))))
+            defmacro alias with (als, org) do qq
+                defmacro !als with (*args) do qq
+                    (!org)(!q(!!args))
                 end end
             end end
         """)
@@ -420,14 +430,14 @@ class TestCore(BaseTest):
     def test_step_execution(self):
         self.go("""
             myadd := func (a, b) do a + b end;
-            defmacro foo with (a) do myadd([quote(array)], [a]) end;
+            defmacro foo with (a) do myadd([q(array)], [a]) end;
             foo(5)
         """)
 
     def test_custom(self):
         with pytest.raises(AssertionError):
             self.go("""
-                defmacro foo with (a) do quasiquote print(unquote(a)) end end;
+                defmacro foo with (a) do qq print(!a) end end;
                 #rule [foo, foo, 5, EXPR, end]
                 foo 6 end
             """)

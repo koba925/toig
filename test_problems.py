@@ -59,11 +59,11 @@ class TestProblemsBase(BaseTest):
             defmacro _let with (bindings, body) do
                 defines := func (bindings) do
                     map(bindings[1:], func (b) do
-                        quasiquote unquote(b[1]) := unquote(b[2]) end
+                        qq !b[1] := !b[2] end
                     end)
                 end;
-                quasiquote scope
-                    unquote_splicing(defines(bindings)); unquote(body)
+                qq scope
+                    !!defines(bindings); !body
                 end end
             end
         """)
@@ -83,11 +83,11 @@ class TestProblemsBase(BaseTest):
             defmacro _let3 with (*bindings, body) do
                 defines := func (bindings) do
                     map(bindings, func (b) do
-                        quasiquote unquote(b[1]) := unquote(b[2]) end
+                        qq !b[1] := !b[2] end
                     end)
                 end;
-                quasiquote scope
-                    unquote_splicing(defines(bindings)); unquote(body)
+                qq scope
+                    !!defines(bindings); !body
                 end end
             end
 
@@ -110,12 +110,12 @@ class TestProblemsBase(BaseTest):
                 i := 0; defines := array();
                 while i < len(bindings) do
                     defines = defines + array(
-                        quasiquote unquote(bindings[i]) := unquote(bindings[i + 1]) end
+                        qq !bindings[i] := !bindings[i + 1] end
                     );
                     i = i + 2
                 end;
-                quasiquote scope
-                    unquote_splicing(defines); unquote(body)
+                qq scope
+                    !!defines; !body
                 end end
             end
 
@@ -140,8 +140,8 @@ class TestProblemsBase(BaseTest):
                         clause := first(clauses);
                         cnd := clause[1];
                         thn := clause[2];
-                        quasiquote
-                            if unquote(cnd) then unquote(thn) else unquote(_cond(rest(clauses))) end
+                        qq
+                            if !cnd then !thn else !_cond(rest(clauses)) end
                         end
                     end
                 end;
@@ -169,8 +169,8 @@ class TestProblemsBase(BaseTest):
                     if clauses == [] then None else
                         cnd := first(clauses); clauses := rest(clauses);
                         thn := first(clauses); clauses := rest(clauses);
-                        quasiquote
-                            if unquote(cnd) then unquote(thn) else unquote(__cond(clauses)) end
+                        qq
+                            if !cnd then !thn else !__cond(clauses) end
                         end
                     end
                 end;
@@ -201,11 +201,11 @@ class TestProblemsBase(BaseTest):
         self.go("""
             defmacro _my_if with (cnd, thn, *rest) do
                 if len(rest) == 0 then
-                    quasiquote if unquote(cnd) then unquote(thn) else None end end
+                    qq if !cnd then !thn else None end end
                 elif len(rest) == 1 then
-                    quasiquote if unquote(cnd) then unquote(thn) else unquote(rest[0]) end end
-                else quasiquote
-                    if unquote(cnd) then unquote(thn) else _my_if(unquote_splicing(rest)) end
+                    qq if !cnd then !thn else !rest[0] end end
+                else qq
+                    if !cnd then !thn else _my_if(!!rest) end
                 end end
             end
 
@@ -292,12 +292,12 @@ class TestProblemsBase(BaseTest):
 
     def test_letcc_try(self, capsys):
         self.go("""
-            raise := func (e) do error(quote(raised_outside_of_try), e) end;
-            defmacro _try with (try_expr, exc_var, exc_expr) do quasiquote scope
+            raise := func (e) do error(q(raised_outside_of_try), e) end;
+            defmacro _try with (try_expr, exc_var, exc_expr) do qq scope
                 prev_raise := raise;
                 letcc escape do
-                    raise = func (unquote(exc_var)) do escape(unquote(exc_expr)) end;
-                    unquote(try_expr)
+                    raise = func (!exc_var) do escape(!exc_expr) end;
+                    !try_expr
                 end;
                 raise = prev_raise
             end end end;
@@ -333,12 +333,12 @@ class TestProblemsBase(BaseTest):
                         if n == 2 then raise(7) end;
                         print(8)
                     catch e do
-                        print(quote(exception_inner_try), e)
+                        print(q(exception_inner_try), e)
                     end;
                     if n == 3 then raise(9) end;
                     print(10)
                 catch e do
-                    print(quote(exception_outer_try), e)
+                    print(q(exception_outer_try), e)
                 end;
                 print(11)
             end
@@ -383,7 +383,7 @@ class TestProblemsBase(BaseTest):
     def test_replace_AST_element(self):
         self.go("""
             defmacro force_minus with (expr) do
-                expr[0] = quote(sub); expr
+                expr[0] = q(sub); expr
             end
         """)
         assert self.go("force_minus(5 + 6)") == -1

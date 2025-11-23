@@ -37,10 +37,10 @@ class Evaluator:
                 self._expr = ["mclosure", params, body, self._env]
             case str(name):
                 self._expr = self._env.get(name)
-            case ["quote", expr]:
+            case ["q", expr]:
                 self._expr = expr
-            case ["quasiquote", expr]:
-                self._expr, self._cont = expr, ["$quasiquote", self._cont]
+            case ["_qq", expr]:
+                self._expr, self._cont = expr, ["$qq", self._cont]
             case ["define", name, val_expr]:
                 assert is_name(name), f"Invalid name: `{name}`"
                 self._expr, self._cont = Expr(val_expr), \
@@ -105,7 +105,7 @@ class Evaluator:
         assert not isinstance(self._expr, Expr), \
             f"Invalid value: {self._expr}"
         match self._cont:
-            case ["$quasiquote", next_cont]:
+            case ["$qq", next_cont]:
                 self._apply_quasiquote(next_cont)
             case ["$qq_elems", splicing, elems, elems_done, next_cont]:
                 elems_done = self._qq_add_element(elems_done,splicing)
@@ -159,7 +159,7 @@ class Evaluator:
                 self._cont = ["$qq_elems", True, rest, elems_done, next_cont]
             case [first, *rest]:
                 self._expr = first
-                self._cont = ["$quasiquote", ["$qq_elems", False, rest, elems_done, next_cont]]
+                self._cont = ["$qq", ["$qq_elems", False, rest, elems_done, next_cont]]
             case _:
                 assert False, f"Invalid quasiquote elements: {elems}"
 

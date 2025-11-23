@@ -535,7 +535,7 @@ class BaseToigOnToigTest(BaseTest):
                     ['mclosure', expr[1], expr[2], env]
                 elif expr[0] == 'quote' then
                     expr[1]
-                elif expr[0] == '__quasiquote' then
+                elif expr[0] == '_quasiquote' then
                     eval_quasiquote(expr[1], env)
                 elif expr[0] == 'define' then
                     define(env, expr[1], _eval(expr[2], env))
@@ -726,7 +726,7 @@ class BaseToigOnToigTest(BaseTest):
 
         self.go(r"""
             stdlib := func () do
-                go('None #rule [quasiquote, __quasiquote, EXPR, end]');
+                go('None #rule [quasiquote, _quasiquote, EXPR, end]');
                 go('
                     _defmacro := macro (name, params, body) do quasiquote
                         unquote(name) := macro (unquote_splicing(params)) do

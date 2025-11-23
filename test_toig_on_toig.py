@@ -513,7 +513,7 @@ class TestInterpreter(BaseToigOnToigTest):
                 quasiquote unquote(a) + unquote(b) end
             end)
         ' """) == [ToigStr('define'), ToigStr('myadd'),
-            [ToigStr('macro'), [ToigStr('a'), ToigStr('b')], [ToigStr('__quasiquote'),
+            [ToigStr('macro'), [ToigStr('a'), ToigStr('b')], [ToigStr('_quasiquote'),
                 [ToigStr('add'),
                     [ToigStr('unquote'), ToigStr('a')],
                     [ToigStr('unquote'), ToigStr('b')]
