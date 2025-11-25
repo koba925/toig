@@ -352,7 +352,7 @@ class TestCore(BaseTest):
         assert self.go("q(add(5, 6))") == ["add", 5, 6]
         assert self.go("q(5 + 6)") == ["add", 5, 6]
 
-    def test_quasiq(self):
+    def test_quasiquote(self):
         assert self.go("qq 5 end") == 5
         assert self.go("qq None end") is None
         assert self.go("qq foo end") == "foo"

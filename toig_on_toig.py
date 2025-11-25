@@ -131,6 +131,10 @@ class BaseToigOnToigTest(BaseTest):
                         raw_string()
                     elif c == '"' then
                         string()
+                    elif c == '!' then
+                        append_char();
+                        if contains(current_char(), '!=') then append_char() end;
+                        token
                     elif contains(c, '=<>!:') then
                         append_char();
                         if current_char() == '=' then append_char() end;
@@ -339,6 +343,10 @@ class BaseToigOnToigTest(BaseTest):
                         advance(); ['*', unary_ops()]
                     elif c == '?' then
                         advance(); ['?', unary_ops()]
+                    elif c == '!' then
+                        advance(); ['unquote', unary_ops()]
+                    elif c == '!!' then
+                        advance(); ['unquote_splicing', unary_ops()]
                     else
                         call_index()
                     end
@@ -533,9 +541,9 @@ class BaseToigOnToigTest(BaseTest):
                     ['closure', expr[1], expr[2], env]
                 elif expr[0] == 'macro' then
                     ['mclosure', expr[1], expr[2], env]
-                elif expr[0] == 'quote' then
+                elif expr[0] == 'q' then
                     expr[1]
-                elif expr[0] == '_quasiquote' then
+                elif expr[0] == '_qq' then
                     eval_quasiquote(expr[1], env)
                 elif expr[0] == 'define' then
                     define(env, expr[1], _eval(expr[2], env))
@@ -726,32 +734,32 @@ class BaseToigOnToigTest(BaseTest):
 
         self.go(r"""
             stdlib := func () do
-                go('None #rule [quasiquote, _quasiquote, EXPR, end]');
+                go('None #rule [qq, _qq, EXPR, end]');
                 go('
-                    _defmacro := macro (name, params, body) do quasiquote
-                        unquote(name) := macro (unquote_splicing(params)) do
-                            unquote(body)
+                    _defmacro := macro (name, params, body) do qq
+                        !name := macro (!!params) do
+                            !body
                         end
                     end end
 
                     #rule [defmacro, _defmacro, EXPR, with, PARAMS, do, EXPR, end]
                 ');
                 go('
-                    defmacro _scope with (body) do quasiquote
-                        func () do unquote(body) end ()
+                    defmacro _scope with (body) do qq
+                        func () do !body end ()
                     end end
 
                     #rule [scope, _scope, EXPR, end]
                 ');
                 go('
                     defmacro _if with  (cnd, thn, *rest) do
-                        __if len(rest) == 0 then quasiquote scope
-                            __if unquote(cnd) then unquote(thn) else None end
+                        __if len(rest) == 0 then qq scope
+                            __if !cnd then !thn else None end
                         end end else
-                            __if len(rest) == 1 then quasiquote scope
-                                __if unquote(cnd) then unquote(thn) else unquote(rest[0]) end
-                            end end else quasiquote scope
-                                __if unquote(cnd) then unquote(thn) else _if(unquote_splicing(rest)) end
+                            __if len(rest) == 1 then qq scope
+                                __if !cnd then !thn else !rest[0] end
+                            end end else qq scope
+                                __if !cnd then !thn else _if(!!rest) end
                             end end end
                         end
                     end
@@ -760,21 +768,21 @@ class BaseToigOnToigTest(BaseTest):
                 ');
                 go('
                     defmacro _aif with  (cnd, thn, *rest) do
-                        __if len(rest) == 0 then quasiquote scope
-                            it := unquote(cnd); __if it then unquote(thn) else None end
+                        __if len(rest) == 0 then qq scope
+                            it := !cnd; __if it then !thn else None end
                         end end else
-                            __if len(rest) == 1 then quasiquote scope
-                                it := unquote(cnd); __if it then unquote(thn) else unquote(rest[0]) end
-                            end end else quasiquote scope
-                                it := unquote(cnd); __if it then unquote(thn) else _aif(unquote_splicing(rest)) end
+                            __if len(rest) == 1 then qq scope
+                                it := !cnd; __if it then !thn else !rest[0] end
+                            end end else qq scope
+                                it := !cnd; __if it then !thn else _aif(!!rest) end
                             end end end
                         end
                     end
 
                     #rule [aif, _aif, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], ?[else, EXPR], end]
                 ');
-                go('defmacro and with (a, b) do quasiquote aif unquote(a) then unquote(b) else it end end end');
-                go('defmacro or with (a, b) do quasiquote aif unquote(a) then it else unquote(b) end end end')
+                go('defmacro and with (a, b) do qq aif !a then !b else it end end end');
+                go('defmacro or with (a, b) do qq aif !a then it else !b end end end')
 
             end
         """)

@@ -358,12 +358,12 @@ class TestInterpreter(BaseToigOnToigTest):
         assert self.tot_go(r""" 'a := [5, 6]; append(a, 7); a' """) == [5, 6, 7]
 
     def test_quote(self):
-        assert self.tot_go(r""" 'quote(5)' """) == 5
-        assert self.tot_go(r""" 'quote(None)' """) is None
-        assert self.tot_go(r""" 'quote(foo)' """) == "foo"
-        assert self.tot_go(r""" 'quote([5, 6])' """) == [ToigStr("array"), 5, 6]
-        assert self.tot_go(r""" 'quote(add(5, 6))' """) == [ToigStr("add"), 5, 6]
-        assert self.tot_go(r""" 'quote(5 + 6)' """) == [ToigStr("add"), 5, 6]
+        assert self.tot_go(r""" 'q(5)' """) == 5
+        assert self.tot_go(r""" 'q(None)' """) is None
+        assert self.tot_go(r""" 'q(foo)' """) == "foo"
+        assert self.tot_go(r""" 'q([5, 6])' """) == [ToigStr("array"), 5, 6]
+        assert self.tot_go(r""" 'q(add(5, 6))' """) == [ToigStr("add"), 5, 6]
+        assert self.tot_go(r""" 'q(5 + 6)' """) == [ToigStr("add"), 5, 6]
 
     def test_array_index_slice(self):
         self.tot_go(r""" 'a := [5, 6, 7, 8, 9]' """)
@@ -397,7 +397,7 @@ class TestInterpreter(BaseToigOnToigTest):
         assert self.tot_go(r""" 'func (a, b) do [a, b] end (5, 6)[1]' """) == 6
 
     def test_macro(self):
-        self.tot_go(r""" 'sq := macro (a) do [quote(mul), a, a] end' """)
+        self.tot_go(r""" 'sq := macro (a) do [q(mul), a, a] end' """)
         assert self.tot_go(r""" 'expand(sq(5 + 6))' """) == [
             ToigStr("mul"), [ToigStr("add"), 5, 6], [ToigStr("add"), 5, 6]
         ]
@@ -405,7 +405,7 @@ class TestInterpreter(BaseToigOnToigTest):
 
         self.tot_go(r""" '
             when := macro (cnd, thn, els) do
-                expr := quote(if c then t else e end);
+                expr := q(if c then t else e end);
                 expr[1] = cnd;
                 expr[2] = thn;
                 expr[3] = els;
@@ -417,7 +417,7 @@ class TestInterpreter(BaseToigOnToigTest):
         ]
         assert self.tot_go(r""" 'when(5 == 6, 7, 8)' """) == 8
 
-        self.tot_go(r""" 'arg_array := macro (*args) do [quote(array)] + args end' """)
+        self.tot_go(r""" 'arg_array := macro (*args) do [q(array)] + args end' """)
         assert self.tot_go(r""" 'expand(arg_array(5 + 6, 7))' """) == [
             ToigStr("array"), [ToigStr("add"), 5, 6], 7
         ]
@@ -425,7 +425,7 @@ class TestInterpreter(BaseToigOnToigTest):
 
     def test_custom_expr(self):
         self.tot_go(r""" '
-            _custom := macro (a) do [quote(mul), a, a] end
+            _custom := macro (a) do [q(mul), a, a] end
             #rule [custom, _custom, EXPR, end]
         ' """)
         assert self.tot_go(r""" '
@@ -437,7 +437,7 @@ class TestInterpreter(BaseToigOnToigTest):
 
     def test_custom_params(self):
         self.tot_go(r""" '
-            _custom := macro (a) do [quote(mul), a[0], a[1]] end
+            _custom := macro (a) do [q(mul), a[0], a[1]] end
             #rule [custom, _custom, PARAMS, end]
         ' """)
         assert self.tot_go_verbose(r""" '
@@ -449,7 +449,7 @@ class TestInterpreter(BaseToigOnToigTest):
 
     def test_custom_many(self):
         self.tot_go(r""" '
-            _custom := macro (*args) do [quote(array)] + args end
+            _custom := macro (*args) do [q(array)] + args end
             #rule [custom, _custom, EXPR, *[many, EXPR], end]
         ' """)
 
@@ -470,7 +470,7 @@ class TestInterpreter(BaseToigOnToigTest):
 
     def test_custom_optional(self):
         self.tot_go(r""" '
-            _custom := macro (*args) do [quote(array)] + args end
+            _custom := macro (*args) do [q(array)] + args end
             #rule [custom, _custom, EXPR, ?[optional, EXPR], end]
         ' """)
 
@@ -488,32 +488,45 @@ class TestInterpreter(BaseToigOnToigTest):
             self.tot_go(r""" 'expand(custom 5 + 6 optional 7 optional 8 end)' """)
 
     def test_quasiquote(self):
-        assert self.tot_go(r""" 'quasiquote 5 end' """) == 5
-        assert self.tot_go(r""" 'quasiquote None end' """) is None
-        assert self.tot_go(r""" 'quasiquote foo end' """) == "foo"
-        assert self.tot_go(r""" 'quasiquote [5, 6] end' """) == [ToigStr("array"), 5, 6]
-        assert self.tot_go(r""" 'quasiquote add(5, 6) end' """) == [ToigStr("add"), 5, 6]
-        assert self.tot_go(r""" 'quasiquote 5 + 6 end' """) == [ToigStr("add"), 5, 6]
+        assert self.tot_go(r""" 'qq 5 end' """) == 5
+        assert self.tot_go(r""" 'qq None end' """) is None
+        assert self.tot_go(r""" 'qq foo end' """) == "foo"
+        assert self.tot_go(r""" 'qq [5, 6] end' """) == [ToigStr("array"), 5, 6]
+        assert self.tot_go(r""" 'qq add(5, 6) end' """) == [ToigStr("add"), 5, 6]
+        assert self.tot_go(r""" 'qq 5 + 6 end' """) == [ToigStr("add"), 5, 6]
 
-        assert self.tot_go(r""" 'quasiquote unquote(add(5, 6)) end' """) == 11
-        assert self.tot_go(r""" 'quasiquote add(5, unquote(6; 7)) end' """) == [ToigStr("add"), 5, 7]
-        assert self.tot_go(r""" 'quasiquote unquote(5 + 6) end' """) == 11
-        assert self.tot_go(r""" 'quasiquote 5 + unquote(6; 7) end' """) == [ToigStr("add"), 5, 7]
-        assert self.tot_go(r""" 'quasiquote add(unquote_splicing([5, 6])) end' """) == [ToigStr("add"), 5, 6]
-        assert self.tot_go(r""" 'quasiquote add(5, unquote_splicing([6])) end' """) == [ToigStr("add"), 5, 6]
+        assert self.tot_go(r""" 'qq unquote(add(5, 6)) end' """) == 11
+        assert self.tot_go(r""" 'qq add(5, unquote(6; 7)) end' """) == [ToigStr("add"), 5, 7]
+        assert self.tot_go(r""" 'qq unquote(5 + 6) end' """) == 11
+        assert self.tot_go(r""" 'qq 5 + unquote(6; 7) end' """) == [ToigStr("add"), 5, 7]
+        assert self.tot_go(r""" 'qq add(unquote_splicing([5, 6])) end' """) == [ToigStr("add"), 5, 6]
+        assert self.tot_go(r""" 'qq add(5, unquote_splicing([6])) end' """) == [ToigStr("add"), 5, 6]
         assert self.tot_go(r""" '
-            quasiquote if a == 5 then 6; 7 else unquote(8; 9) end end
+            qq if a == 5 then 6; 7 else unquote(8; 9) end end
         ' """) == [ToigStr("_if"), [ToigStr("equal"), ToigStr("a"), 5], [ToigStr("seq"), 6, 7], 9]
 
-        # assert self.tot_go(r""" 'quasiquote unquote(when(False, 5)) end' """) is None
+        # assert self.tot_go(r""" 'qq unquote(when(False, 5)) end' """) is None
+
+    def test_unquote_operator(self):
+        assert self.tot_go(r""" 'qq !(add(5, 6)) end' """) == 11
+        assert self.tot_go(r""" 'qq add(5, !(6; 7)) end' """) == [ToigStr("add"), 5, 7]
+        assert self.tot_go(r""" 'qq !(5 + 6) end' """) == 11
+        assert self.tot_go(r""" 'qq ![5, 6; 7] end' """) == [5, 7]
+        assert self.tot_go(r""" 'a := 5; qq !a + 6 end' """) == [ToigStr("add"), 5, 6]
+        assert self.tot_go(r""" 'qq 5 + !(6; 7) end' """) == [ToigStr("add"), 5, 7]
+        assert self.tot_go(r""" 'qq add(!![5, 6]) end' """) == [ToigStr("add"), 5, 6]
+        assert self.tot_go(r""" 'qq add(5, !![6]) end' """) == [ToigStr("add"), 5, 6]
+        assert self.tot_go(r""" '
+            qq if a == 5 then 6; 7 else !(8; 9) end end
+        ' """) == [ToigStr("_if"), [ToigStr("equal"), ToigStr("a"), 5], [ToigStr("seq"), 6, 7], 9]
 
     def test_defmacro(self):
         assert self.tot_go_verbose(r""" '
             expand(defmacro myadd with (a, b) do
-                quasiquote unquote(a) + unquote(b) end
+                qq !a + !b end
             end)
         ' """) == [ToigStr('define'), ToigStr('myadd'),
-            [ToigStr('macro'), [ToigStr('a'), ToigStr('b')], [ToigStr('_quasiquote'),
+            [ToigStr('macro'), [ToigStr('a'), ToigStr('b')], [ToigStr('_qq'),
                 [ToigStr('add'),
                     [ToigStr('unquote'), ToigStr('a')],
                     [ToigStr('unquote'), ToigStr('b')]
@@ -522,7 +535,7 @@ class TestInterpreter(BaseToigOnToigTest):
         ]]
         self.tot_go_verbose(r""" '
             defmacro myadd with (a, b) do
-                quasiquote unquote(a) + unquote(b) end
+                qq !a + !b end
             end
         ' """)
         assert self.tot_go_verbose(r""" 'myadd(5, 6)' """) == 11
@@ -670,5 +683,5 @@ class TestEvaluator(BaseToigOnToigTest):
 
     # def test_macro(self):
     #     self.eot_go(r""" ["defmacro", "sq", ["a"],
-    #         ["quasiquote",  ["inc", ["unquote", "a"]]]
+    #         ["qq",  ["inc", ["unquote", "a"]]]
     #     ] """)
