@@ -587,6 +587,8 @@ class TestInterpreter(BaseToigOnToigTest):
         assert self.tot_go(""" 'False or False or False' """) is False
         assert self.tot_go(""" 'x := True or False' """) is True
         assert self.tot_go(""" 'x' """) is True
+
+    def test_and(self):
         assert self.tot_go(""" '5 == 5 and 5 == 5' """) is True
         assert self.tot_go(""" '5 == 5 and 5 != 5' """) is False
         assert self.tot_go(""" '5 != 5 and 5 == 5' """) is False
@@ -596,8 +598,23 @@ class TestInterpreter(BaseToigOnToigTest):
         assert self.tot_go(""" 'True or True and False' """) is True
         assert self.tot_go(""" '(True or True) and False' """) is False
 
-    def test_and(self):
-        pass
+    def test_letcc(self):
+        assert self.tot_go(""" 'letcc cc do 5 + 6 end' """) == 11
+        assert self.tot_go(""" 'letcc cc do cc() end' """) == None
+        assert self.tot_go(""" 'letcc cc do cc(5) + 6 end' """) == 5
+        assert self.tot_go(""" '5 + letcc cc do cc(6) end' """) == 11
+        assert self.tot_go(""" 'letcc cc1 do cc1(letcc cc2 do cc2(5) + 6 end) + 7 end' """) == 5
+
+        assert self.tot_go(r""" '
+            inner := func (raise) do raise(5) end;
+            outer := func () do letcc raise do inner(raise) + 6 end end;
+            outer()
+        ' """) == 5
+
+        self.tot_go(""" 'add5 := None' """)
+        assert self.tot_go(""" '5 + letcc cc do add5 = cc; 6 end' """) == 11
+        assert self.tot_go(""" 'add5(7)' """) == 12
+        assert self.tot_go(""" 'add5(8)' """) == 13
 
 @pytest.mark.parametrize(
     "set_interpreter",

@@ -214,6 +214,15 @@ class BaseToigOnToigTest(BaseTest):
                     ['if', cond_expr, then_expr, else_expr]
                 end;
 
+                letcc_ := func () do
+                    advance();
+                    name := advance();
+                    consume(['do']);
+                    body := expression();
+                    consume(['end']);
+                    ['letcc', name, ['_scope', body]]
+                end;
+
                 custom := func (rule) do
                     _custom := func (r) do
                         if r == [] then []
@@ -263,6 +272,8 @@ class BaseToigOnToigTest(BaseTest):
                         func_macro()
                     elif c == '__if' then
                         if_()
+                    elif c == 'letcc' then
+                        letcc_()
                     elif has_name(rules, c) then
                         advance();
                         custom(get(rules, c))
@@ -553,6 +564,8 @@ class BaseToigOnToigTest(BaseTest):
                     eval_seq(expr, env)
                 elif expr[0] == 'if' then
                     eval_if(expr, env)
+                elif expr[0] == 'letcc' then
+                    eval_letcc(expr, env)
                 elif expr[0] == 'expand' then
                     eval_expand(expr[1][0], expr[1][1:], env)
                 else
@@ -603,6 +616,19 @@ class BaseToigOnToigTest(BaseTest):
                     _eval(expr[2], env)
                 else
                     _eval(expr[3], env)
+                end
+            end
+        """)
+
+        self.go(r"""
+            eval_letcc := func (expr, env) do
+                letcc cc do
+                    define(env, expr[1],
+                        ['primitive', func (args) do
+                            if len(args) == 0 then cc(None) else cc(args[0]) end
+                        end]
+                    );
+                    _eval(expr[2], env)
                 end
             end
         """)
