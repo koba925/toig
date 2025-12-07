@@ -1,15 +1,34 @@
 import pytest
 
 from commons import ToigStr
-from toig_on_toig import BaseToigOnToigTest
+from test_commons import BaseTest
 from ici import Interpreter as ICI
 from stm import Interpreter as STM
+from toig_on_toig import setup_toig
 
-@pytest.mark.parametrize(
-    "set_interpreter",
-    [ICI, STM], ids=["ici", "stm"],
-    indirect=True)
-class TestUtilities(BaseToigOnToigTest):
+@pytest.fixture(scope="session", params=[ICI, STM], ids=["ici", "stm"])
+# @pytest.fixture(scope="session", params=[ICI], ids=["ici"])
+# @pytest.fixture(scope="session", params=[STM], ids=["stm"])
+def shared_interpreter(request):
+    ParentToigClass = request.param
+    child_toig = setup_toig(ParentToigClass)
+    yield child_toig
+
+@pytest.fixture(scope="class", autouse=True)
+def use_interpreter(request, shared_interpreter):
+    request.cls.i = shared_interpreter
+
+@pytest.fixture(autouse=True)
+def reset_interpreter(shared_interpreter):
+    shared_interpreter.go("reset_interpreter()")
+
+class TestToTBase:
+
+    def go(self, src):
+        return self.i.go(src)
+
+class TestUtilities(TestToTBase):
+
     def test_is_space(self):
         assert self.go(r""" is_space(" ") """) == True
         assert self.go(r""" is_space("\n") """) == True
@@ -56,11 +75,7 @@ class TestUtilities(BaseToigOnToigTest):
         assert self.go(r""" contains("a", [1, None, "b", False, []]) """) == False
         assert self.go(r""" contains("a", [1, None, "b", False, "a"]) """) == True
 
-@pytest.mark.parametrize(
-    "set_interpreter",
-    [ICI, STM], ids=["ici", "stm"],
-    indirect=True)
-class TestScanner(BaseToigOnToigTest):
+class TestScanner(TestToTBase):
     def test_whitespace(self):
         assert self.go(r""" scan('', [None, []]) """) == [ToigStr("$EOF")]
         assert self.go(r""" scan(' 5 ', [None, []]) """) == [5, ToigStr("$EOF")]
@@ -91,12 +106,7 @@ class TestScanner(BaseToigOnToigTest):
         self.go(r""" scan("#rule [foo, _foo, EXPR, end]", rules) """)
         assert self.go(r""" rules """) == [None, [[ToigStr('foo'), [ToigStr('_foo'), ToigStr('EXPR'), ToigStr('end')]]]]
 
-
-@pytest.mark.parametrize(
-    "set_interpreter",
-    [ICI, STM], ids=["ici", "stm"],
-    indirect=True)
-class TestInterpreter(BaseToigOnToigTest):
+class TestInterpreter(TestToTBase):
     def tot_go(self, tot_src):
         return self.go(f"go({tot_src})")
 
@@ -280,7 +290,7 @@ class TestInterpreter(BaseToigOnToigTest):
         assert self.tot_go(r""" 'counter2()' """) == 3
 
     def test_fib(self):
-        self.tot_go(r""" '
+        self.tot_go_verbose(r""" '
             fib := func (n) do
                 if n == 0 then 0
                 else if n == 1 then 1
@@ -691,11 +701,7 @@ class TestInterpreter(BaseToigOnToigTest):
         # with pytest.raises(AssertionError):
         #     self.tot_go(r""" 'continue(None)' """)
 
-@pytest.mark.parametrize(
-    "set_interpreter",
-    [ICI, STM], ids=["ici", "stm"],
-    indirect=True)
-class TestEvaluator(BaseToigOnToigTest):
+class TestEvaluator(TestToTBase):
     def eot_go(self, eot_src):
         return self.go(f""" eval({eot_src}) """)
 
