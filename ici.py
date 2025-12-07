@@ -65,5 +65,10 @@ if __name__ == "__main__":
         assert expected == result
 
     print(go_verbose("""
-        letcc cc do cc(5) + 6 end
+        print("loop1");
+        loop := None;
+        letcc cc do loop = cc end;
+        print("loop2");
+        # loop(5);
+        print("loop3")
     """))

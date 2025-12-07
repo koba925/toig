@@ -622,14 +622,20 @@ class BaseToigOnToigTest(BaseTest):
 
         self.go(r"""
             eval_letcc := func (expr, env) do
-                letcc cc do
+                val := letcc cc do
+                    print('eval_letcc1', cc);
                     define(env, expr[1],
                         ['primitive', func (args) do
                             if len(args) == 0 then cc(None) else cc(args[0]) end
                         end]
                     );
-                    _eval(expr[2], env)
-                end
+                    print('eval_letcc2', cc);
+                    ival := _eval(expr[2], env);
+                    print('eval_letcc3', ival);
+                    ival
+                end;
+                print('eval_letcc result', val);
+                val
             end
         """)
 
@@ -808,8 +814,25 @@ class BaseToigOnToigTest(BaseTest):
                     #rule [aif, _aif, EXPR, then, EXPR, *[elif, EXPR, then, EXPR], ?[else, EXPR], end]
                 ');
                 go('defmacro and with (a, b) do qq aif !a then !b else it end end end');
-                go('defmacro or with (a, b) do qq aif !a then it else !b end end end')
+                go('defmacro or with (a, b) do qq aif !a then it else !b end end end');
 
+                go('
+                    defmacro __while with (cnd, body) do qq scope
+                        continue := val := None;
+                        letcc break do
+                            loop := func() do
+                                print("while1");
+                                letcc cc do continue = cc end;
+                                print("while2");
+                                if !cnd then val = !body; loop() else val end;
+                                print("while3")
+                            end;
+                            loop()
+                        end
+                    end end end
+
+                    #rule [while, __while, EXPR, do, EXPR, end]
+                ')
             end
         """)
 
