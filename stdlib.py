@@ -132,20 +132,22 @@ class StdLib:
 
         self._go("""
             defmacro __stdlib_for with (e, l, body) do qq scope
-                __stdlib_for_index := -1;
                 __stdlib_for_l := !l;
-                continue := __stdlib_for_val := !e := None;
-                letcc break do
-                    loop := func () do
-                        letcc cc do continue = cc end;
-                        __stdlib_for_index = __stdlib_for_index + 1;
-                        if __stdlib_for_index < len(__stdlib_for_l) then
-                            !e = __stdlib_for_l[__stdlib_for_index];
-                            __stdlib_for_val = !body;
-                            loop()
-                        else __stdlib_for_val end
-                    end;
-                    loop()
+                if len(__stdlib_for_l) == 0 then None else
+                    letcc break do
+                        __stdlib_for_loop := func (l) do
+                            __stdlib_for_val := letcc continue do
+                                !e := first(l);
+                                !body
+                            end;
+                            if len(l) == 1 then
+                                __stdlib_for_val
+                            else
+                                __stdlib_for_loop(rest(l))
+                            end
+                        end;
+                        __stdlib_for_loop(__stdlib_for_l)
+                    end
                 end
             end end end
 

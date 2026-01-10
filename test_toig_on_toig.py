@@ -626,80 +626,54 @@ class TestInterpreter(TestToTBase):
         assert self.tot_go(""" 'add5(7)' """) == 12
         assert self.tot_go(""" 'add5(8)' """) == 13
 
-    # def test_while(self):
-    #     assert self.tot_go(r""" '
-    #         i := sum := 0;
-    #         while i < 10 do
-    #             sum = sum + i;
-    #             i = i + 1;
-    #             sum
-    #         end
-    #     ' """) == 45
+    def test_while(self):
+        assert self.tot_go_verbose(r""" '
+            i := sum := 0;
+            while i < 4 do
+                sum = sum + i;
+                i = i + 1;
+                sum
+            end
+        ' """) == 6
 
-    #     assert self.tot_go(r""" '
-    #         r := c := [];
-    #         while len(r) < 3 do
-    #             c = [];
-    #             while len(c) < 3 do
-    #                 c = c + [0]
-    #             end;
-    #             r = r + [c]
-    #         end
-    #     ' """) == [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+        assert self.tot_go(r""" '
+            r := c := [];
+            while len(r) < 3 do
+                c = [];
+                while len(c) < 3 do
+                    c = c + [0]
+                end;
+                r = r + [c]
+            end
+        ' """) == [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
 
-    # def test_while_break(self):
-    #     assert self.tot_go(r""" '
-    #         i := sum := 0;
-    #         while True do
-    #             if i >= 10 then break(sum) end;
-    #             sum = sum + i;
-    #             i = i + 1
-    #         end
-    #     ' """) == 45
+    def test_while_break(self):
+        assert self.tot_go(r""" '
+            i := sum := 0;
+            while True do
+                if i >= 4 then break(sum) end;
+                sum = sum + i;
+                i = i + 1
+            end
+        ' """) == 6
 
-    #     with pytest.raises(AssertionError):
-    #         self.tot_go(r""" ' break(5)' """)
+        with pytest.raises(AssertionError):
+            self.tot_go(r""" ' break(5)' """)
 
-    # def test_while_continue(self):
+    def test_while_continue(self):
 
-    #     assert self.tot_go_verbose(r""" '
-    #         print("loop1");
-    #         loop := None;
-    #         letcc cc do loop = cc end;
-    #         print("loop2");
-    #         loop(5);
-    #         print("loop3")
-    #     ' """) == 40
+        assert self.tot_go(r""" '
+            i := sum := 0;
+            while i < 4 do
+                if i == 2 then i = i + 1; continue() end;
+                sum = sum + i;
+                i = i + 1;
+                sum
+            end
+        ' """) == 4
 
-        # assert self.tot_go_verbose(r""" '
-        #     defmacro __wh with (cnd, body) do qq scope
-        #         continue := None;
-        #         loop := func() do
-        #             print("while1");
-        #             letcc cc do continue = cc end;
-        #             print("while2");
-        #             continue(5);
-        #             print("while3")
-        #         end;
-        #         loop()
-        #     end end end;
-
-        #     #rule [wh, __wh, EXPR, do, EXPR, end]
-        #     wh True do continue(5) end
-        # ' """) == 40
-
-        # assert self.tot_go_verbose(r""" '
-        #     i := sum := 0;
-        #     while i < 10 do
-        #         if i == 5 then i = i + 1; continue() end;
-        #         sum = sum + i;
-        #         i = i + 1;
-        #         sum
-        #     end
-        # ' """) == 40
-
-        # with pytest.raises(AssertionError):
-        #     self.tot_go(r""" 'continue(None)' """)
+        with pytest.raises(AssertionError):
+            self.tot_go(r""" 'continue(None)' """)
 
 class TestEvaluator(TestToTBase):
     def eot_go(self, eot_src):

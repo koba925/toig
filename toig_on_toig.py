@@ -1,6 +1,3 @@
-from ici import Interpreter as ICI
-from stm import Interpreter as STM
-
 # Define Toig on Toig
 
 def setup_toig(ParentInterpreter):
@@ -625,20 +622,18 @@ def setup_toig(ParentInterpreter):
 
     i.go(r"""
         eval_letcc := func (expr, env) do
-            val := letcc cc do
-                print('eval_letcc1', cc);
-                define(env, expr[1],
-                    ['primitive', func (args) do
-                        if len(args) == 0 then cc(None) else cc(args[0]) end
-                    end]
-                );
-                print('eval_letcc2', cc);
-                ival := _eval(expr[2], env);
-                print('eval_letcc3', ival);
-                ival
-            end;
-            print('eval_letcc result', val);
-            val
+            letcc host_cc do
+                define(env, expr[1], ['primitive',
+                    func (args) do
+                        if len(args) == 0 then
+                            host_cc(None)
+                        else
+                            host_cc(args[0])
+                        end
+                    end
+                ]);
+                _eval(expr[2], env)
+            end
         end
     """)
 
@@ -824,11 +819,8 @@ def setup_toig(ParentInterpreter):
                     continue := val := None;
                     letcc break do
                         loop := func() do
-                            print("while1");
                             letcc cc do continue = cc end;
-                            print("while2");
-                            if !cnd then val = !body; loop() else val end;
-                            print("while3")
+                            if !cnd then val = !body; loop() else val end
                         end;
                         loop()
                     end
@@ -869,14 +861,22 @@ def setup_toig(ParentInterpreter):
     return i
 
 if __name__ == "__main__":
+    from ici import Interpreter as ICI
+    from stm import Interpreter as STM
+
     src = r""" go_verbose('
-        a := 5
+        print("loop1");
+        loop := None;
+        letcc cc do loop = cc end;
+        print("loop2");
+        loop(5);
+        print("loop3")
     ') """
 
-    print("ICI:")
+    print("=== ICI ===")
     ici = setup_toig(ICI)
     ici.go(src)
 
-    print("STM:")
+    print("=== STM ===")
     stm = setup_toig(STM)
     stm.go(src)

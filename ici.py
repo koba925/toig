@@ -65,10 +65,9 @@ if __name__ == "__main__":
         assert expected == result
 
     print(go_verbose("""
-        print("loop1");
-        loop := None;
-        letcc cc do loop = cc end;
-        print("loop2");
-        # loop(5);
-        print("loop3")
+            sum := 0;
+            for i in [5, 6, 7, 8, 9] do
+                if i == 8 then continue() end;
+                sum = sum + i
+            end
     """))
